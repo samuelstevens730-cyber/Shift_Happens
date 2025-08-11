@@ -52,8 +52,22 @@ function ClockOutModal({
   onSuccess: () => void; // navigate to receipt page
 }) {
   const [endLocal, setEndLocal] = useState(toLocalInputValue());
-  const [closingConfirm, setClosingConfirm] = useState(false);
+  const closingItems = [
+    "Close Credit Card Batch",
+    "Print Z-Report",
+    "Match Credit Card Summary Total and Z-Report Charge total",
+    "Count till and change drawer",
+    "Fill out Sales Worksheet using numbers from both Reports",
+    "Take report picture and post to sales group.",
+  ];
+  const [closingChecks, setClosingChecks] = useState<boolean[]>(
+    closingItems.map(() => false)
+  );
   const [doubleCheck, setDoubleCheck] = useState(false);
+
+  const endHour = new Date(endLocal).getHours();
+  const isClosingShift = endHour >= 20 || endHour === 0;
+  const allClosingDone = closingChecks.every(Boolean);
 
   return (
     <div className="fixed inset-0 bg-black/40 grid place-items-center p-4">
@@ -67,15 +81,29 @@ function ClockOutModal({
           value={endLocal}
           onChange={e => setEndLocal(e.target.value)}
         />
-
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={closingConfirm}
-            onChange={e => setClosingConfirm(e.target.checked)}
-          />
-          Closing tasks are complete
-        </label>
+        {isClosingShift && (
+          <div className="space-y-2">
+            <div className="text-sm font-medium">Closing Checklist</div>
+            <ul className="border rounded divide-y">
+              {closingItems.map((text, idx) => (
+                <li key={idx} className="flex items-center gap-2 p-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={closingChecks[idx]}
+                    onChange={e => {
+                      setClosingChecks(prev => {
+                        const copy = [...prev];
+                        copy[idx] = e.target.checked;
+                        return copy;
+                      });
+                    }}
+                  />
+                  <span>{text}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -89,13 +117,13 @@ function ClockOutModal({
         <div className="flex gap-2 justify-end">
           <button className="px-3 py-1.5 rounded border" onClick={onClose}>Cancel</button>
           <button
-            disabled={!doubleCheck}
+            disabled={!doubleCheck || (isClosingShift && !allClosingDone)}
             className="px-3 py-1.5 rounded bg-black text-white disabled:opacity-50"
             onClick={async () => {
               const { error } = await supabase.rpc("end_shift", {
                 p_shift_id: shiftId,
                 p_end_at: new Date(endLocal).toISOString(),
-                p_closing_confirm: closingConfirm,
+                p_closing_confirm: isClosingShift && allClosingDone,
                 p_manager_override: false,
               });
               if (error) { alert(error.message); return; }

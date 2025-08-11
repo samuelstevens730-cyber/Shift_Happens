@@ -60,8 +60,8 @@ export default function ShiftRunPage() {
         if (checksErr) throw checksErr;
 
         setDone(new Set((checks ?? []).map(c => c.item_id)));
-      } catch (e: any) {
-        setErr(e.message ?? "Failed to load run");
+      } catch (e: unknown) {
+        setErr(e instanceof Error ? e.message : "Failed to load run");
       } finally {
         setLoading(false);
       }
@@ -92,8 +92,8 @@ export default function ShiftRunPage() {
       if (error) throw error;
 
       setDone(prev => new Set(prev).add(itemId));
-    } catch (e: any) {
-      setErr(e.message ?? "Failed to check item");
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Failed to check item");
     }
   }
 
