@@ -28,7 +28,7 @@ export default function ClockPage() {
   const [selectedStore, setSelectedStore] = useState<string>("");
   const [role, setRole] = useState<Membership["role"] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [shiftId, setshiftId] = useState<string | null>(null);
+  const [shiftId, setShiftId] = useState<string | null>(null);
   const router = useRouter();
 
   // Pull memberships on mount
