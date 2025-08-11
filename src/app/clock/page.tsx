@@ -16,9 +16,6 @@ function toLocalInputValue(d = new Date()) {
   return `${y}-${m}-${day}T${h}:${min}`;
 }
 
-const [showClockIn, setShowClockIn] = useState(false);
-const [startLocal, setStartLocal] = useState(toLocalInputValue());
-
 
 type Membership = { store_id: string; role: "owner" | "manager" | "clerk" };
 
@@ -29,6 +26,8 @@ export default function ClockPage() {
   const [role, setRole] = useState<Membership["role"] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [shiftId, setshiftId] = useState<string | null>(null);
+  const [showClockIn, setShowClockIn] = useState(false);
+  const [startLocal, setStartLocal] = useState(toLocalInputValue());
   const router = useRouter();
 
   // Pull memberships on mount
