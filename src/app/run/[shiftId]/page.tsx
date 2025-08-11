@@ -5,7 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
-const CHECKLISTS_ENABLED = process.env.NEXT_PUBLIC_ENABLE_CHECKLISTS === "true";
+// Controls whether checklist progress is persisted
+const CAN_WRITE_CHECKLISTS = process.env.NEXT_PUBLIC_ENABLE_CHECKLISTS === "true";
 
 type Item = {
   id: string;
@@ -14,6 +15,13 @@ type Item = {
   required_for: "clock_in" | "clock_out" | "none";
   manager_only: boolean;
 };
+
+// Used when DB writes are disabled
+const FALLBACK_ITEMS: Item[] = [
+  { id: "1", text: "Turn on lights", required: true, required_for: "clock_in", manager_only: false },
+  { id: "2", text: "Boot registers", required: true, required_for: "clock_in", manager_only: false },
+  { id: "3", text: "Count cash drawer", required: false, required_for: "none", manager_only: false },
+];
 
 export default function ShiftRunPage() {
   const { shiftId } = useParams() as { shiftId: string };
@@ -28,7 +36,8 @@ export default function ShiftRunPage() {
 
   // Load run + items
   useEffect(() => {
-    if (!CHECKLISTS_ENABLED) {
+    if (!CAN_WRITE_CHECKLISTS) {
+      setItems(FALLBACK_ITEMS);
       setLoading(false);
       return;
     }
@@ -83,11 +92,11 @@ export default function ShiftRunPage() {
     () => requiredIds.filter(id => !done.has(id)).length,
     [requiredIds, done]
   );
-  const canContinue = remainingRequired === 0 && (CHECKLISTS_ENABLED ? !!runId : true);
+  const canContinue = remainingRequired === 0 && (CAN_WRITE_CHECKLISTS ? !!runId : true);
 
   async function checkItem(itemId: string) {
     if (done.has(itemId)) return; // keep v1 simple: no uncheck
-    if (!CHECKLISTS_ENABLED) {
+    if (!CAN_WRITE_CHECKLISTS) {
       setDone(prev => new Set(prev).add(itemId));
       return;
     }
