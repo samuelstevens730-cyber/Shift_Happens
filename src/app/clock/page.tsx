@@ -51,7 +51,10 @@ export default function ClockPage() {
     const first = (data && data[0]?.store_id) || "";
     const pick = last && data?.some(m => m.store_id === last) ? last : first;
     setSelectedStore(pick);
-    if (pick) setRole((data?.find(m => m.store_id === pick)?.role ?? null) as any);
+    if (pick) {
+      const foundRole = (data?.find(m => m.store_id === pick)?.role ?? null) as Membership["role"] | null;
+      setRole(foundRole);
+    }
     setLoading(false);
   })();
   return () => { alive = false; };
@@ -61,7 +64,7 @@ export default function ClockPage() {
   useEffect(() => {
     if (!selectedStore) return;
     const r = memberships.find(m => m.store_id === selectedStore)?.role ?? null;
-    setRole(r as any);
+    setRole(r as Membership["role"] | null);
     localStorage.setItem("sh_store", selectedStore);
   }, [selectedStore, memberships]);
 
@@ -94,25 +97,31 @@ async function handleClockInManual(localValue: string) {
       throw new Error("Server did not return a shift id.");
     }
 
-    // spawn checklists same as before...
-    const { data: lists, error: listErr } = await supabase
-      .from("checklists")
-      .select("id")
-      .eq("store_id", selectedStore)
-      .eq("applies_to_role", role)
-      .eq("kind", "opening");
-    if (listErr) throw listErr;
+    const startHour = d.getHours();
+    const isOpening = startHour >= 9 && startHour < 13;
 
-    if (lists?.length) {
-      const payload = lists.map(l => ({ checklist_id: l.id, shift_id: newShiftId, store_id: selectedStore }));
-      const { error: runErr } = await supabase.from("checklist_runs").insert(payload);
-      if (runErr) throw runErr;
+    if (isOpening) {
+      const { data: lists, error: listErr } = await supabase
+        .from("checklists")
+        .select("id")
+        .eq("store_id", selectedStore)
+        .eq("applies_to_role", role)
+        .eq("kind", "opening");
+      if (listErr) throw listErr;
+
+      if (lists?.length) {
+        const payload = lists.map(l => ({ checklist_id: l.id, shift_id: newShiftId, store_id: selectedStore }));
+        const { error: runErr } = await supabase.from("checklist_runs").insert(payload);
+        if (runErr) throw runErr;
+      }
+
+      setShiftId(newShiftId);
+      setShowClockIn(false);
+    } else {
+      router.replace(`/shift/${newShiftId}`);
     }
-
-    setShiftId(newShiftId);
-    setShowClockIn(false);
-  } catch (e: any) {
-    setError(e.message ?? "Clock-in failed.");
+  } catch (e: unknown) {
+    setError(e instanceof Error ? e.message : "Clock-in failed.");
   } finally {
     setLoading(false);
   }
