@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
+const CHECKLISTS_ENABLED = process.env.NEXT_PUBLIC_ENABLE_CHECKLISTS === "true";
+
 type Item = {
   id: string;
   text: string;
@@ -26,6 +28,10 @@ export default function ShiftRunPage() {
 
   // Load run + items
   useEffect(() => {
+    if (!CHECKLISTS_ENABLED) {
+      setLoading(false);
+      return;
+    }
     (async () => {
       setErr(null);
       setLoading(true);
@@ -38,7 +44,7 @@ export default function ShiftRunPage() {
           .limit(1)
           .maybeSingle();
         if (runErr) throw runErr;
-        if (!run) throw new Error("No checklist run found for this shift.")
+        if (!run) throw new Error("No checklist run found for this shift.");
         setRunId(run.id);
         setStoreId(run.store_id);
 
@@ -77,11 +83,15 @@ export default function ShiftRunPage() {
     () => requiredIds.filter(id => !done.has(id)).length,
     [requiredIds, done]
   );
-  const canContinue = remainingRequired === 0 && !!runId;
+  const canContinue = remainingRequired === 0 && (CHECKLISTS_ENABLED ? !!runId : true);
 
   async function checkItem(itemId: string) {
-    if (!runId) return;
     if (done.has(itemId)) return; // keep v1 simple: no uncheck
+    if (!CHECKLISTS_ENABLED) {
+      setDone(prev => new Set(prev).add(itemId));
+      return;
+    }
+    if (!runId) return;
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not signed in.");

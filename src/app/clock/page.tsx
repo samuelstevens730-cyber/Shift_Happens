@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
+const CHECKLISTS_ENABLED = process.env.NEXT_PUBLIC_ENABLE_CHECKLISTS === "true";
+
 function toLocalInputValue(d = new Date()) {
   // Format for <input type="datetime-local">
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -101,18 +103,20 @@ async function handleClockInManual(localValue: string) {
     const isOpening = startHour >= 9 && startHour < 13;
 
     if (isOpening) {
-      const { data: lists, error: listErr } = await supabase
-        .from("checklists")
-        .select("id")
-        .eq("store_id", selectedStore)
-        .eq("applies_to_role", role)
-        .eq("kind", "opening");
-      if (listErr) throw listErr;
+      if (CHECKLISTS_ENABLED) {
+        const { data: lists, error: listErr } = await supabase
+          .from("checklists")
+          .select("id")
+          .eq("store_id", selectedStore)
+          .eq("applies_to_role", role)
+          .eq("kind", "opening");
+        if (listErr) throw listErr;
 
-      if (lists?.length) {
-        const payload = lists.map(l => ({ checklist_id: l.id, shift_id: newShiftId, store_id: selectedStore }));
-        const { error: runErr } = await supabase.from("checklist_runs").insert(payload);
-        if (runErr) throw runErr;
+        if (lists?.length) {
+          const payload = lists.map(l => ({ checklist_id: l.id, shift_id: newShiftId, store_id: selectedStore }));
+          const { error: runErr } = await supabase.from("checklist_runs").insert(payload);
+          if (runErr) throw runErr;
+        }
       }
 
       setShiftId(newShiftId);
