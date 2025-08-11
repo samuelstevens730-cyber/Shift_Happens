@@ -36,8 +36,9 @@ export default function ShiftRunPage() {
           .select("id, store_id, checklist_id")
           .eq("shift_id", shiftId)
           .limit(1)
-          .single();
+          .maybeSingle();
         if (runErr) throw runErr;
+        if (!run) throw new Error("No checklist run found for this shift.")
         setRunId(run.id);
         setStoreId(run.store_id);
 
@@ -67,15 +68,16 @@ export default function ShiftRunPage() {
     })();
   }, [shiftId]);
 
+  // For OPENING (BoS) we require items where required_for === "clock_in"
   const requiredIds = useMemo(
-    () => items.filter(i => i.required && i.required_for === "clock_out").map(i => i.id),
+    () => items.filter(i => i.required && i.required_for === "clock_in").map(i => i.id),
     [items]
   );
   const remainingRequired = useMemo(
     () => requiredIds.filter(id => !done.has(id)).length,
     [requiredIds, done]
   );
-  const canClockOut = remainingRequired === 0 && !!runId;
+  const canContinue = remainingRequired === 0 && !!runId;
 
   async function checkItem(itemId: string) {
     if (!runId) return;
@@ -95,17 +97,9 @@ export default function ShiftRunPage() {
     }
   }
 
-  async function clockOut() {
-    try {
-      const { error } = await supabase
-        .from("shifts")
-        .update({ end_at: new Date().toISOString(), status: "closed" })
-        .eq("id", shiftId);
-      if (error) throw error;
-      router.replace("/clock");
-    } catch (e: any) {
-      setErr(e.message ?? "Failed to clock out");
-    }
+  // After BoS is complete, move to the Shift screen (changeover + clock out live there)
+  function continueToShift() {
+    router.replace(`/shift/${shiftId}`);
   }
 
   if (loading) return <div className="p-6">Loading…</div>;
@@ -119,20 +113,22 @@ export default function ShiftRunPage() {
 
         {items.length === 0 ? (
           <div className="text-sm border rounded p-3">
-            No items for this checklist. If the user is a manager and you only seeded clerk tasks, either
-            seed a manager opening list or test as a clerk.
+            No items for this checklist.
           </div>
         ) : (
           <ul className="border rounded divide-y">
             {items.map(it => {
               const isDone = done.has(it.id);
+              const reqText =
+                it.required && it.required_for === "clock_in"
+                  ? "Required to continue"
+                  : "Optional";
               return (
                 <li key={it.id} className="flex items-center justify-between p-3">
                   <div>
                     <div>{it.text}</div>
                     <div className="text-xs text-gray-500">
-                      {it.required && it.required_for === "clock_out" ? "Required for clock out" : "Optional"}
-                      {it.manager_only ? " • Manager only" : ""}
+                      {reqText}{it.manager_only ? " • Manager only" : ""}
                     </div>
                   </div>
                   <button
@@ -151,15 +147,15 @@ export default function ShiftRunPage() {
         <div className="space-y-2">
           <p className="text-sm">
             {remainingRequired > 0
-              ? `Finish ${remainingRequired} required item${remainingRequired === 1 ? "" : "s"} to enable Clock Out.`
+              ? `Finish ${remainingRequired} required item${remainingRequired === 1 ? "" : "s"} to continue.`
               : "All required items done."}
           </p>
           <button
-            onClick={clockOut}
-            disabled={!canClockOut}
+            onClick={continueToShift}
+            disabled={!canContinue}
             className="w-full rounded py-2 bg-black text-white disabled:opacity-50"
           >
-            Clock Out
+            Continue to Shift
           </button>
         </div>
       </div>

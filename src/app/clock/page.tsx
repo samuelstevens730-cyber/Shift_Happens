@@ -25,7 +25,7 @@ export default function ClockPage() {
   const [selectedStore, setSelectedStore] = useState<string>("");
   const [role, setRole] = useState<Membership["role"] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [shiftId, setshiftId] = useState<string | null>(null);
+  const [shiftId, setShiftId] = useState<string | null>(null);
   const [showClockIn, setShowClockIn] = useState(false);
   const [startLocal, setStartLocal] = useState(toLocalInputValue());
   const router = useRouter();
