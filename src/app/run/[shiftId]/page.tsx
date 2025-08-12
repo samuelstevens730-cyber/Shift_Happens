@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 const CHECKLISTS_ENABLED = process.env.NEXT_PUBLIC_ENABLE_CHECKLISTS === "true";
@@ -18,6 +18,7 @@ type Item = {
 export default function ShiftRunPage() {
   const { shiftId } = useParams() as { shiftId: string };
   const router = useRouter();
+  const search = useSearchParams();
 
   const [runId, setRunId] = useState<string | null>(null);
   const [storeId, setStoreId] = useState<string | null>(null);
@@ -28,51 +29,76 @@ export default function ShiftRunPage() {
 
   // Load run + items
   useEffect(() => {
-    if (!CHECKLISTS_ENABLED) {
-      setLoading(false);
-      return;
-    }
     (async () => {
       setErr(null);
       setLoading(true);
       try {
-        // 1) Grab the run tied to this shift
-        const { data: run, error: runErr } = await supabase
-          .from("checklist_runs")
-          .select("id, store_id, checklist_id")
-          .eq("shift_id", shiftId)
-          .limit(1)
-          .maybeSingle();
-        if (runErr) throw runErr;
-        if (!run) throw new Error("No checklist run found for this shift.");
-        setRunId(run.id);
-        setStoreId(run.store_id);
+        if (CHECKLISTS_ENABLED) {
+          // 1) Grab the run tied to this shift
+          const { data: run, error: runErr } = await supabase
+            .from("checklist_runs")
+            .select("id, store_id, checklist_id")
+            .eq("shift_id", shiftId)
+            .limit(1)
+            .maybeSingle();
+          if (runErr) throw runErr;
+          if (!run) throw new Error("No checklist run found for this shift.");
+          setRunId(run.id);
+          setStoreId(run.store_id);
 
-        // 2) Load checklist items
-        const { data: its, error: itemsErr } = await supabase
-          .from("checklist_items")
-          .select("id, text, required, required_for, manager_only")
-          .eq("checklist_id", run.checklist_id)
-          .order("order_num");
-        if (itemsErr) throw itemsErr;
+          // 2) Load checklist items
+          const { data: its, error: itemsErr } = await supabase
+            .from("checklist_items")
+            .select("id, text, required, required_for, manager_only")
+            .eq("checklist_id", run.checklist_id)
+            .order("order_num");
+          if (itemsErr) throw itemsErr;
 
-        setItems(its ?? []);
+          setItems(its ?? []);
 
-        // 3) Load any checks already done
-        const { data: checks, error: checksErr } = await supabase
-          .from("checklist_item_checks")
-          .select("item_id")
-          .eq("run_id", run.id);
-        if (checksErr) throw checksErr;
+          // 3) Load any checks already done
+          const { data: checks, error: checksErr } = await supabase
+            .from("checklist_item_checks")
+            .select("item_id")
+            .eq("run_id", run.id);
+          if (checksErr) throw checksErr;
 
-        setDone(new Set((checks ?? []).map(c => c.item_id)));
+          setDone(new Set((checks ?? []).map(c => c.item_id)));
+        } else {
+          const store = search.get("store");
+          const role = search.get("role");
+          if (!store || !role) {
+            throw new Error("Missing store or role.");
+          }
+          setStoreId(store);
+          const { data: list, error: listErr } = await supabase
+            .from("checklists")
+            .select("id")
+            .eq("store_id", store)
+            .eq("applies_to_role", role)
+            .eq("kind", "opening")
+            .limit(1)
+            .maybeSingle();
+          if (listErr) throw listErr;
+          if (!list) {
+            setItems([]);
+          } else {
+            const { data: its, error: itemsErr } = await supabase
+              .from("checklist_items")
+              .select("id, text, required, required_for, manager_only")
+              .eq("checklist_id", list.id)
+              .order("order_num");
+            if (itemsErr) throw itemsErr;
+            setItems(its ?? []);
+          }
+        }
       } catch (e: unknown) {
-        setErr(e instanceof Error ? e.message : "Failed to load run");
+        setErr(e instanceof Error ? e.message : "Failed to load checklist");
       } finally {
         setLoading(false);
       }
     })();
-  }, [shiftId]);
+  }, [shiftId, search]);
 
   // For OPENING (BoS) we require items where required_for === "clock_in"
   const requiredIds = useMemo(
