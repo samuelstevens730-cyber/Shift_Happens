@@ -34,6 +34,7 @@ function ResetPasswordInner() {
     setSaving(false);
     if (error) { setError(error.message); return; }
 
+    await supabase.auth.signOut();
     router.replace("/login");
   }
 

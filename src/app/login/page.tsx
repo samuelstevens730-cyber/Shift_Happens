@@ -2,7 +2,7 @@
 
 import { supabase } from "@/lib/supabaseClient";
 import { Auth } from "@supabase/auth-ui-react";
-import { ThemeSupa, type ViewType } from "@supabase/auth-ui-shared";
+import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
@@ -10,12 +10,17 @@ import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 export default function LoginPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
-  const [view, setView] = useState<ViewType>("sign_in");
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
 
-  const origin =
-    typeof window !== "undefined" ? window.location.origin : undefined;
-  const resetRedirect =
-    origin && view === "forgotten_password" ? `${origin}/auth/reset` : undefined;
+  async function handleForgot() {
+    const email = prompt("Enter your email for password reset");
+    if (!email) return;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${origin}/auth/reset`,
+    });
+    if (error) alert(error.message);
+    else alert("Check your email for the reset link.");
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -49,11 +54,14 @@ export default function LoginPage() {
         <Auth
           supabaseClient={supabase}
           providers={[]}
-          view={view}
           appearance={{ theme: ThemeSupa }}
-          redirectTo={resetRedirect}
-          onViewChange={setView}
         />
+        <button
+          className="text-sm underline mt-3"
+          onClick={handleForgot}
+        >
+          Forgot password?
+        </button>
       </div>
     </div>
   );
