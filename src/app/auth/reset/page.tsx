@@ -1,20 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
-export default function ResetPasswordPage() {
+function ResetPasswordInner() {
   const router = useRouter();
   const q = useSearchParams();
 
   const [pending, setPending] = useState(true);
-  const [error, setError]   = useState<string | null>(null);
-  const [pw1, setPw1]       = useState("");
-  const [pw2, setPw2]       = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pw1, setPw1] = useState("");
+  const [pw2, setPw2] = useState("");
   const [saving, setSaving] = useState(false);
 
-  // Supabase sends ?code=... on password recovery; exchange for a session first
   useEffect(() => {
     (async () => {
       const code = q.get("code");
@@ -35,7 +34,7 @@ export default function ResetPasswordPage() {
     setSaving(false);
     if (error) { setError(error.message); return; }
 
-    router.replace("/login"); // or wherever you land post-reset
+    router.replace("/login");
   }
 
   if (pending) return <div className="p-6">Checking your link…</div>;
@@ -47,19 +46,37 @@ export default function ResetPasswordPage() {
         {error && <div className="text-sm text-red-600 border border-red-300 rounded p-3">{error}</div>}
 
         <label className="text-sm">New password</label>
-        <input type="password" className="w-full border rounded p-2"
-               value={pw1} onChange={e => setPw1(e.target.value)} />
+        <input
+          type="password"
+          className="w-full border rounded p-2"
+          value={pw1}
+          onChange={e => setPw1(e.target.value)}
+        />
 
         <label className="text-sm">Confirm password</label>
-        <input type="password" className="w-full border rounded p-2"
-               value={pw2} onChange={e => setPw2(e.target.value)} />
+        <input
+          type="password"
+          className="w-full border rounded p-2"
+          value={pw2}
+          onChange={e => setPw2(e.target.value)}
+        />
 
-        <button disabled={saving}
-                onClick={submit}
-                className="w-full rounded bg-black text-white py-2 disabled:opacity-50">
+        <button
+          disabled={saving}
+          onClick={submit}
+          className="w-full rounded bg-black text-white py-2 disabled:opacity-50"
+        >
           {saving ? "Saving…" : "Update password"}
         </button>
       </div>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div className="p-6">Loading…</div>}>
+      <ResetPasswordInner />
+    </Suspense>
   );
 }
