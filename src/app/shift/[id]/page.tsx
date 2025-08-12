@@ -3,11 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
-
-function toLocalInputValue(d = new Date()) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
+import { toLocalInputValue } from "@/lib/date";
 
 function ChangeoverPanel({
   shiftId,
@@ -18,6 +14,7 @@ function ChangeoverPanel({
   confirmed: boolean;
   onConfirmed: (v: boolean) => void;
 }) {
+  const [error, setError] = useState<string | null>(null);
   if (confirmed) {
     return (
       <div className="border rounded p-3 text-sm text-green-700">
@@ -28,11 +25,17 @@ function ChangeoverPanel({
   return (
     <div className="border rounded p-3 space-y-2">
       <p className="text-sm">Mid‑shift handoff requires drawer count and changeover.</p>
+      {error && (
+        <div className="text-sm text-red-600 border border-red-300 rounded p-2">
+          {error}
+        </div>
+      )}
       <button
         className="rounded bg-black text-white px-3 py-2"
         onClick={async () => {
           const { error } = await supabase.rpc("confirm_changeover", { p_shift_id: shiftId });
-          if (error) { alert(error.message); return; }
+          if (error) { setError(error.message); return; }
+          setError(null);
           onConfirmed(true);
         }}
       >
@@ -52,6 +55,7 @@ function ClockOutModal({
   onSuccess: () => void; // navigate to receipt page
 }) {
   const [endLocal, setEndLocal] = useState(toLocalInputValue());
+  const [error, setError] = useState<string | null>(null);
   const closingItems = [
     "Close Credit Card Batch",
     "Print Z-Report",
@@ -65,8 +69,9 @@ function ClockOutModal({
   );
   const [doubleCheck, setDoubleCheck] = useState(false);
 
-  const endHour = new Date(endLocal).getHours();
-  const isClosingShift = endHour >= 20 || endHour === 0;
+  const endDate = new Date(endLocal);
+  const endHour = endDate.getHours();
+  const isClosingShift = !Number.isNaN(endHour) && (endHour >= 20 || endHour === 0);
   const allClosingDone = closingChecks.every(Boolean);
 
   return (
@@ -81,6 +86,11 @@ function ClockOutModal({
           value={endLocal}
           onChange={e => setEndLocal(e.target.value)}
         />
+        {error && (
+          <div className="text-sm text-red-600 border border-red-300 rounded p-2">
+            {error}
+          </div>
+        )}
         {isClosingShift && (
           <div className="space-y-2">
             <div className="text-sm font-medium">Closing Checklist</div>
@@ -120,13 +130,19 @@ function ClockOutModal({
             disabled={!doubleCheck || (isClosingShift && !allClosingDone)}
             className="px-3 py-1.5 rounded bg-black text-white disabled:opacity-50"
             onClick={async () => {
-              const { error } = await supabase.rpc("end_shift", {
+              setError(null);
+              const d = new Date(endLocal);
+              if (Number.isNaN(d.getTime())) {
+                setError("Invalid date/time.");
+                return;
+              }
+              const { error: rpcError } = await supabase.rpc("end_shift", {
                 p_shift_id: shiftId,
-                p_end_at: new Date(endLocal).toISOString(),
+                p_end_at: d.toISOString(),
                 p_closing_confirm: isClosingShift && allClosingDone,
                 p_manager_override: false,
               });
-              if (error) { alert(error.message); return; }
+              if (rpcError) { setError(rpcError.message); return; }
               // close modal, then navigate to the receipt page
               onClose();
               onSuccess();

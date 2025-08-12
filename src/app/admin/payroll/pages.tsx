@@ -119,9 +119,9 @@ export default function PayrollAdminPage() {
       });
 
       setRows(processed);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Payroll run error:", e);
-      setErr(e.message ?? "Failed to run report");
+      setErr(e instanceof Error ? e.message : "Failed to run report");
       setRows([]);
     } finally {
       setLoading(false);

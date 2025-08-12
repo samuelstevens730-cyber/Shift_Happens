@@ -3,19 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { toLocalInputValue } from "@/lib/date";
 
 const CHECKLISTS_ENABLED = process.env.NEXT_PUBLIC_ENABLE_CHECKLISTS === "true";
-
-function toLocalInputValue(d = new Date()) {
-  // Format for <input type="datetime-local">
-  const pad = (n: number) => String(n).padStart(2, "0");
-  const y = d.getFullYear();
-  const m = pad(d.getMonth() + 1);
-  const day = pad(d.getDate());
-  const h = pad(d.getHours());
-  const min = pad(d.getMinutes());
-  return `${y}-${m}-${day}T${h}:${min}`;
-}
 
 
 type Membership = { store_id: string; role: "owner" | "manager" | "clerk" };
@@ -158,7 +148,12 @@ async function handleClockInManual(localValue: string) {
        {shiftId ? (
   <div className="space-y-3 border rounded p-3">
     <div className="text-sm">You’re clocked in for <b>{selectedStore}</b>.</div>
-    <button onClick={() => router.push(`/run/${shiftId}`)} className="w-full rounded bg-black text-white py-2">
+    <button
+      onClick={() =>
+        router.push(`/run/${shiftId}?store=${selectedStore}&role=${role}`)
+      }
+      className="w-full rounded bg-black text-white py-2"
+    >
       Start Opening Checklist
     </button>
   </div>
