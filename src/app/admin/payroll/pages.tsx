@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-// types for dropdown options and rows
 interface Profile { id: string; full_name: string | null; }
-interface Store { id: string; name: string; }
+interface Store   { id: string; name: string; }
+
 interface ShiftRow {
   id: string;
   user_id: string;
@@ -24,128 +24,114 @@ function toISODate(d: Date) {
   return `${y}-${m}-${day}`;
 }
 function startOfDay(d: Date) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
-function endOfDay(d: Date) { const x = new Date(d); x.setHours(23,59,59,999); return x; }
+function endOfDay(d: Date)   { const x = new Date(d); x.setHours(23,59,59,999); return x; }
 
 function roundMinutes(mins: number) {
   const hours = Math.floor(mins / 60);
   const rem = mins % 60;
-  let add = 0;
-  if (rem < 20) add = 0;
-  else if (rem > 40) add = 1;
-  else add = 0.5;
-  return hours + add;
+  if (rem < 20) return hours;
+  if (rem > 40) return hours + 1;
+  return hours + 0.5;
 }
 
 export default function PayrollAdminPage() {
-  const today = new Date();
+  // default range = this week
+  const today  = new Date();
   const monday = new Date(today);
   monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
 
-  const [from, setFrom] = useState(toISODate(monday));
-  const [to, setTo] = useState(toISODate(today));
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [stores, setStores] = useState<Store[]>([]);
-  const [selectedUser, setSelectedUser] = useState<string>("all");
+  const [from, setFrom]               = useState(toISODate(monday));
+  const [to, setTo]                   = useState(toISODate(today));
+  const [profiles, setProfiles]       = useState<Profile[]>([]);
+  const [stores, setStores]           = useState<Store[]>([]);
+  const [selectedUser, setSelectedUser]   = useState<string>("all");
   const [selectedStore, setSelectedStore] = useState<string>("all");
-  const [rows, setRows] = useState<ShiftRow[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [role, setRole] = useState<string | null>(null);
+  const [rows, setRows]               = useState<ShiftRow[]>([]);
+  const [loading, setLoading]         = useState(false);
+  const [err, setErr]                 = useState<string | null>(null);
 
-  const hasAccess = role === "manager" || role === "owner";
-
+  // dropdowns
   useEffect(() => {
-    // check current user's role
-    (async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setErr("Not signed in."); return; }
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("global_role")
-        .eq("id", user.id)
-        .single();
-      if (error) { setErr(error.message); return; }
-      setRole(data?.global_role ?? null);
-    })();
-  }, []);
-
-  useEffect(() => {
-    if (!hasAccess) return;
-    // load dropdown data
     (async () => {
       const { data: profs } = await supabase
         .from("profiles")
-        .select("id,full_name")
-        .order("full_name");
+        .select("id, full_name")
+        .order("full_name", { ascending: true });
       setProfiles(profs ?? []);
+
       const { data: sts } = await supabase
         .from("stores")
-        .select("id,name")
-        .order("name");
+        .select("id, name")
+        .order("name", { ascending: true });
       setStores(sts ?? []);
     })();
-  }, [hasAccess]);
+  }, []);
 
-  async function runReport() {
+  const runReport = useCallback(async () => {
     try {
       setErr(null);
       setLoading(true);
 
       const fromISO = startOfDay(new Date(from)).toISOString();
-      const toISO = endOfDay(new Date(to)).toISOString();
+      const toISO   = endOfDay(new Date(to)).toISOString();
 
-      let query = supabase
-        .from("shifts")
-        .select("id,user_id,start_at,end_at,store_id,profiles(full_name)")
-        .gte("start_at", fromISO)
-        .lte("start_at", toISO)
-        .not("end_at", "is", null);
+      // 1) fetch per-shift rows via RPC (RLS-safe)
+      const { data: rpcRows, error: rpcErr } = await supabase.rpc("payroll_shifts_range", {
+        p_from: fromISO,
+        p_to:   toISO,
+      });
+      if (rpcErr) throw rpcErr;
 
-      if (selectedUser !== "all") query = query.eq("user_id", selectedUser);
-      if (selectedStore !== "all") query = query.eq("store_id", selectedStore);
+      type RpcRow = { id: string; user_id: string; store_id: string; start_at: string; end_at: string };
 
-      const { data, error } = await query.order("start_at");
-      if (error) throw error;
+      // optional client-side filtering for user/store dropdowns
+      let raw: RpcRow[] = (rpcRows ?? []) as RpcRow[];
+      if (selectedUser !== "all")  raw = raw.filter(r => r.user_id === selectedUser);
+      if (selectedStore !== "all") raw = raw.filter(r => r.store_id === selectedStore);
 
-      type ShiftQueryResult = {
-        id: string;
-        user_id: string;
-        start_at: string;
-        end_at: string;
-        store_id: string;
-        profiles: { full_name: string | null } | null;
-      };
+      // 2) fetch names for those user_ids
+      const userIds = Array.from(new Set(raw.map(r => r.user_id)));
+      const nameMap = new Map<string, string | null>();
+      if (userIds.length) {
+        const { data: profs, error: profErr } = await supabase
+          .from("profiles")
+          .select("id, full_name")
+          .in("id", userIds);
+        if (profErr) throw profErr;
+        (profs ?? []).forEach(p => nameMap.set(p.id, p.full_name));
+      }
 
-      const processed = ((data as ShiftQueryResult[]) || []).map((r) => {
+      // 3) compute durations
+      const processed: ShiftRow[] = raw.map(r => {
         const start = new Date(r.start_at);
-        const end = new Date(r.end_at);
-        const mins = Math.round((end.getTime() - start.getTime()) / 60000);
+        const end   = new Date(r.end_at);
+        const mins  = Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
         return {
           id: r.id,
           user_id: r.user_id,
-          full_name: r.profiles?.full_name ?? null,
+          full_name: nameMap.get(r.user_id) ?? null,
           store_id: r.store_id,
           start_at: r.start_at,
           end_at: r.end_at,
           minutes: mins,
           rounded_hours: roundMinutes(mins),
-        } as ShiftRow;
+        };
       });
+
       setRows(processed);
-    } catch (e: unknown) {
-      setErr(e instanceof Error ? e.message : "Failed to run report");
+    } catch (e: any) {
+      console.error("Payroll run error:", e);
+      setErr(e.message ?? "Failed to run report");
       setRows([]);
     } finally {
       setLoading(false);
     }
-  }
+  }, [from, to, selectedUser, selectedStore]);
 
-  // intentionally only re-run when access level changes
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { if (hasAccess) runReport(); }, [hasAccess]);
+  useEffect(() => { void runReport(); }, [runReport]);
 
-  const totalMinutes = useMemo(() => rows.reduce((a,r) => a + r.minutes, 0), [rows]);
-  const totalRounded = useMemo(() => rows.reduce((a,r) => a + r.rounded_hours, 0), [rows]);
+  const totalMinutes = useMemo(() => rows.reduce((a, r) => a + r.minutes, 0), [rows]);
+  const totalRounded = useMemo(() => rows.reduce((a, r) => a + r.rounded_hours, 0), [rows]);
 
   function exportCsv() {
     const header = ["shift_id","user_id","full_name","store_id","start_at","end_at","minutes","rounded_hours"];
@@ -162,16 +148,12 @@ export default function PayrollAdminPage() {
       ].join(","))
     );
     const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
     a.href = url;
     a.download = `payroll_${from}_to_${to}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }
-
-  if (role && !hasAccess) {
-    return <div className="p-6">Access denied.</div>;
   }
 
   return (
