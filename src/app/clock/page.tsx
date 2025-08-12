@@ -19,6 +19,7 @@ export default function ClockPage() {
   const [shiftId, setShiftId] = useState<string | null>(null);
   const [showClockIn, setShowClockIn] = useState(false);
   const [startLocal, setStartLocal] = useState(toLocalInputValue());
+
   const router = useRouter();
 
   // Pull memberships on mount
