@@ -10,6 +10,12 @@ import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 export default function LoginPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
+  const [view, setView] = useState<ViewType>("sign_in");
+
+  const origin =
+    typeof window !== "undefined" ? window.location.origin : undefined;
+  const resetRedirect =
+    origin && view === "forgotten_password" ? `${origin}/auth/reset` : undefined;
 
   useEffect(() => {
     let mounted = true;
@@ -43,13 +49,10 @@ export default function LoginPage() {
         <Auth
           supabaseClient={supabase}
           providers={[]}
-          view={"sign_in" as ViewType}
+          view={view}
           appearance={{ theme: ThemeSupa }}
-          redirectTo={
-            typeof window !== "undefined"
-              ? `${window.location.origin}/clock`
-              : undefined
-          }
+          redirectTo={resetRedirect}
+          onViewChange={setView}
         />
       </div>
     </div>
