@@ -2,9 +2,10 @@
 
 import { supabase } from "@/lib/supabaseClient";
 import { Auth } from "@supabase/auth-ui-react";
-import { ThemeSupa } from "@supabase/auth-ui-shared";
+import { ThemeSupa, type ViewType } from "@supabase/auth-ui-shared";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,19 +14,19 @@ export default function LoginPage() {
   useEffect(() => {
     let mounted = true;
 
-    // If already logged in, bounce
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
       if (data.session) router.replace("/clock");
       else setReady(true);
     });
 
-    // Also listen for auth state changes and redirect after sign-in
-    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session) {
-        router.replace("/clock");
+    const { data: sub } = supabase.auth.onAuthStateChange(
+      (event: AuthChangeEvent, session: Session | null) => {
+        if (event === "SIGNED_IN" && session) {
+          router.replace("/clock");
+        }
       }
-    });
+    );
 
     return () => {
       mounted = false;
@@ -42,10 +43,13 @@ export default function LoginPage() {
         <Auth
           supabaseClient={supabase}
           providers={[]}
-          view="sign_in"
+          view={"sign_in" as ViewType}
           appearance={{ theme: ThemeSupa }}
-          // good to keep, but our onAuthStateChange handles the push
-          redirectTo={typeof window !== "undefined" ? window.location.origin + "/clock" : undefined}
+          redirectTo={
+            typeof window !== "undefined"
+              ? `${window.location.origin}/clock`
+              : undefined
+          }
         />
       </div>
     </div>
