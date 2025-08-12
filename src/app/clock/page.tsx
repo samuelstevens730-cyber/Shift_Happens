@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
-const CHECKLISTS_ENABLED = process.env.NEXT_PUBLIC_ENABLE_CHECKLISTS === "true";
+// When false, checklists still display but DB writes are skipped
+const CAN_WRITE_CHECKLISTS = process.env.NEXT_PUBLIC_ENABLE_CHECKLISTS === "true";
 
 function toLocalInputValue(d = new Date()) {
   // Format for <input type="datetime-local">
@@ -103,7 +104,7 @@ async function handleClockInManual(localValue: string) {
     const isOpening = startHour >= 9 && startHour < 13;
 
     if (isOpening) {
-      if (CHECKLISTS_ENABLED) {
+      if (CAN_WRITE_CHECKLISTS) {
         const { data: lists, error: listErr } = await supabase
           .from("checklists")
           .select("id")
