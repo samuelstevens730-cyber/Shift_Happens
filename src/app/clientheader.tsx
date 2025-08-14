@@ -38,7 +38,7 @@ export default function ClientHeader() {
         {/* Left: logo links home */}
         <Link href="/" className="flex items-center gap-2" aria-label="Go to home">
           <Image
-            src="/brand/nocap-logo.jpg"
+            src="/brand/no_cap_logo.jpg"
             alt="No Cap Smoke Shop"
             width={140}
             height={32}
