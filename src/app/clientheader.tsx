@@ -9,12 +9,17 @@ export default function ClientHeader() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-  supabase.auth.getUser().then(({ data }) => setIsLoggedIn(!!data.user));
-  const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
-    setIsLoggedIn(!!session?.user);
-  });
-  return () => sub.subscription.unsubscribe();
-}, []);
+    supabase.auth.getUser().then(({ data }) => setIsLoggedIn(!!data.user));
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setIsLoggedIn(!!session?.user);
+    });
+
+    if (!sub || !sub.subscription) {
+      return;
+    }
+
+    return () => sub?.subscription?.unsubscribe();
+  }, []);
 
   async function handleLogout() {
     await supabase.auth.signOut();
