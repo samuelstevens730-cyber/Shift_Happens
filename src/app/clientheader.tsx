@@ -13,23 +13,16 @@ export default function ClientHeader() {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
-    let alive = true;
-
-    // Prime from current session; don't set state after unmount
-    supabase.auth
-      .getUser()
-      .then(({ data }) => { if (alive) setIsLoggedIn(!!data.user); })
-      .catch(() => { /* header stays quiet */ });
-
-    // Auth listener (v2 shape) + safe cleanup
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-      if (alive) setIsLoggedIn(!!session?.user);
+    supabase.auth.getUser().then(({ data }) => setIsLoggedIn(!!data.user));
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setIsLoggedIn(!!session?.user);
     });
 
-    return () => {
-      alive = false;
-      try { subscription?.unsubscribe(); } catch { /* nothing to clean */ }
-    };
+    if (!sub || !sub.subscription) {
+      return;
+    }
+
+    return () => sub?.subscription?.unsubscribe();
   }, []);
 
   async function handleLogout() {
