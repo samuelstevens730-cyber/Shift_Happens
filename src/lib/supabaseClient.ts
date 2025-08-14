@@ -14,5 +14,12 @@ if (!SUPABASE_ANON_KEY) {
 }
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true },
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    // Explicit so this file can never blow up if imported in a non-browser context
+    storage: typeof window !== "undefined" ? window.localStorage : undefined,
+    // Optional to be explicit; defaults to true
+    detectSessionInUrl: true,
+  },
 });
