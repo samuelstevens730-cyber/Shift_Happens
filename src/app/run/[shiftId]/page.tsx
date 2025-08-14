@@ -19,6 +19,8 @@ export default function ShiftRunPage() {
   const { shiftId } = useParams() as { shiftId: string };
   const router = useRouter();
   const search = useSearchParams();
+  const store = search.get("store");
+  const role = search.get("role");
 
   const [runId, setRunId] = useState<string | null>(null);
   const [storeId, setStoreId] = useState<string | null>(null);
@@ -65,8 +67,6 @@ export default function ShiftRunPage() {
 
           setDone(new Set((checks ?? []).map(c => c.item_id)));
         } else {
-          const store = search.get("store");
-          const role = search.get("role");
           if (!store || !role) {
             throw new Error("Missing store or role.");
           }
@@ -98,7 +98,7 @@ export default function ShiftRunPage() {
         setLoading(false);
       }
     })();
-  }, [shiftId, search]);
+  }, [shiftId, store, role]);
 
   // For OPENING (BoS) we require items where required_for === "clock_in"
   const requiredIds = useMemo(
