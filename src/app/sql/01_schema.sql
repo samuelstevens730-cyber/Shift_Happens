@@ -32,6 +32,7 @@ create table if not exists public.stores (
 
 create table if not exists public.profiles (
   id uuid primary key default gen_random_uuid(),
+  auth_user_id uuid null references auth.users(id) on delete set null,
   name text not null unique,
   active boolean not null default true,
   created_at timestamptz not null default now()
@@ -52,6 +53,10 @@ create table if not exists public.shifts (
   planned_start_at timestamptz not null,
   started_at timestamptz not null default now(),
   ended_at timestamptz,
+  requires_override boolean not null default false,
+  override_at timestamptz,
+  override_by uuid,
+  override_note text,
 
   created_at timestamptz not null default now()
 );

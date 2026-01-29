@@ -22,9 +22,29 @@ type VarianceRow = {
 type VarianceResponse = { rows: VarianceRow[] } | { error: string };
 type ReviewResponse = { ok: true } | { error: string };
 
+type MissingCountRow = {
+  id: string;
+  shiftId: string;
+  storeName: string | null;
+  employeeName: string | null;
+  shiftType: string | null;
+  countType: "start" | "changeover" | "end";
+  countedAt: string;
+  drawerCents: number;
+  note: string | null;
+};
+
+type MissingCountsResponse = { rows: MissingCountRow[] } | { error: string };
+
 function formatMoney(cents: number | null) {
   if (cents == null || !Number.isFinite(cents)) return "--";
   return `$${(cents / 100).toFixed(2)}`;
+}
+
+function formatWhen(value: string) {
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return value;
+  return dt.toLocaleString();
 }
 
 export default function VarianceReviewPage() {
@@ -33,6 +53,7 @@ export default function VarianceReviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [isAuthed, setIsAuthed] = useState(false);
   const [rows, setRows] = useState<VarianceRow[]>([]);
+  const [missingRows, setMissingRows] = useState<MissingCountRow[]>([]);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
 
@@ -73,22 +94,35 @@ export default function VarianceReviewPage() {
           return;
         }
 
-        const res = await fetch("/api/admin/variances", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const json = (await res.json()) as VarianceResponse;
+        const [varianceRes, missingRes] = await Promise.all([
+          fetch("/api/admin/variances", { headers: { Authorization: `Bearer ${token}` } }),
+          fetch("/api/admin/missing-counts", { headers: { Authorization: `Bearer ${token}` } }),
+        ]);
+
+        const varianceJson = (await varianceRes.json()) as VarianceResponse;
+        const missingJson = (await missingRes.json()) as MissingCountsResponse;
         if (!alive) return;
-        if (!res.ok || "error" in json) {
-          const msg = "error" in json ? json.error : "Failed to load variances.";
+
+        if (!varianceRes.ok || "error" in varianceJson) {
+          const msg = "error" in varianceJson ? varianceJson.error : "Failed to load variances.";
           setError(msg);
           setRows([]);
-          return;
+        } else {
+          setRows(varianceJson.rows);
         }
-        setRows(json.rows);
+
+        if (!missingRes.ok || "error" in missingJson) {
+          const msg = "error" in missingJson ? missingJson.error : "Failed to load missing counts.";
+          setError(prev => prev ?? msg);
+          setMissingRows([]);
+        } else {
+          setMissingRows(missingJson.rows);
+        }
       } catch (e: unknown) {
         if (!alive) return;
         setError(e instanceof Error ? e.message : "Failed to load variances.");
         setRows([]);
+        setMissingRows([]);
       }
     })();
     return () => {
@@ -222,6 +256,40 @@ export default function VarianceReviewPage() {
           {!rows.length && (
             <div className="card card-pad text-center text-sm muted">
               No open variances.
+            </div>
+          )}
+        </div>
+
+        <div className="pt-4">
+          <h2 className="text-xl font-semibold">Admin-Closed Without Count</h2>
+        </div>
+
+        <div className="space-y-3">
+          {missingRows.map(r => (
+            <div key={r.id} className="card card-pad space-y-2">
+              <div className="flex flex-wrap gap-3 items-center justify-between">
+                <div className="text-sm muted">
+                  <b>{r.storeName || "Unknown Store"}</b>
+                </div>
+                <div className="text-xs muted">{formatWhen(r.countedAt)}</div>
+              </div>
+
+              <div className="text-sm">
+                Employee: <b>{r.employeeName || "Unknown"}</b>{" "}
+                {r.shiftType && <span>- Shift: {r.shiftType}</span>}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
+                <div>Type: <b>{r.countType}</b></div>
+                <div>Drawer: <b>{formatMoney(r.drawerCents)}</b></div>
+                <div>Note: <b>{r.note ?? "--"}</b></div>
+              </div>
+            </div>
+          ))}
+
+          {!missingRows.length && (
+            <div className="card card-pad text-center text-sm muted">
+              No admin-closed shifts without a count.
             </div>
           )}
         </div>

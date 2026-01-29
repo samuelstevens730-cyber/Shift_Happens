@@ -7,6 +7,7 @@ type ShiftRow = {
   id: string;
   shift_type: string | null;
   ended_at: string | null;
+  started_at: string | null;
   store: { id: string; expected_drawer_cents: number } | null;
 };
 
@@ -45,7 +46,7 @@ export async function POST(
 
   const { data: shift, error: shiftErr } = await supabaseServer
     .from("shifts")
-    .select("id, shift_type, ended_at, store:store_id(id, expected_drawer_cents)")
+    .select("id, shift_type, ended_at, started_at, store:store_id(id, expected_drawer_cents)")
     .eq("id", shiftId)
     .maybeSingle()
     .returns<ShiftRow>();
@@ -75,9 +76,18 @@ export async function POST(
     if (countErr) return NextResponse.json({ error: countErr.message }, { status: 500 });
   }
 
+  const startedAt = shift.started_at ? new Date(shift.started_at) : null;
+  const durationHours = startedAt && !Number.isNaN(startedAt.getTime())
+    ? (endAt.getTime() - startedAt.getTime()) / (1000 * 60 * 60)
+    : null;
+  const requiresOverride = durationHours != null && durationHours > 13;
+
   const { data, error } = await supabaseServer
     .from("shifts")
-    .update({ ended_at: endAt.toISOString() })
+    .update({
+      ended_at: endAt.toISOString(),
+      requires_override: requiresOverride,
+    })
     .eq("id", shiftId)
     .select("id")
     .maybeSingle()

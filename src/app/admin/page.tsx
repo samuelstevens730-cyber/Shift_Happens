@@ -103,17 +103,6 @@ export default function AdminIndex() {
             </p>
           </Link>
 
-          {/* Missing Drawer Counts */}
-          <Link href="/admin/missing-counts" className="tile">
-            <div className="flex items-center gap-2">
-              <span className="tile-dot" />
-              <div className="text-lg font-medium">Missing Counts</div>
-            </div>
-            <p className="mt-2 text-sm muted">
-              Review shifts closed without a drawer count.
-            </p>
-          </Link>
-
           {/* Open Shifts */}
           <Link href="/admin/open-shifts" className="tile">
             <div className="flex items-center gap-2">
@@ -122,6 +111,17 @@ export default function AdminIndex() {
             </div>
             <p className="mt-2 text-sm muted">
               See and close any in-progress or stale shifts.
+            </p>
+          </Link>
+
+          {/* Long Shift Overrides */}
+          <Link href="/admin/overrides" className="tile">
+            <div className="flex items-center gap-2">
+              <span className="tile-dot" />
+              <div className="text-lg font-medium">Long Shift Overrides</div>
+            </div>
+            <p className="mt-2 text-sm muted">
+              Approve shifts that exceed 13 hours.
             </p>
           </Link>
 

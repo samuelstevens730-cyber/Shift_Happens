@@ -52,6 +52,8 @@ export default function ClockPageClient() {
   const [startDrawer, setStartDrawer] = useState<string>("200");
   const [startConfirmThreshold, setStartConfirmThreshold] = useState(false);
   const [startNotifiedManager, setStartNotifiedManager] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmChecked, setConfirmChecked] = useState(false);
 
   const requiresStartDrawer = shiftKind !== "other";
 
@@ -77,6 +79,21 @@ export default function ClockPageClient() {
     if (parsedStart == null) return "Enter a valid drawer amount.";
     return thresholdMessage(parsedStart, expectedDrawerCents);
   }, [requiresStartDrawer, parsedStart, expectedDrawerCents]);
+
+  const selectedStoreName = useMemo(() => {
+    return stores.find(s => s.id === storeId)?.name ?? "Unknown Store";
+  }, [stores, storeId]);
+
+  const selectedProfileName = useMemo(() => {
+    return profiles.find(p => p.id === profileId)?.name ?? "Unknown Employee";
+  }, [profiles, profileId]);
+
+  const plannedStartLabel = useMemo(() => {
+    if (!plannedStartLocal) return "Unknown time";
+    const dt = new Date(plannedStartLocal);
+    if (Number.isNaN(dt.getTime())) return plannedStartLocal;
+    return dt.toLocaleString();
+  }, [plannedStartLocal]);
 
   const canStart = useMemo(() => {
     if (!storeId || !profileId || !plannedStartLocal) return false;
@@ -164,6 +181,11 @@ export default function ClockPageClient() {
   useEffect(() => {
     if (profileId) localStorage.setItem("sh_profile", profileId);
   }, [profileId]);
+
+  useEffect(() => {
+    setConfirmChecked(false);
+    setConfirmOpen(false);
+  }, [storeId, profileId, plannedStartLocal, shiftKind]);
 
   async function startShift() {
     setError(null);
@@ -361,13 +383,57 @@ export default function ClockPageClient() {
             <button
               className="btn-primary w-full py-3 text-sm disabled:opacity-50"
               disabled={!canStart || submitting}
-              onClick={startShift}
+              onClick={() => {
+                if (canStart) setConfirmOpen(true);
+              }}
             >
               {submitting ? "Starting..." : "Start Shift"}
             </button>
           </div>
         </div>
       </div>
+
+      {confirmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="card card-pad w-full max-w-md space-y-4">
+            <div className="text-lg font-semibold">Confirm clock in</div>
+            <div className="text-sm muted">
+              I am clocking in as <b>{selectedProfileName}</b> at <b>{selectedStoreName}</b> at{" "}
+              <b>{plannedStartLabel}</b>.
+            </div>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={confirmChecked}
+                onChange={e => setConfirmChecked(e.target.checked)}
+                disabled={submitting}
+              />
+              I confirm the details above are correct.
+            </label>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                className="btn-secondary px-4 py-2"
+                onClick={() => setConfirmOpen(false)}
+                disabled={submitting}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn-primary px-4 py-2 disabled:opacity-50"
+                onClick={() => {
+                  if (!confirmChecked) return;
+                  void startShift();
+                }}
+                disabled={!confirmChecked || submitting}
+              >
+                {submitting ? "Starting..." : "Confirm & Start"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

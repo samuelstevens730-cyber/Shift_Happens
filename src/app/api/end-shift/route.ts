@@ -51,7 +51,7 @@ export async function POST(req: Request) {
 
     const { data: shift, error: shiftErr } = await supabaseServer
       .from("shifts")
-      .select("id, store_id, shift_type, ended_at")
+      .select("id, store_id, shift_type, ended_at, started_at")
       .eq("id", body.shiftId)
       .maybeSingle();
 
@@ -190,9 +190,18 @@ export async function POST(req: Request) {
     if (Number.isNaN(endAt.getTime())) return NextResponse.json({ error: "Invalid endAt." }, { status: 400 });
     const endRounded = roundTo30Minutes(endAt);
 
+    const startedAt = new Date(shift.started_at);
+    const durationHours = Number.isNaN(startedAt.getTime())
+      ? null
+      : (endRounded.getTime() - startedAt.getTime()) / (1000 * 60 * 60);
+    const requiresOverride = durationHours != null && durationHours > 13;
+
     const { error: endShiftErr } = await supabaseServer
       .from("shifts")
-      .update({ ended_at: endRounded.toISOString() })
+      .update({
+        ended_at: endRounded.toISOString(),
+        requires_override: requiresOverride,
+      })
       .eq("id", body.shiftId);
 
     // NOTE: DB trigger enforces drawer counts for open/close/double at this point.
