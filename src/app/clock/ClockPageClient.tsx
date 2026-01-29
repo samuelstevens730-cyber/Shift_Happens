@@ -44,6 +44,8 @@ export default function ClockPageClient() {
   const [storeId, setStoreId] = useState("");
   const [profileId, setProfileId] = useState("");
   const [shiftKind, setShiftKind] = useState<ShiftKind>("open");
+  const [tokenStore, setTokenStore] = useState<Store | null>(null);
+  const [tokenError, setTokenError] = useState<string | null>(null);
 
   const [plannedStartLocal, setPlannedStartLocal] = useState(() =>
     toLocalInputValue(roundTo30Minutes(new Date()))
@@ -150,6 +152,24 @@ export default function ClockPageClient() {
         setStores(storeData ?? []);
         setProfiles(filteredProfiles);
 
+        if (qrToken) {
+          const { data: tokenStoreRow, error: tokenErr } = await supabase
+            .from("stores")
+            .select("id, name, expected_drawer_cents")
+            .eq("qr_token", qrToken)
+            .maybeSingle()
+            .returns<Store>();
+          if (tokenErr) throw tokenErr;
+          if (!tokenStoreRow) {
+            setTokenError("QR token is invalid for any store.");
+            setTokenStore(null);
+          } else {
+            setTokenStore(tokenStoreRow);
+            setTokenError(null);
+            setStoreId(tokenStoreRow.id);
+          }
+        }
+
         // Restore last selections if still valid
         const lastStore = localStorage.getItem("sh_store") || "";
         const lastProfile = localStorage.getItem("sh_profile") || "";
@@ -160,7 +180,7 @@ export default function ClockPageClient() {
         const nextStoreId = storeOk ? lastStore : (storeData?.[0]?.id ?? "");
         const nextProfileId = profileOk ? lastProfile : (filteredProfiles?.[0]?.id ?? "");
 
-        setStoreId(nextStoreId);
+        if (!qrToken) setStoreId(nextStoreId);
         setProfileId(nextProfileId);
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : "Failed to load stores/profiles.");
@@ -275,6 +295,16 @@ export default function ClockPageClient() {
             </div>
           )}
 
+          {qrToken && tokenStore && (
+            <div className="banner text-sm">
+              Token store: <b>{tokenStore.name}</b>. Store selection is locked to this location.
+            </div>
+          )}
+
+          {qrToken && tokenError && (
+            <div className="banner banner-error text-sm">{tokenError}</div>
+          )}
+
           {error && (
             <div className="banner banner-error text-sm">{error}</div>
           )}
@@ -285,7 +315,7 @@ export default function ClockPageClient() {
               className="select"
               value={storeId}
               onChange={e => setStoreId(e.target.value)}
-              disabled={submitting}
+              disabled={submitting || Boolean(qrToken)}
             >
               {stores.map(s => (
                 <option key={s.id} value={s.id}>
