@@ -58,6 +58,24 @@ export async function POST(req: Request) {
       store = storeById;
     }
 
+    const { data: pendingAssignments, error: assignErr } = await supabaseServer
+      .from("shift_assignments")
+      .select("id,type,acknowledged_at,completed_at")
+      .eq("delivered_shift_id", body.shiftId)
+      .returns<{ id: string; type: "task" | "message"; acknowledged_at: string | null; completed_at: string | null }[]>();
+    if (assignErr) return NextResponse.json({ error: assignErr.message }, { status: 500 });
+
+    const hasPending = (pendingAssignments ?? []).some(a =>
+      (a.type === "message" && !a.acknowledged_at) ||
+      (a.type === "task" && !a.completed_at)
+    );
+    if (hasPending) {
+      return NextResponse.json(
+        { error: "Pending messages or tasks must be completed before clock out." },
+        { status: 400 }
+      );
+    }
+
     const shiftType = shift.shift_type as ShiftType;
 
     // 1) Enforce checklist required items (per your v1 rule: cannot clock out until required items are checked)

@@ -125,6 +125,17 @@ export default function AdminIndex() {
             </p>
           </Link>
 
+          {/* Tasks & Messages */}
+          <Link href="/admin/assignments" className="tile">
+            <div className="flex items-center gap-2">
+              <span className="tile-dot" />
+              <div className="text-lg font-medium">Tasks & Messages</div>
+            </div>
+            <p className="mt-2 text-sm muted">
+              Assign tasks or messages for the next shift.
+            </p>
+          </Link>
+
           {/* Settings (placeholder) */}
           <button
             className="tile tile-disabled text-left"

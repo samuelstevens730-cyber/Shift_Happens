@@ -40,6 +40,17 @@ type ShiftState = {
 
   // IMPORTANT: backend currently returns labels, not norms
   checkedGroupLabels: string[];
+
+  assignments: {
+    id: string;
+    type: "task" | "message";
+    message: string;
+    created_at: string;
+    created_by: string | null;
+    delivered_at: string | null;
+    acknowledged_at: string | null;
+    completed_at: string | null;
+  }[];
 };
 
 function toLocalInputValue(d = new Date()) {
@@ -132,6 +143,37 @@ export default function ShiftPage() {
     return requiredGroupKeys.filter(k => !done.has(k)).length;
   }, [requiredGroupKeys, done]);
 
+  const pendingMessages = useMemo(() => {
+    return (state?.assignments || []).filter(a => a.type === "message" && !a.acknowledged_at);
+  }, [state]);
+
+  const pendingTasks = useMemo(() => {
+    return (state?.assignments || []).filter(a => a.type === "task" && !a.completed_at);
+  }, [state]);
+
+  async function updateAssignment(assignmentId: string, action: "ack" | "complete") {
+    setErr(null);
+    const res = await fetch(`/api/shift/${shiftId}/assignments/${assignmentId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      setErr(json?.error || "Failed to update assignment.");
+      return;
+    }
+    setState(prev => {
+      if (!prev) return prev;
+      const nextAssignments = (prev.assignments || []).map(a => {
+        if (a.id !== assignmentId) return a;
+        if (action === "ack") return { ...a, acknowledged_at: new Date().toISOString() };
+        return { ...a, completed_at: new Date().toISOString() };
+      });
+      return { ...prev, assignments: nextAssignments };
+    });
+  }
+
   async function checkGroup(group: { norm: string; itemIds: string[] }) {
     if (done.has(group.norm)) return;
 
@@ -221,9 +263,60 @@ export default function ShiftPage() {
           </div>
         )}
 
+        {(pendingMessages.length > 0 || pendingTasks.length > 0) && (
+          <div className="space-y-3">
+            {pendingMessages.length > 0 && (
+              <div className="border rounded p-3 space-y-2">
+                <div className="text-sm font-medium">Manager Messages</div>
+                <div className="space-y-2">
+                  {pendingMessages.map(m => (
+                    <label key={m.id} className="flex items-start gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(m.acknowledged_at)}
+                        onChange={() => updateAssignment(m.id, "ack")}
+                      />
+                      <span>{m.message}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {pendingTasks.length > 0 && (
+              <div className="border rounded p-3 space-y-2">
+                <div className="text-sm font-medium">Tasks</div>
+                <div className="space-y-2">
+                  {pendingTasks.map(t => (
+                    <div key={t.id} className="flex items-center justify-between gap-2 text-sm">
+                      <span>{t.message}</span>
+                      <button
+                        className="px-3 py-1 rounded border"
+                        onClick={() => updateAssignment(t.id, "complete")}
+                      >
+                        Mark Complete
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {pendingMessages.length + pendingTasks.length > 0 && (
+          <div className="text-sm">
+            Please acknowledge all messages and complete all tasks before clocking out.
+          </div>
+        )}
+
         <button
           className="w-full rounded bg-black text-white py-2 disabled:opacity-50"
-          disabled={shiftType !== "other" && remainingRequired > 0}
+          disabled={
+            (shiftType !== "other" && remainingRequired > 0) ||
+            pendingMessages.length > 0 ||
+            pendingTasks.length > 0
+          }
           onClick={() => setShowClockOut(true)}
         >
           Clock Out

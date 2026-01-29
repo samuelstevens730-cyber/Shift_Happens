@@ -9,6 +9,7 @@ Run order (top to bottom):
 4) 04_store_managers.sql
 5) 05_payroll_rpc.sql
 6) 06_seed_managers.sql
+7) 07_shift_assignments.sql
 
 Notes:
 - These are safe to re-run (uses IF NOT EXISTS / CREATE OR REPLACE where possible).

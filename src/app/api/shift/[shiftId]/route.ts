@@ -157,6 +157,48 @@ let checks: { item_id: string }[] = [];
     .filter(g => g.itemIds.every(id => checkedSet.has(id)))
     .map(g => g.label);
 
+  // Claim pending assignments for this shift (next-shift semantics)
+  if (!shift.ended_at) {
+    const { data: pendingAssignments, error: pendingErr } = await supabaseServer
+      .from("shift_assignments")
+      .select("id")
+      .is("delivered_at", null)
+      .or(`target_profile_id.eq.${shift.profile_id},target_store_id.eq.${shift.store_id}`);
+    if (pendingErr) return NextResponse.json({ error: pendingErr.message }, { status: 500 });
+
+    const pendingIds = (pendingAssignments ?? []).map(a => a.id);
+    if (pendingIds.length) {
+      const { error: claimErr } = await supabaseServer
+        .from("shift_assignments")
+        .update({
+          delivered_at: new Date().toISOString(),
+          delivered_shift_id: shift.id,
+          delivered_profile_id: shift.profile_id,
+          delivered_store_id: shift.store_id,
+        })
+        .in("id", pendingIds)
+        .is("delivered_at", null);
+      if (claimErr) return NextResponse.json({ error: claimErr.message }, { status: 500 });
+    }
+  }
+
+  const { data: assignments, error: assignErr } = await supabaseServer
+    .from("shift_assignments")
+    .select("id,type,message,created_at,created_by,delivered_at,acknowledged_at,completed_at")
+    .eq("delivered_shift_id", shift.id)
+    .order("created_at", { ascending: true })
+    .returns<{
+      id: string;
+      type: "task" | "message";
+      message: string;
+      created_at: string;
+      created_by: string | null;
+      delivered_at: string | null;
+      acknowledged_at: string | null;
+      completed_at: string | null;
+    }[]>();
+  if (assignErr) return NextResponse.json({ error: assignErr.message }, { status: 500 });
+
   return NextResponse.json({
     store,
     shift,
@@ -168,5 +210,7 @@ let checks: { item_id: string }[] = [];
     // new (Option A support)
     checklistGroups,         // deduped for UI display + has underlying itemIds[]
     checkedGroupLabels,      // convenience for UI
+
+    assignments: assignments ?? [],
   });
 }
