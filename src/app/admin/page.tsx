@@ -136,20 +136,16 @@ export default function AdminIndex() {
             </p>
           </Link>
 
-          {/* Settings (placeholder) */}
-          <button
-            className="tile tile-disabled text-left"
-            title="Coming soon"
-            disabled
-          >
+          {/* Settings */}
+          <Link href="/admin/settings" className="tile">
             <div className="flex items-center gap-2">
               <span className="tile-dot" />
               <div className="text-lg font-medium">Settings</div>
             </div>
             <p className="mt-2 text-sm muted">
-              Store config, checklists, payroll options.
+              Store config and checklists.
             </p>
-          </button>
+          </Link>
         </section>
       </div>
     </div>

@@ -91,14 +91,24 @@ alter table public.shift_drawer_counts
 create index if not exists shift_drawer_counts_shift_idx on public.shift_drawer_counts(shift_id);
 
 -- ----------------------------
--- 4) Checklists (hardcoded templates)
+-- 4) Seed stores (LV1/LV2) with QR tokens (safe to re-run)
+-- ----------------------------
+insert into public.stores (name, qr_token)
+values
+  ('LV1', encode(gen_random_bytes(16), 'hex')),
+  ('LV2', encode(gen_random_bytes(16), 'hex'))
+on conflict (name) do nothing;
+
+-- ----------------------------
+-- 5) Checklists (per-store templates)
 -- ----------------------------
 create table if not exists public.checklist_templates (
   id uuid primary key default gen_random_uuid(),
+  store_id uuid not null references public.stores(id) on delete cascade,
   name text not null,
   shift_type public.shift_type not null, -- templates for open/close
   created_at timestamptz not null default now(),
-  unique(name, shift_type)
+  unique(store_id, name, shift_type)
 );
 
 create table if not exists public.checklist_items (
@@ -119,10 +129,13 @@ create table if not exists public.shift_checklist_checks (
 create index if not exists shift_checklist_checks_shift_idx on public.shift_checklist_checks(shift_id);
 
 -- Seed templates
-insert into public.checklist_templates (name, shift_type)
-values
+insert into public.checklist_templates (store_id, name, shift_type)
+select s.id, t.name, t.shift_type
+from public.stores s
+cross join (values
   ('Open Checklist', 'open'),
   ('Close Checklist', 'close')
+) as t(name, shift_type)
 on conflict do nothing;
 
 -- Seed Open items
@@ -155,7 +168,7 @@ on t.name = 'Close Checklist' and t.shift_type = 'close'
 on conflict do nothing;
 
 -- ----------------------------
--- 5) Enforce required counts before clock-out
+-- 6) Enforce required counts before clock-out
 --   - other: no requirements
 --   - open/close: require start + end
 --   - double: require start + changeover + end
@@ -220,7 +233,7 @@ for each row
 execute function public.enforce_required_drawer_counts();
 
 -- ----------------------------
--- 6) Export view for CSV (includes drawer counts + deltas)
+-- 7) Export view for CSV (includes drawer counts + deltas)
 --   FIX: use bool_or for booleans (max(boolean) is invalid)
 -- ----------------------------
 create or replace view public.shift_export as
@@ -283,15 +296,6 @@ from public.shifts s
 join public.profiles p on p.id = s.profile_id
 join public.stores st on st.id = s.store_id
 left join counts c on c.shift_id = s.id;
-
--- ----------------------------
--- 7) Seed stores (LV1/LV2) with QR tokens (safe to re-run)
--- ----------------------------
-insert into public.stores (name, qr_token)
-values
-  ('LV1', encode(gen_random_bytes(16), 'hex')),
-  ('LV2', encode(gen_random_bytes(16), 'hex'))
-on conflict (name) do nothing;
 
 -- ============================================================
 -- Done.

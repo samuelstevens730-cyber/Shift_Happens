@@ -11,6 +11,13 @@ type ChecklistItemRow = {
   required: boolean;
 };
 
+type TemplateRow = {
+  id: string;
+  store_id: string | null;
+  shift_type: string;
+  name: string;
+};
+
 function templatesForShiftType(st: ShiftType) {
   if (st === "open") return ["open"];
   if (st === "close") return ["close"];
@@ -20,6 +27,27 @@ function templatesForShiftType(st: ShiftType) {
 
 function normLabel(s: string) {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+async function fetchTemplatesForStore(storeId: string, shiftTypes: string[]) {
+  const { data: storeTemplates, error: storeErr } = await supabaseServer
+    .from("checklist_templates")
+    .select("id, store_id, shift_type, name")
+    .eq("store_id", storeId)
+    .in("shift_type", shiftTypes)
+    .returns<TemplateRow[]>();
+
+  if (storeErr) throw new Error(storeErr.message);
+  if (storeTemplates && storeTemplates.length > 0) return storeTemplates;
+
+  const { data: legacyTemplates, error: legacyErr } = await supabaseServer
+    .from("checklist_templates")
+    .select("id, store_id, shift_type, name")
+    .is("store_id", null)
+    .in("shift_type", shiftTypes)
+    .returns<TemplateRow[]>();
+  if (legacyErr) throw new Error(legacyErr.message);
+  return legacyTemplates ?? [];
 }
 
 export async function GET(
@@ -87,16 +115,16 @@ export async function GET(
   // checklist items for this shift type
   const neededTemplateTypes = templatesForShiftType(shift.shift_type as ShiftType);
 
-let checklistItems: ChecklistItemRow[] = [];
-let checks: { item_id: string }[] = [];
+  let checklistItems: ChecklistItemRow[] = [];
+  let checks: { item_id: string }[] = [];
 
   if (neededTemplateTypes.length) {
-    const { data: templates, error: tplErr } = await supabaseServer
-      .from("checklist_templates")
-      .select("id, shift_type, name")
-      .in("shift_type", neededTemplateTypes);
-
-    if (tplErr) return NextResponse.json({ error: tplErr.message }, { status: 500 });
+    let templates: TemplateRow[] = [];
+    try {
+      templates = await fetchTemplatesForStore(shift.store_id, neededTemplateTypes);
+    } catch (e: unknown) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : "Failed to load templates." }, { status: 500 });
+    }
 
     const templateIds = (templates ?? []).map(t => t.id);
 

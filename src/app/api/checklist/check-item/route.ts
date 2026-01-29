@@ -11,11 +11,33 @@ type Body = {
   itemIds?: string[];
 };
 
+type TemplateRow = { id: string; store_id: string | null; shift_type: string };
+
 function templatesForShiftType(st: ShiftType) {
   if (st === "open") return ["open"];
   if (st === "close") return ["close"];
   if (st === "double") return ["open", "close"];
   return [];
+}
+
+async function fetchTemplatesForStore(storeId: string, shiftTypes: string[]) {
+  const { data: storeTemplates, error: storeErr } = await supabaseServer
+    .from("checklist_templates")
+    .select("id, store_id, shift_type")
+    .eq("store_id", storeId)
+    .in("shift_type", shiftTypes)
+    .returns<TemplateRow[]>();
+  if (storeErr) throw new Error(storeErr.message);
+  if (storeTemplates && storeTemplates.length > 0) return storeTemplates;
+
+  const { data: legacyTemplates, error: legacyErr } = await supabaseServer
+    .from("checklist_templates")
+    .select("id, store_id, shift_type")
+    .is("store_id", null)
+    .in("shift_type", shiftTypes)
+    .returns<TemplateRow[]>();
+  if (legacyErr) throw new Error(legacyErr.message);
+  return legacyTemplates ?? [];
 }
 
 export async function POST(req: Request) {
@@ -68,12 +90,12 @@ export async function POST(req: Request) {
     }
 
     // 3) Validate the itemIds are real and belong to allowed templates for this shift type
-    const { data: templates, error: tplErr } = await supabaseServer
-      .from("checklist_templates")
-      .select("id, shift_type")
-      .in("shift_type", allowedTemplateTypes);
-
-    if (tplErr) return NextResponse.json({ error: tplErr.message }, { status: 500 });
+    let templates: TemplateRow[] = [];
+    try {
+      templates = await fetchTemplatesForStore(shift.store_id, allowedTemplateTypes);
+    } catch (e: unknown) {
+      return NextResponse.json({ error: e instanceof Error ? e.message : "Failed to load templates." }, { status: 500 });
+    }
 
     const allowedTemplateIds = new Set((templates ?? []).map(t => t.id));
     if (allowedTemplateIds.size === 0) {

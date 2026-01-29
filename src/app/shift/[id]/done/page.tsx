@@ -286,8 +286,7 @@ export default function ShiftPage() {
             isOther={shiftType === "other"}
             onClose={() => setShowClockOut(false)}
             onSuccess={() => {
-              const doneQuery = qrToken ? `?t=${encodeURIComponent(qrToken)}` : "";
-              router.replace(`/shift/${shiftId}/done${doneQuery}`);
+              router.replace("/");
             }}
           />
         )}
