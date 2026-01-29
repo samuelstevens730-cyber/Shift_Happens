@@ -103,6 +103,17 @@ export default function AdminIndex() {
             </p>
           </Link>
 
+          {/* Missing Drawer Counts */}
+          <Link href="/admin/missing-counts" className="tile">
+            <div className="flex items-center gap-2">
+              <span className="tile-dot" />
+              <div className="text-lg font-medium">Missing Counts</div>
+            </div>
+            <p className="mt-2 text-sm muted">
+              Review shifts closed without a drawer count.
+            </p>
+          </Link>
+
           {/* Open Shifts */}
           <Link href="/admin/open-shifts" className="tile">
             <div className="flex items-center gap-2">

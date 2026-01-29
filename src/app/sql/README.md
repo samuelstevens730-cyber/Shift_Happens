@@ -11,6 +11,7 @@ Run order (top to bottom):
 6) 06_seed_managers.sql
 7) 07_shift_assignments.sql
 8) 08_checklists_per_store.sql
+9) 09_missing_counts.sql
 
 Notes:
 - These are safe to re-run (uses IF NOT EXISTS / CREATE OR REPLACE where possible).

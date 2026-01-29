@@ -68,6 +68,7 @@ export async function POST(
           note: "Admin ended shift (no drawer count).",
           counted_at: endAt.toISOString(),
           out_of_threshold: false,
+          count_missing: true,
         },
         { onConflict: "shift_id,count_type" }
       );

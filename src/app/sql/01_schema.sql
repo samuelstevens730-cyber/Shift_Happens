@@ -76,6 +76,7 @@ create table if not exists public.shift_drawer_counts (
   confirmed boolean not null default false,
   notified_manager boolean not null default false,
   note text,
+  count_missing boolean not null default false,
 
   -- prevent duplicates per shift/count_type (only one start, one end, etc.)
   unique (shift_id, count_type)
