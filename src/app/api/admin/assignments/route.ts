@@ -182,6 +182,7 @@ export async function POST(req: Request) {
         .select("store_id")
         .eq("profile_id", targetProfileId)
         .in("store_id", managerStoreIds)
+        .limit(1)
         .maybeSingle()
         .returns<{ store_id: string }>();
       if (memErr) return NextResponse.json({ error: memErr.message }, { status: 500 });

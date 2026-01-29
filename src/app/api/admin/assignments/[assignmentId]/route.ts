@@ -53,6 +53,7 @@ export async function PATCH(
         .select("store_id")
         .eq("profile_id", assignment.target_profile_id)
         .in("store_id", managerStoreIds)
+        .limit(1)
         .maybeSingle()
         .returns<{ store_id: string }>();
       if (memErr) return NextResponse.json({ error: memErr.message }, { status: 500 });
