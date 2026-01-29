@@ -4,7 +4,7 @@ import { supabaseServer } from "@/lib/supabaseServer";
 import { isOutOfThreshold } from "@/lib/kioskRules";
 
 type Body = {
-  qrToken: string;
+  qrToken?: string;
   shiftId: string;
   drawerCents: number;
   confirmed?: boolean;
@@ -15,17 +15,8 @@ type Body = {
 export async function POST(req: Request) {
   try {
     const body = (await req.json()) as Body;
-    if (!body.qrToken) return NextResponse.json({ error: "Missing qrToken." }, { status: 401 });
     if (!body.shiftId) return NextResponse.json({ error: "Missing shiftId." }, { status: 400 });
     if (typeof body.drawerCents !== "number") return NextResponse.json({ error: "Missing drawerCents." }, { status: 400 });
-
-    const { data: store } = await supabaseServer
-      .from("stores")
-      .select("id, expected_drawer_cents")
-      .eq("qr_token", body.qrToken)
-      .maybeSingle();
-
-    if (!store) return NextResponse.json({ error: "Invalid QR token." }, { status: 401 });
 
     const { data: shift } = await supabaseServer
       .from("shifts")
@@ -34,8 +25,28 @@ export async function POST(req: Request) {
       .maybeSingle();
 
     if (!shift) return NextResponse.json({ error: "Shift not found." }, { status: 404 });
-    if (shift.store_id !== store.id) return NextResponse.json({ error: "Wrong store." }, { status: 403 });
     if (shift.ended_at) return NextResponse.json({ error: "Shift already ended." }, { status: 400 });
+
+    let store: { id: string; expected_drawer_cents: number } | null = null;
+
+    if (body.qrToken) {
+      const { data: storeByToken } = await supabaseServer
+        .from("stores")
+        .select("id, expected_drawer_cents")
+        .eq("qr_token", body.qrToken)
+        .maybeSingle();
+      if (!storeByToken) return NextResponse.json({ error: "Invalid QR token." }, { status: 401 });
+      if (shift.store_id !== storeByToken.id) return NextResponse.json({ error: "Wrong store." }, { status: 403 });
+      store = storeByToken;
+    } else {
+      const { data: storeById } = await supabaseServer
+        .from("stores")
+        .select("id, expected_drawer_cents")
+        .eq("id", shift.store_id)
+        .maybeSingle();
+      if (!storeById) return NextResponse.json({ error: "Store not found." }, { status: 404 });
+      store = storeById;
+    }
 
     const out = isOutOfThreshold(body.drawerCents, store.expected_drawer_cents);
     if (out && !body.confirmed) {

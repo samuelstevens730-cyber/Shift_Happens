@@ -67,8 +67,8 @@ export default function ShiftPage() {
   const [showClockOut, setShowClockOut] = useState(false);
 
   async function refreshShift() {
-    if (!qrToken) return;
-    const res = await fetch(`/api/shift/${shiftId}?t=${encodeURIComponent(qrToken)}`);
+    const query = qrToken ? `?t=${encodeURIComponent(qrToken)}` : "";
+    const res = await fetch(`/api/shift/${shiftId}${query}`);
     const json = await res.json();
     if (!res.ok) throw new Error(json?.error || "Failed to load shift.");
     setState(json);
@@ -88,7 +88,8 @@ export default function ShiftPage() {
     }
 
     if (json.shift?.ended_at) {
-      router.replace(`/shift/${shiftId}/done?t=${encodeURIComponent(qrToken)}`);
+      const doneQuery = qrToken ? `?t=${encodeURIComponent(qrToken)}` : "";
+      router.replace(`/shift/${shiftId}/done${doneQuery}`);
     }
   }
 
@@ -99,7 +100,6 @@ export default function ShiftPage() {
       try {
         setErr(null);
         setLoading(true);
-        if (!qrToken) throw new Error("Missing QR token in URL (?t=...).");
         if (!alive) return;
         await refreshShift();
       } catch (e: unknown) {
@@ -157,7 +157,6 @@ export default function ShiftPage() {
   }, [requiredLabels, doneLabels, doneItemIds, usingGroups]);
 
   async function checkGroup(group: ChecklistGroup) {
-    if (!qrToken) return;
     if (usingGroups && doneLabels.has(group.label)) return;
     if (!usingGroups && doneItemIds.has(group.label)) return; // fallback mapping uses label as key
 
@@ -286,7 +285,10 @@ export default function ShiftPage() {
             expectedCents={state.store.expected_drawer_cents}
             isOther={shiftType === "other"}
             onClose={() => setShowClockOut(false)}
-            onSuccess={() => router.replace(`/shift/${shiftId}/done?t=${encodeURIComponent(qrToken)}`)}
+            onSuccess={() => {
+              const doneQuery = qrToken ? `?t=${encodeURIComponent(qrToken)}` : "";
+              router.replace(`/shift/${shiftId}/done${doneQuery}`);
+            }}
           />
         )}
       </div>

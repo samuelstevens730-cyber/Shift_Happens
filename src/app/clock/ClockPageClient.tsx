@@ -242,7 +242,7 @@ export default function ClockPageClient() {
         <div className="card card-pad space-y-4">
           {!qrToken && (
             <div className="banner text-sm">
-              Missing QR token. Use the store QR code so the URL includes <b>?t=...</b>
+              QR token missing - manual clock-in is allowed. Select a store and employee to continue.
             </div>
           )}
 

@@ -81,9 +81,8 @@ export default function ShiftPage() {
   }, []);
 
   const reloadShift = useCallback(async () => {
-    if (!qrToken) throw new Error("Missing QR token in URL (?t=...).");
-
-    const res = await fetch(`/api/shift/${shiftId}?t=${encodeURIComponent(qrToken)}`);
+    const query = qrToken ? `?t=${encodeURIComponent(qrToken)}` : "";
+    const res = await fetch(`/api/shift/${shiftId}${query}`);
     const json = await res.json();
     if (!res.ok) throw new Error(json?.error || "Failed to load shift.");
 
@@ -91,7 +90,8 @@ export default function ShiftPage() {
     seedDoneFromState(json);
 
     if (json.shift?.ended_at) {
-      router.replace(`/shift/${shiftId}/done?t=${encodeURIComponent(qrToken)}`);
+      const doneQuery = qrToken ? `?t=${encodeURIComponent(qrToken)}` : "";
+      router.replace(`/shift/${shiftId}/done${doneQuery}`);
     }
   }, [qrToken, shiftId, router, seedDoneFromState]);
 
@@ -134,7 +134,6 @@ export default function ShiftPage() {
 
   async function checkGroup(group: { norm: string; itemIds: string[] }) {
     if (done.has(group.norm)) return;
-    if (!qrToken) return;
 
     setErr(null);
     setDone(prev => new Set(prev).add(group.norm)); // optimistic
@@ -237,7 +236,10 @@ export default function ShiftPage() {
             expectedCents={state.store.expected_drawer_cents}
             isOther={shiftType === "other"}
             onClose={() => setShowClockOut(false)}
-            onSuccess={() => router.replace(`/shift/${shiftId}/done?t=${encodeURIComponent(qrToken)}`)}
+            onSuccess={() => {
+              const doneQuery = qrToken ? `?t=${encodeURIComponent(qrToken)}` : "";
+              router.replace(`/shift/${shiftId}/done${doneQuery}`);
+            }}
           />
         )}
       </div>

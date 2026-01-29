@@ -5,7 +5,7 @@ import { ShiftType } from "@/lib/kioskRules";
 
 type Body = {
   shiftId: string;
-  qrToken: string;
+  qrToken?: string;
   // Option A: allow dedupe groups
   itemId?: string;
   itemIds?: string[];
@@ -22,7 +22,6 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as Body;
 
-    if (!body.qrToken) return NextResponse.json({ error: "Missing qrToken." }, { status: 401 });
     if (!body.shiftId) return NextResponse.json({ error: "Missing shiftId." }, { status: 400 });
 
     const idsRaw = Array.isArray(body.itemIds) && body.itemIds.length
@@ -36,17 +35,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing itemId (or itemIds[])." }, { status: 400 });
     }
 
-    // 1) Resolve store by token
-    const { data: store, error: storeErr } = await supabaseServer
-      .from("stores")
-      .select("id")
-      .eq("qr_token", body.qrToken)
-      .maybeSingle();
-
-    if (storeErr) return NextResponse.json({ error: storeErr.message }, { status: 500 });
-    if (!store) return NextResponse.json({ error: "Invalid QR token." }, { status: 401 });
-
-    // 2) Fetch shift and validate store ownership + not ended
+    // 1) Fetch shift and validate not ended
     const { data: shift, error: shiftErr } = await supabaseServer
       .from("shifts")
       .select("id, store_id, ended_at, shift_type")
@@ -55,8 +44,20 @@ export async function POST(req: Request) {
 
     if (shiftErr) return NextResponse.json({ error: shiftErr.message }, { status: 500 });
     if (!shift) return NextResponse.json({ error: "Shift not found." }, { status: 404 });
-    if (shift.store_id !== store.id) return NextResponse.json({ error: "Wrong store." }, { status: 403 });
     if (shift.ended_at) return NextResponse.json({ error: "Shift already ended." }, { status: 400 });
+
+    if (body.qrToken) {
+      // Resolve store by token and validate ownership
+      const { data: store, error: storeErr } = await supabaseServer
+        .from("stores")
+        .select("id")
+        .eq("qr_token", body.qrToken)
+        .maybeSingle();
+
+      if (storeErr) return NextResponse.json({ error: storeErr.message }, { status: 500 });
+      if (!store) return NextResponse.json({ error: "Invalid QR token." }, { status: 401 });
+      if (shift.store_id !== store.id) return NextResponse.json({ error: "Wrong store." }, { status: 403 });
+    }
 
     const shiftType = shift.shift_type as ShiftType;
     const allowedTemplateTypes = templatesForShiftType(shiftType);

@@ -31,18 +31,6 @@ export async function GET(
   const url = new URL(_req.url);
   const qrToken = url.searchParams.get("t") || "";
 
-  if (!qrToken) return NextResponse.json({ error: "Missing qr token." }, { status: 401 });
-
-  // resolve store by token
-  const { data: store, error: storeErr } = await supabaseServer
-    .from("stores")
-    .select("id, name, expected_drawer_cents")
-    .eq("qr_token", qrToken)
-    .maybeSingle();
-
-  if (storeErr) return NextResponse.json({ error: storeErr.message }, { status: 500 });
-  if (!store) return NextResponse.json({ error: "Invalid QR token." }, { status: 401 });
-
   // fetch shift
   const { data: shift, error: shiftErr } = await supabaseServer
     .from("shifts")
@@ -52,8 +40,33 @@ export async function GET(
 
   if (shiftErr) return NextResponse.json({ error: shiftErr.message }, { status: 500 });
   if (!shift) return NextResponse.json({ error: "Shift not found." }, { status: 404 });
-  if (shift.store_id !== store.id)
-    return NextResponse.json({ error: "Shift does not belong to this store." }, { status: 403 });
+
+  let store: { id: string; name: string; expected_drawer_cents: number } | null = null;
+
+  if (qrToken) {
+    // resolve store by token
+    const { data: storeByToken, error: storeErr } = await supabaseServer
+      .from("stores")
+      .select("id, name, expected_drawer_cents")
+      .eq("qr_token", qrToken)
+      .maybeSingle();
+
+    if (storeErr) return NextResponse.json({ error: storeErr.message }, { status: 500 });
+    if (!storeByToken) return NextResponse.json({ error: "Invalid QR token." }, { status: 401 });
+    if (shift.store_id !== storeByToken.id)
+      return NextResponse.json({ error: "Shift does not belong to this store." }, { status: 403 });
+    store = storeByToken;
+  } else {
+    const { data: storeById, error: storeErr } = await supabaseServer
+      .from("stores")
+      .select("id, name, expected_drawer_cents")
+      .eq("id", shift.store_id)
+      .maybeSingle();
+
+    if (storeErr) return NextResponse.json({ error: storeErr.message }, { status: 500 });
+    if (!storeById) return NextResponse.json({ error: "Store not found." }, { status: 404 });
+    store = storeById;
+  }
 
   // employee name
   const { data: prof, error: profErr } = await supabaseServer
