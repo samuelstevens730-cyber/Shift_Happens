@@ -347,7 +347,7 @@ export default function ClockPageClient() {
             </label>
           )}
 
-          {requiresStartDrawer && parsedStart != null && (
+          {requiresStartDrawer && startOutOfThreshold && (
             <label className="flex items-center gap-2 text-sm">
               <input
                 type="checkbox"

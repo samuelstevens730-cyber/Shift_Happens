@@ -3,7 +3,12 @@ import { supabaseServer } from "@/lib/supabaseServer";
 
 type EndBody = { endAt?: string };
 
-type ShiftRow = { id: string };
+type ShiftRow = {
+  id: string;
+  shift_type: string | null;
+  ended_at: string | null;
+  store: { id: string; expected_drawer_cents: number } | null;
+};
 
 function getBearerToken(req: Request) {
   const auth = req.headers.get("authorization") || "";
@@ -36,6 +41,37 @@ export async function POST(
   const endAt = new Date(body.endAt);
   if (Number.isNaN(endAt.getTime())) {
     return NextResponse.json({ error: "Invalid endAt." }, { status: 400 });
+  }
+
+  const { data: shift, error: shiftErr } = await supabaseServer
+    .from("shifts")
+    .select("id, shift_type, ended_at, store:store_id(id, expected_drawer_cents)")
+    .eq("id", shiftId)
+    .maybeSingle()
+    .returns<ShiftRow>();
+
+  if (shiftErr) return NextResponse.json({ error: shiftErr.message }, { status: 500 });
+  if (!shift) return NextResponse.json({ error: "Shift not found." }, { status: 404 });
+  if (shift.ended_at) return NextResponse.json({ error: "Shift already ended." }, { status: 400 });
+
+  if (shift.shift_type !== "other") {
+    const expected = shift.store?.expected_drawer_cents ?? 20000;
+    const { error: countErr } = await supabaseServer
+      .from("shift_drawer_counts")
+      .upsert(
+        {
+          shift_id: shiftId,
+          count_type: "end",
+          drawer_cents: expected,
+          confirmed: false,
+          notified_manager: false,
+          note: "Admin ended shift (no drawer count).",
+          counted_at: endAt.toISOString(),
+          out_of_threshold: false,
+        },
+        { onConflict: "shift_id,count_type" }
+      );
+    if (countErr) return NextResponse.json({ error: countErr.message }, { status: 500 });
   }
 
   const { data, error } = await supabaseServer

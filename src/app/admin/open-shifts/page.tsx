@@ -38,6 +38,7 @@ export default function OpenShiftsPage() {
   const [rows, setRows] = useState<OpenShiftRow[]>([]);
   const [endTimes, setEndTimes] = useState<Record<string, string>>({});
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+  const [confirmShiftId, setConfirmShiftId] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -209,7 +210,7 @@ export default function OpenShiftsPage() {
                 />
                 <button
                   className="rounded bg-black text-white px-3 py-2 text-sm disabled:opacity-50"
-                  onClick={() => endShift(r.id)}
+                  onClick={() => setConfirmShiftId(r.id)}
                   disabled={savingIds.has(r.id)}
                 >
                   {savingIds.has(r.id) ? "Saving..." : "End Shift"}
@@ -225,6 +226,37 @@ export default function OpenShiftsPage() {
           )}
         </div>
       </div>
+
+      {confirmShiftId && (
+        <div className="fixed inset-0 bg-black/40 grid place-items-center p-4">
+          <div className="w-full max-w-md bg-white rounded-2xl p-4 space-y-4">
+            <h2 className="text-lg font-semibold">Confirm End Shift</h2>
+            <p className="text-sm text-gray-600">
+              This will end the shift and record an admin placeholder drawer count.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                className="px-3 py-1.5 rounded border"
+                onClick={() => setConfirmShiftId(null)}
+                disabled={savingIds.has(confirmShiftId)}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-3 py-1.5 rounded bg-black text-white disabled:opacity-50"
+                onClick={() => {
+                  const id = confirmShiftId;
+                  setConfirmShiftId(null);
+                  void endShift(id);
+                }}
+                disabled={savingIds.has(confirmShiftId)}
+              >
+                Confirm End Shift
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
