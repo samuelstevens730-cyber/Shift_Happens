@@ -266,10 +266,6 @@ function ChangeoverPanel({
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
-  if (alreadyConfirmed) {
-    return <div className="border rounded p-3 text-sm text-green-700">Changeover drawer count recorded.</div>;
-  }
-
   const cents = Math.round(Number(drawer) * 100);
   const msg = Number.isFinite(cents) ? thresholdMessage(cents, expectedCents) : null;
   const outOfThreshold = shouldShowVarianceControls(cents, expectedCents);
@@ -281,6 +277,10 @@ function ChangeoverPanel({
       setNotify(false);
     }
   }, [outOfThreshold]);
+
+  if (alreadyConfirmed) {
+    return <div className="border rounded p-3 text-sm text-green-700">Changeover drawer count recorded.</div>;
+  }
 
   return (
     <div className="border rounded p-3 space-y-2">

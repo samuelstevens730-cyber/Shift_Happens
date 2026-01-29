@@ -3,6 +3,14 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { ShiftType } from "@/lib/kioskRules";
 
+type ChecklistItemRow = {
+  id: string;
+  template_id: string;
+  label: string;
+  sort_order: number;
+  required: boolean;
+};
+
 function templatesForShiftType(st: ShiftType) {
   if (st === "open") return ["open"];
   if (st === "close") return ["close"];
@@ -14,8 +22,11 @@ function normLabel(s: string) {
   return s.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-export async function GET(_req: Request, { params }: { params: { shiftId: string } }) {
-  const shiftId = params.shiftId;
+export async function GET(
+  _req: Request,
+  { params }: { params: Promise<{ shiftId: string }> }
+) {
+  const { shiftId } = await params;
 
   const url = new URL(_req.url);
   const qrToken = url.searchParams.get("t") || "";
@@ -63,8 +74,8 @@ export async function GET(_req: Request, { params }: { params: { shiftId: string
   // checklist items for this shift type
   const neededTemplateTypes = templatesForShiftType(shift.shift_type as ShiftType);
 
-  let checklistItems: { id: string; template_id: string; label: string; sort_order: number; required: boolean }[] = [];
-  let checks: { item_id: string }[] = [];
+let checklistItems: ChecklistItemRow[] = [];
+let checks: { item_id: string }[] = [];
 
   if (neededTemplateTypes.length) {
     const { data: templates, error: tplErr } = await supabaseServer
@@ -84,7 +95,7 @@ export async function GET(_req: Request, { params }: { params: { shiftId: string
         .order("sort_order");
 
       if (itemsErr) return NextResponse.json({ error: itemsErr.message }, { status: 500 });
-      checklistItems = (items ?? []) as any;
+      checklistItems = (items ?? []) as ChecklistItemRow[];
     }
 
     const { data: doneRows, error: doneErr } = await supabaseServer

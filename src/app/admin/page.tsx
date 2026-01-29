@@ -5,11 +5,14 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
+type VarianceCountResponse = { rows: unknown[] } | { error: string };
+
 export default function AdminIndex() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState<string | null>(null);
   const [isAuthed, setIsAuthed] = useState(false);
+  const [varianceCount, setVarianceCount] = useState<number | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -33,7 +36,34 @@ export default function AdminIndex() {
     return () => { alive = false; };
   }, [router]);
 
-  if (loading) return <div className="p-6">Loading…</div>;
+  useEffect(() => {
+    if (!isAuthed) return;
+    let alive = true;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        const token = session?.access_token || "";
+        if (!token || !alive) return;
+
+        const res = await fetch("/api/admin/variances", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const json = (await res.json()) as VarianceCountResponse;
+        if (!alive) return;
+        if (!res.ok || "error" in json) {
+          setVarianceCount(null);
+          return;
+        }
+        setVarianceCount(Array.isArray(json.rows) ? json.rows.length : null);
+      } catch {
+        if (!alive) return;
+        setVarianceCount(null);
+      }
+    })();
+    return () => { alive = false; };
+  }, [isAuthed]);
+
+  if (loading) return <div className="p-6">Loading...</div>;
   if (error)   return <div className="p-6 text-red-600">{error}</div>;
   if (!isAuthed) return null; // redirected
 
@@ -51,6 +81,21 @@ export default function AdminIndex() {
             <div className="text-lg font-medium">Payroll</div>
             <p className="mt-1 text-sm text-gray-600">
               View finished shifts and export for payroll.
+            </p>
+          </Link>
+
+          {/* Variance Review */}
+          <Link href="/admin/variances" className="block rounded-2xl border p-5 shadow-sm hover:shadow transition">
+            <div className="flex items-center gap-2">
+              <div className="text-lg font-medium">Variance Review</div>
+              {typeof varianceCount === "number" && varianceCount > 0 && (
+                <span className="text-xs rounded-full bg-black text-white px-2 py-0.5">
+                  {varianceCount}
+                </span>
+              )}
+            </div>
+            <p className="mt-1 text-sm text-gray-600">
+              Review out-of-threshold drawer counts.
             </p>
           </Link>
 
@@ -94,3 +139,4 @@ export default function AdminIndex() {
     </div>
   );
 }
+

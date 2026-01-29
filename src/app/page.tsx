@@ -7,9 +7,9 @@ export default function Home() {
         <h1 className="text-2xl font-semibold">Shift Happens</h1>
         <div className="flex gap-4">
           <Link href="/clock" className="flex-1 text-center rounded bg-black text-white py-2">
-            Clock
+            Employee
           </Link>
-          <Link href="/admin" className="flex-1 text-center rounded border py-2">
+          <Link href="/login?next=/admin" className="flex-1 text-center rounded border py-2">
             Admin
           </Link>
         </div>

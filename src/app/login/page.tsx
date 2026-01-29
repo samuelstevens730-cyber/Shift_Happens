@@ -11,6 +11,10 @@ export default function LoginPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const nextPath =
+    typeof window !== "undefined"
+      ? new URLSearchParams(window.location.search).get("next") || "/clock"
+      : "/clock";
 
   async function handleForgot() {
     const email = prompt("Enter your email for password reset");
@@ -32,14 +36,14 @@ export default function LoginPage() {
 
     supabase.auth.getSession().then(({ data }) => {
       if (!mounted) return;
-      if (data.session) router.replace("/clock");
+      if (data.session) router.replace(nextPath);
       else setReady(true);
     });
 
     const { data: sub } = supabase.auth.onAuthStateChange(
       (event: AuthChangeEvent, session: Session | null) => {
         if (event === "SIGNED_IN" && session) {
-          router.replace("/clock");
+          router.replace(nextPath);
         }
       }
     );
@@ -48,7 +52,7 @@ export default function LoginPage() {
       mounted = false;
       sub.subscription.unsubscribe();
     };
-  }, [router]);
+  }, [router, nextPath]);
 
   if (!ready) return null;
 
@@ -60,7 +64,7 @@ export default function LoginPage() {
           supabaseClient={supabase}
           providers={[]}
           appearance={{ theme: ThemeSupa }}
-          redirectTo={`${origin}/clock`}
+          redirectTo={`${origin}${nextPath}`}
         />
         <button
           className="text-sm underline mt-3"
