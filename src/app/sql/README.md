@@ -7,6 +7,8 @@ Run order (top to bottom):
 2) 02_variance_review.sql
 3) 03_app_users.sql
 4) 04_store_managers.sql
+5) 05_payroll_rpc.sql
+6) 06_seed_managers.sql
 
 Notes:
 - These are safe to re-run (uses IF NOT EXISTS / CREATE OR REPLACE where possible).

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-interface Profile { id: string; full_name: string | null; }
+interface Profile { id: string; name: string | null; }
 interface Store   { id: string; name: string; }
 
 interface ShiftRow {
@@ -55,8 +55,8 @@ export default function PayrollAdminPage() {
     (async () => {
       const { data: profs } = await supabase
         .from("profiles")
-        .select("id, full_name")
-        .order("full_name", { ascending: true });
+        .select("id, name")
+        .order("name", { ascending: true });
       setProfiles(profs ?? []);
 
       const { data: sts } = await supabase
@@ -95,10 +95,10 @@ export default function PayrollAdminPage() {
       if (userIds.length) {
         const { data: profs, error: profErr } = await supabase
           .from("profiles")
-          .select("id, full_name")
+          .select("id, name")
           .in("id", userIds);
         if (profErr) throw profErr;
-        (profs ?? []).forEach(p => nameMap.set(p.id, p.full_name));
+        (profs ?? []).forEach(p => nameMap.set(p.id, p.name));
       }
 
       // 3) compute durations
@@ -175,7 +175,7 @@ export default function PayrollAdminPage() {
             <select className="select" value={selectedUser} onChange={e => setSelectedUser(e.target.value)}>
               <option value="all">All</option>
               {profiles.map(p => (
-                <option key={p.id} value={p.id}>{p.full_name || p.id.slice(0,8)}</option>
+                <option key={p.id} value={p.id}>{p.name || p.id.slice(0,8)}</option>
               ))}
             </select>
           </div>
