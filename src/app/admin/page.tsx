@@ -114,20 +114,16 @@ export default function AdminIndex() {
             </p>
           </Link>
 
-          {/* Users (placeholder) */}
-          <button
-            className="tile tile-disabled text-left"
-            title="Coming soon"
-            disabled
-          >
+          {/* Users */}
+          <Link href="/admin/users" className="tile">
             <div className="flex items-center gap-2">
               <span className="tile-dot" />
               <div className="text-lg font-medium">Users</div>
             </div>
             <p className="mt-2 text-sm muted">
-              Manage access to stores and roles.
+              Manage employee profiles and store assignments.
             </p>
-          </button>
+          </Link>
 
           {/* Settings (placeholder) */}
           <button
