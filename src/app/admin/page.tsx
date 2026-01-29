@@ -99,17 +99,13 @@ export default function AdminIndex() {
             </p>
           </Link>
 
-          {/* Open Shifts (placeholder; wire when ready) */}
-          <button
-            className="rounded-2xl border p-5 text-left shadow-sm opacity-60 cursor-not-allowed"
-            title="Coming soon"
-            disabled
-          >
+          {/* Open Shifts */}
+          <Link href="/admin/open-shifts" className="block rounded-2xl border p-5 shadow-sm hover:shadow transition">
             <div className="text-lg font-medium">Open Shifts</div>
             <p className="mt-1 text-sm text-gray-600">
               See and close any in-progress or stale shifts.
             </p>
-          </button>
+          </Link>
 
           {/* Users (placeholder) */}
           <button
