@@ -11,10 +11,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const nextPath =
-    typeof window !== "undefined"
-      ? new URLSearchParams(window.location.search).get("next") || "/clock"
-      : "/clock";
+  const [nextPath, setNextPath] = useState<string | null>(null);
 
   async function handleForgot() {
     const email = prompt("Enter your email for password reset");
@@ -32,6 +29,13 @@ export default function LoginPage() {
   }
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const next = new URLSearchParams(window.location.search).get("next") || "/clock";
+    setNextPath(next);
+  }, []);
+
+  useEffect(() => {
+    if (!nextPath) return;
     let mounted = true;
 
     supabase.auth.getSession().then(({ data }) => {
@@ -54,7 +58,7 @@ export default function LoginPage() {
     };
   }, [router, nextPath]);
 
-  if (!ready) return null;
+  if (!ready || !nextPath) return null;
 
   return (
     <div className="min-h-screen grid place-items-center p-6">
