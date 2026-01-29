@@ -14,6 +14,7 @@ Run order (top to bottom):
 9) 09_missing_counts.sql
 10) 10_shift_rules.sql
 11) 11_rls.sql
+12) 12_assignments_soft_delete.sql
 
 Notes:
 - These are safe to re-run (uses IF NOT EXISTS / CREATE OR REPLACE where possible).

@@ -19,7 +19,6 @@ type VarianceRow = {
   note: string | null;
 };
 
-type VarianceResponse = { rows: VarianceRow[] } | { error: string };
 type ReviewResponse = { ok: true } | { error: string };
 
 type MissingCountRow = {
@@ -34,7 +33,16 @@ type MissingCountRow = {
   note: string | null;
 };
 
-type MissingCountsResponse = { rows: MissingCountRow[] } | { error: string };
+type MissingCountsResponse =
+  | { rows: MissingCountRow[]; page: number; pageSize: number; total: number }
+  | { error: string };
+
+type VarianceListResponse =
+  | { rows: VarianceRow[]; page: number; pageSize: number; total: number }
+  | { error: string };
+
+type Store = { id: string; name: string };
+type Profile = { id: string; name: string | null };
 
 function formatMoney(cents: number | null) {
   if (cents == null || !Number.isFinite(cents)) return "--";
@@ -54,8 +62,23 @@ export default function VarianceReviewPage() {
   const [isAuthed, setIsAuthed] = useState(false);
   const [rows, setRows] = useState<VarianceRow[]>([]);
   const [missingRows, setMissingRows] = useState<MissingCountRow[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set());
+  const [filterFrom, setFilterFrom] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().slice(0, 10);
+  });
+  const [filterTo, setFilterTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [filterStore, setFilterStore] = useState("all");
+  const [filterProfile, setFilterProfile] = useState("all");
+  const [page, setPage] = useState(1);
+  const [missingPage, setMissingPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [missingTotal, setMissingTotal] = useState(0);
+  const pageSize = 25;
 
   useEffect(() => {
     let alive = true;
@@ -87,6 +110,18 @@ export default function VarianceReviewPage() {
     (async () => {
       try {
         setError(null);
+        const { data: storeData } = await supabase
+          .from("stores")
+          .select("id, name")
+          .order("name", { ascending: true });
+        if (alive) setStores(storeData ?? []);
+
+        const { data: profileData } = await supabase
+          .from("profiles")
+          .select("id, name")
+          .order("name", { ascending: true });
+        if (alive) setProfiles(profileData ?? []);
+
         const { data: { session } } = await supabase.auth.getSession();
         const token = session?.access_token || "";
         if (!token) {
@@ -94,12 +129,30 @@ export default function VarianceReviewPage() {
           return;
         }
 
+        const params = new URLSearchParams({
+          page: String(page),
+          pageSize: String(pageSize),
+          from: new Date(filterFrom).toISOString(),
+          to: new Date(filterTo).toISOString(),
+        });
+        if (filterStore !== "all") params.set("storeId", filterStore);
+        if (filterProfile !== "all") params.set("profileId", filterProfile);
+
+        const missingParams = new URLSearchParams({
+          page: String(missingPage),
+          pageSize: String(pageSize),
+          from: new Date(filterFrom).toISOString(),
+          to: new Date(filterTo).toISOString(),
+        });
+        if (filterStore !== "all") missingParams.set("storeId", filterStore);
+        if (filterProfile !== "all") missingParams.set("profileId", filterProfile);
+
         const [varianceRes, missingRes] = await Promise.all([
-          fetch("/api/admin/variances", { headers: { Authorization: `Bearer ${token}` } }),
-          fetch("/api/admin/missing-counts", { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`/api/admin/variances?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`/api/admin/missing-counts?${missingParams.toString()}`, { headers: { Authorization: `Bearer ${token}` } }),
         ]);
 
-        const varianceJson = (await varianceRes.json()) as VarianceResponse;
+        const varianceJson = (await varianceRes.json()) as VarianceListResponse;
         const missingJson = (await missingRes.json()) as MissingCountsResponse;
         if (!alive) return;
 
@@ -109,6 +162,8 @@ export default function VarianceReviewPage() {
           setRows([]);
         } else {
           setRows(varianceJson.rows);
+          setTotal(varianceJson.total);
+          setPage(varianceJson.page);
         }
 
         if (!missingRes.ok || "error" in missingJson) {
@@ -117,6 +172,8 @@ export default function VarianceReviewPage() {
           setMissingRows([]);
         } else {
           setMissingRows(missingJson.rows);
+          setMissingTotal(missingJson.total);
+          setMissingPage(missingJson.page);
         }
       } catch (e: unknown) {
         if (!alive) return;
@@ -128,7 +185,7 @@ export default function VarianceReviewPage() {
     return () => {
       alive = false;
     };
-  }, [isAuthed, router]);
+  }, [isAuthed, router, page, missingPage, filterFrom, filterTo, filterStore, filterProfile]);
 
   const deltaById = useMemo(() => {
     const map = new Map<string, number | null>();
@@ -193,6 +250,49 @@ export default function VarianceReviewPage() {
         <h1 className="text-2xl font-semibold">Variance Review</h1>
 
         {error && <div className="banner banner-error text-sm">{error}</div>}
+
+        <div className="card card-pad space-y-4">
+          <div className="text-lg font-medium">Filters</div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-2">
+              <label className="text-sm muted">From</label>
+              <input type="date" className="input" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm muted">To</label>
+              <input type="date" className="input" value={filterTo} onChange={e => setFilterTo(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm muted">Store</label>
+              <select className="select" value={filterStore} onChange={e => setFilterStore(e.target.value)}>
+                <option value="all">All</option>
+                {stores.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm muted">Employee</label>
+              <select className="select" value={filterProfile} onChange={e => setFilterProfile(e.target.value)}>
+                <option value="all">All</option>
+                {profiles.map(p => (
+                  <option key={p.id} value={p.id}>{p.name || p.id.slice(0, 8)}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              className="btn-primary px-4 py-2"
+              onClick={() => {
+                setPage(1);
+                setMissingPage(1);
+              }}
+            >
+              Apply Filters
+            </button>
+          </div>
+        </div>
 
         <div className="space-y-3">
           {rows.map(r => {
@@ -260,6 +360,15 @@ export default function VarianceReviewPage() {
           )}
         </div>
 
+        {total > pageSize && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+          />
+        )}
+
         <div className="pt-4">
           <h2 className="text-xl font-semibold">Admin-Closed Without Count</h2>
         </div>
@@ -293,7 +402,54 @@ export default function VarianceReviewPage() {
             </div>
           )}
         </div>
+
+        {missingTotal > pageSize && (
+          <Pagination
+            page={missingPage}
+            pageSize={pageSize}
+            total={missingTotal}
+            onPageChange={setMissingPage}
+          />
+        )}
       </div>
+    </div>
+  );
+}
+
+function Pagination({
+  page,
+  pageSize,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
+  const totalPages = Math.ceil(total / pageSize);
+  if (totalPages <= 1) return null;
+
+  const pages: number[] = [];
+  for (let i = 1; i <= totalPages; i += 1) pages.push(i);
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button className="btn-secondary px-3 py-1.5" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
+        Prev
+      </button>
+      {pages.map(p => (
+        <button
+          key={p}
+          className={p === page ? "btn-primary px-3 py-1.5" : "btn-secondary px-3 py-1.5"}
+          onClick={() => onPageChange(p)}
+        >
+          {p}
+        </button>
+      ))}
+      <button className="btn-secondary px-3 py-1.5" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
+        Next
+      </button>
     </div>
   );
 }

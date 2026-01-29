@@ -30,7 +30,7 @@ type Assignment = {
 };
 
 type AssignmentsResponse =
-  | { stores: Store[]; users: User[]; assignments: Assignment[] }
+  | { stores: Store[]; users: User[]; assignments: Assignment[]; page: number; pageSize: number; total: number }
   | { error: string };
 
 type SimpleResponse = { ok: true } | { error: string };
@@ -43,6 +43,9 @@ export default function AssignmentsAdminPage() {
   const [stores, setStores] = useState<Store[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const pageSize = 25;
 
   const [type, setType] = useState<"task" | "message">("task");
   const [targetMode, setTargetMode] = useState<"profile" | "store">("profile");
@@ -50,6 +53,15 @@ export default function AssignmentsAdminPage() {
   const [targetStoreId, setTargetStoreId] = useState("");
   const [message, setMessage] = useState("");
   const [saving, setSaving] = useState(false);
+  const [filterFrom, setFilterFrom] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return d.toISOString().slice(0, 10);
+  });
+  const [filterTo, setFilterTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [filterStore, setFilterStore] = useState("all");
+  const [filterProfile, setFilterProfile] = useState("all");
+  const [filterStatus, setFilterStatus] = useState<"all" | "pending" | "completed">("all");
 
   useEffect(() => {
     let alive = true;
@@ -73,7 +85,7 @@ export default function AssignmentsAdminPage() {
     return () => { alive = false; };
   }, [router]);
 
-  const loadAssignments = async () => {
+  const loadAssignments = async (nextPage = page) => {
     setError(null);
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token || "";
@@ -82,7 +94,17 @@ export default function AssignmentsAdminPage() {
       return;
     }
 
-    const res = await fetch("/api/admin/assignments", {
+    const params = new URLSearchParams({
+      page: String(nextPage),
+      pageSize: String(pageSize),
+      from: new Date(filterFrom).toISOString(),
+      to: new Date(filterTo).toISOString(),
+    });
+    if (filterStore !== "all") params.set("storeId", filterStore);
+    if (filterProfile !== "all") params.set("profileId", filterProfile);
+    if (filterStatus !== "all") params.set("status", filterStatus);
+
+    const res = await fetch(`/api/admin/assignments?${params.toString()}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const json = (await res.json()) as AssignmentsResponse;
@@ -93,11 +115,13 @@ export default function AssignmentsAdminPage() {
     setStores(json.stores);
     setUsers(json.users);
     setAssignments(json.assignments);
+    setPage(json.page);
+    setTotal(json.total);
   };
 
   useEffect(() => {
     if (!isAuthed) return;
-    void loadAssignments();
+    void loadAssignments(1);
   }, [isAuthed]);
 
   const canCreate = useMemo(() => {
@@ -140,7 +164,7 @@ export default function AssignmentsAdminPage() {
       setMessage("");
       setTargetProfileId("");
       setTargetStoreId("");
-      await loadAssignments();
+      await loadAssignments(1);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to create assignment.");
     } finally {
@@ -172,9 +196,82 @@ export default function AssignmentsAdminPage() {
         setError("error" in json ? json.error : "Failed to save note.");
         return;
       }
-      await loadAssignments();
+      await loadAssignments(page);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save note.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteAssignment(id: string) {
+    if (saving) return;
+    if (!window.confirm("Delete this assignment?")) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || "";
+      if (!token) {
+        router.replace("/login?next=/admin/assignments");
+        return;
+      }
+
+      const res = await fetch(`/api/admin/assignments/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = (await res.json()) as SimpleResponse;
+      if (!res.ok || "error" in json) {
+        setError("error" in json ? json.error : "Failed to delete assignment.");
+        return;
+      }
+
+      await loadAssignments(page);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to delete assignment.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function bulkDelete() {
+    if (saving) return;
+    if (!window.confirm("Delete all assignments matching the current filters?")) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || "";
+      if (!token) {
+        router.replace("/login?next=/admin/assignments");
+        return;
+      }
+
+      const res = await fetch("/api/admin/assignments/bulk-delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          filters: {
+            from: new Date(filterFrom).toISOString(),
+            to: new Date(filterTo).toISOString(),
+            storeId: filterStore === "all" ? undefined : filterStore,
+            profileId: filterProfile === "all" ? undefined : filterProfile,
+            status: filterStatus,
+          },
+        }),
+      });
+      const json = (await res.json()) as { ok: true; deleted: number } | { error: string };
+      if (!res.ok || "error" in json) {
+        setError("error" in json ? json.error : "Failed to delete assignments.");
+        return;
+      }
+      await loadAssignments(1);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to delete assignments.");
     } finally {
       setSaving(false);
     }
@@ -263,9 +360,63 @@ export default function AssignmentsAdminPage() {
           </button>
         </div>
 
+        <div className="card card-pad space-y-4">
+          <div className="text-lg font-medium">Filters</div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <div className="space-y-2">
+              <label className="text-sm muted">From</label>
+              <input type="date" className="input" value={filterFrom} onChange={e => setFilterFrom(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm muted">To</label>
+              <input type="date" className="input" value={filterTo} onChange={e => setFilterTo(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm muted">Store</label>
+              <select className="select" value={filterStore} onChange={e => setFilterStore(e.target.value)}>
+                <option value="all">All</option>
+                {stores.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm muted">Employee</label>
+              <select className="select" value={filterProfile} onChange={e => setFilterProfile(e.target.value)}>
+                <option value="all">All</option>
+                {users.map(u => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm muted">Status</label>
+              <select className="select" value={filterStatus} onChange={e => setFilterStatus(e.target.value as "all" | "pending" | "completed")}>
+                <option value="all">All</option>
+                <option value="pending">Pending</option>
+                <option value="completed">Completed</option>
+              </select>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button className="btn-primary px-4 py-2" onClick={() => loadAssignments(1)} disabled={saving}>
+              Apply Filters
+            </button>
+            <button className="btn-secondary px-4 py-2" onClick={bulkDelete} disabled={saving || !assignments.length}>
+              Bulk Delete (Filtered)
+            </button>
+          </div>
+        </div>
+
         <div className="space-y-3">
           {assignments.map(a => (
-            <AssignmentCard key={a.id} assignment={a} onSaveNote={saveAuditNote} saving={saving} />
+            <AssignmentCard
+              key={a.id}
+              assignment={a}
+              onSaveNote={saveAuditNote}
+              onDelete={deleteAssignment}
+              saving={saving}
+            />
           ))}
           {!assignments.length && (
             <div className="card card-pad text-center text-sm muted">
@@ -273,6 +424,15 @@ export default function AssignmentsAdminPage() {
             </div>
           )}
         </div>
+
+        {total > pageSize && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={p => loadAssignments(p)}
+          />
+        )}
       </div>
     </div>
   );
@@ -281,10 +441,12 @@ export default function AssignmentsAdminPage() {
 function AssignmentCard({
   assignment,
   onSaveNote,
+  onDelete,
   saving,
 }: {
   assignment: Assignment;
   onSaveNote: (id: string, note: string) => void;
+  onDelete: (id: string) => void;
   saving: boolean;
 }) {
   const [note, setNote] = useState(assignment.audit_note || "");
@@ -347,6 +509,13 @@ function AssignmentCard({
         >
           Save Note
         </button>
+        <button
+          className="btn-secondary px-3 py-1.5 disabled:opacity-50"
+          onClick={() => onDelete(assignment.id)}
+          disabled={saving}
+        >
+          Delete
+        </button>
         {assignment.audit_note_updated_at && (
           <div className="text-xs muted">
             Note updated {new Date(assignment.audit_note_updated_at).toLocaleString()}
@@ -354,6 +523,44 @@ function AssignmentCard({
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function Pagination({
+  page,
+  pageSize,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
+  const totalPages = Math.ceil(total / pageSize);
+  if (totalPages <= 1) return null;
+
+  const pages: number[] = [];
+  for (let i = 1; i <= totalPages; i += 1) pages.push(i);
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button className="btn-secondary px-3 py-1.5" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
+        Prev
+      </button>
+      {pages.map(p => (
+        <button
+          key={p}
+          className={p === page ? "btn-primary px-3 py-1.5" : "btn-secondary px-3 py-1.5"}
+          onClick={() => onPageChange(p)}
+        >
+          {p}
+        </button>
+      ))}
+      <button className="btn-secondary px-3 py-1.5" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
+        Next
+      </button>
     </div>
   );
 }

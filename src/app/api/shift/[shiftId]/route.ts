@@ -191,6 +191,7 @@ export async function GET(
       .from("shift_assignments")
       .select("id")
       .is("delivered_at", null)
+      .is("deleted_at", null)
       .or(`target_profile_id.eq.${shift.profile_id},target_store_id.eq.${shift.store_id}`);
     if (pendingErr) return NextResponse.json({ error: pendingErr.message }, { status: 500 });
 
@@ -214,6 +215,7 @@ export async function GET(
     .from("shift_assignments")
     .select("id,type,message,created_at,created_by,delivered_at,acknowledged_at,completed_at")
     .eq("delivered_shift_id", shift.id)
+    .is("deleted_at", null)
     .order("created_at", { ascending: true })
     .returns<{
       id: string;

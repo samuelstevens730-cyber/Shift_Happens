@@ -13,35 +13,30 @@ drop policy if exists "stores_select_all" on public.stores;
 create policy "stores_select_all"
 on public.stores
 for select
+to anon, authenticated
 using (true);
 
--- Profiles: allow read for clock-in (temporary), managers for their stores, and self once auth_user_id is set.
-drop policy if exists "profiles_select_clock_in" on public.profiles;
+-- Profiles: reset policies to avoid recursion, then allow read for clock-in (temporary) and self once auth_user_id is set.
+do $$
+declare r record;
+begin
+  for r in select policyname from pg_policies where schemaname = 'public' and tablename = 'profiles' loop
+    execute format('drop policy if exists %I on public.profiles', r.policyname);
+  end loop;
+end $$;
+
 create policy "profiles_select_clock_in"
 on public.profiles
 for select
+to anon, authenticated
 using (true);
 
-drop policy if exists "profiles_select_manager" on public.profiles;
-create policy "profiles_select_manager"
-on public.profiles
-for select
-using (
-  exists (
-    select 1
-    from public.store_memberships sm
-    join public.store_managers mm on mm.store_id = sm.store_id
-    where sm.profile_id = id and mm.user_id = auth.uid()
-  )
-);
-
-drop policy if exists "profiles_select_self" on public.profiles;
 create policy "profiles_select_self"
 on public.profiles
 for select
 using (auth.uid() = auth_user_id);
 
--- Store memberships: managers can read for their stores, and users can read their own.
+-- Store memberships: managers can read for their stores.
 drop policy if exists "store_memberships_select_manager" on public.store_memberships;
 create policy "store_memberships_select_manager"
 on public.store_memberships
@@ -50,17 +45,6 @@ using (
   exists (
     select 1 from public.store_managers mm
     where mm.store_id = store_id and mm.user_id = auth.uid()
-  )
-);
-
-drop policy if exists "store_memberships_select_self" on public.store_memberships;
-create policy "store_memberships_select_self"
-on public.store_memberships
-for select
-using (
-  exists (
-    select 1 from public.profiles p
-    where p.id = profile_id and p.auth_user_id = auth.uid()
   )
 );
 

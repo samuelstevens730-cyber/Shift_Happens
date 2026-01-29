@@ -7,6 +7,7 @@ type AssignmentRow = {
   delivered_shift_id: string | null;
   acknowledged_at: string | null;
   completed_at: string | null;
+  deleted_at: string | null;
 };
 
 export async function PATCH(
@@ -26,12 +27,13 @@ export async function PATCH(
 
     const { data: assignment, error: assignErr } = await supabaseServer
       .from("shift_assignments")
-      .select("id, type, delivered_shift_id, acknowledged_at, completed_at")
+      .select("id, type, delivered_shift_id, acknowledged_at, completed_at, deleted_at")
       .eq("id", assignmentId)
       .maybeSingle()
       .returns<AssignmentRow>();
     if (assignErr) return NextResponse.json({ error: assignErr.message }, { status: 500 });
     if (!assignment) return NextResponse.json({ error: "Not found." }, { status: 404 });
+    if (assignment.deleted_at) return NextResponse.json({ error: "Assignment deleted." }, { status: 400 });
 
     if (assignment.delivered_shift_id !== shiftId) {
       return NextResponse.json({ error: "Not assigned to this shift." }, { status: 403 });
@@ -68,7 +70,8 @@ export async function PATCH(
     const { error: updateErr } = await supabaseServer
       .from("shift_assignments")
       .update(updateData)
-      .eq("id", assignmentId);
+      .eq("id", assignmentId)
+      .is("deleted_at", null);
     if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
 
     return NextResponse.json({ ok: true });

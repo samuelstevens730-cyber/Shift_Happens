@@ -22,6 +22,8 @@ type AssignmentRow = {
   audit_note: string | null;
   audit_note_updated_at: string | null;
   audit_note_by: string | null;
+  deleted_at: string | null;
+  deleted_by: string | null;
 };
 
 function getBearerToken(req: Request) {
@@ -79,18 +81,80 @@ export async function GET(req: Request) {
     : { data: [], error: null };
   if (userErr) return NextResponse.json({ error: userErr.message }, { status: 500 });
 
-  const orParts = [
-    `target_store_id.in.(${managerStoreIds.join(",")})`,
-  ];
-  if (profileIds.length) {
-    orParts.push(`target_profile_id.in.(${profileIds.join(",")})`);
+  const url = new URL(req.url);
+  const page = Math.max(1, Number(url.searchParams.get("page") || "1"));
+  const pageSize = Math.min(100, Math.max(1, Number(url.searchParams.get("pageSize") || "25")));
+  const offset = (page - 1) * pageSize;
+  const from = url.searchParams.get("from");
+  const to = url.searchParams.get("to");
+  const storeId = url.searchParams.get("storeId") || "";
+  const profileId = url.searchParams.get("profileId") || "";
+  const status = (url.searchParams.get("status") || "all").toLowerCase();
+
+  if (storeId && !managerStoreIds.includes(storeId)) {
+    return NextResponse.json({ error: "Invalid store selection." }, { status: 403 });
   }
 
-  const { data: assignments, error: assignErr } = await supabaseServer
+  if (profileId) {
+    const { data: mem, error: memErr } = await supabaseServer
+      .from("store_memberships")
+      .select("store_id")
+      .eq("profile_id", profileId)
+      .in("store_id", managerStoreIds)
+      .limit(1)
+      .maybeSingle()
+      .returns<{ store_id: string }>();
+    if (memErr) return NextResponse.json({ error: memErr.message }, { status: 500 });
+    if (!mem) return NextResponse.json({ error: "Invalid profile selection." }, { status: 403 });
+  }
+
+  let filteredOrParts: string[] = [];
+  if (storeId) {
+    let storeProfileIds: string[] = [];
+    const { data: storeProfiles, error: spErr } = await supabaseServer
+      .from("store_memberships")
+      .select("profile_id")
+      .eq("store_id", storeId)
+      .returns<{ profile_id: string }[]>();
+    if (spErr) return NextResponse.json({ error: spErr.message }, { status: 500 });
+    storeProfileIds = Array.from(new Set((storeProfiles ?? []).map(p => p.profile_id)));
+
+    filteredOrParts.push(`target_store_id.eq.${storeId}`);
+    if (storeProfileIds.length) {
+      filteredOrParts.push(`target_profile_id.in.(${storeProfileIds.join(",")})`);
+    }
+  } else {
+    filteredOrParts = [
+      `target_store_id.in.(${managerStoreIds.join(",")})`,
+    ];
+    if (profileIds.length) {
+      filteredOrParts.push(`target_profile_id.in.(${profileIds.join(",")})`);
+    }
+  }
+
+  let baseQuery = supabaseServer
     .from("shift_assignments")
-    .select("*")
-    .or(orParts.join(","))
+    .select("*", { count: "exact" })
+    .or(filteredOrParts.join(","))
+    .is("deleted_at", null);
+
+  if (from) baseQuery = baseQuery.gte("created_at", from);
+  if (to) baseQuery = baseQuery.lte("created_at", to);
+  if (profileId) baseQuery = baseQuery.eq("target_profile_id", profileId);
+
+  if (status === "pending") {
+    baseQuery = baseQuery.or(
+      "and(type.eq.message,acknowledged_at.is.null),and(type.eq.task,completed_at.is.null)"
+    );
+  } else if (status === "completed") {
+    baseQuery = baseQuery.or(
+      "and(type.eq.message,acknowledged_at.not.is.null),and(type.eq.task,completed_at.not.is.null)"
+    );
+  }
+
+  const { data: assignments, error: assignErr, count } = await baseQuery
     .order("created_at", { ascending: false })
+    .range(offset, offset + pageSize - 1)
     .returns<AssignmentRow[]>();
   if (assignErr) return NextResponse.json({ error: assignErr.message }, { status: 500 });
 
@@ -138,6 +202,9 @@ export async function GET(req: Request) {
     stores: stores ?? [],
     users: users ?? [],
     assignments: assignmentsWithNames,
+    page,
+    pageSize,
+    total: count ?? 0,
   });
 }
 

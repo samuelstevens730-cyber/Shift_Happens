@@ -11,11 +11,16 @@ interface ShiftRow {
   user_id: string;
   full_name: string | null;
   store_id: string;
+  store_name: string | null;
   start_at: string;
   end_at: string;
   minutes: number;
   rounded_hours: number;
 }
+
+type PayrollResponse =
+  | { rows: ShiftRow[]; page: number; pageSize: number; total: number }
+  | { error: string };
 
 function toISODate(d: Date) {
   const y = d.getFullYear();
@@ -25,14 +30,6 @@ function toISODate(d: Date) {
 }
 function startOfDay(d: Date) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
 function endOfDay(d: Date)   { const x = new Date(d); x.setHours(23,59,59,999); return x; }
-
-function roundMinutes(mins: number) {
-  const hours = Math.floor(mins / 60);
-  const rem = mins % 60;
-  if (rem < 20) return hours;
-  if (rem > 40) return hours + 1;
-  return hours + 0.5;
-}
 
 export default function PayrollAdminPage() {
   // default range = this week
@@ -49,6 +46,9 @@ export default function PayrollAdminPage() {
   const [rows, setRows]               = useState<ShiftRow[]>([]);
   const [loading, setLoading]         = useState(false);
   const [err, setErr]                 = useState<string | null>(null);
+  const [page, setPage]               = useState(1);
+  const [total, setTotal]             = useState(0);
+  const pageSize = 25;
 
   // dropdowns
   useEffect(() => {
@@ -67,7 +67,7 @@ export default function PayrollAdminPage() {
     })();
   }, []);
 
-  const runReport = useCallback(async () => {
+  const runReport = useCallback(async (nextPage = page) => {
     try {
       setErr(null);
       setLoading(true);
@@ -75,50 +75,30 @@ export default function PayrollAdminPage() {
       const fromISO = startOfDay(new Date(from)).toISOString();
       const toISO   = endOfDay(new Date(to)).toISOString();
 
-      // 1) fetch per-shift rows via RPC (RLS-safe)
-      const { data: rpcRows, error: rpcErr } = await supabase.rpc("payroll_shifts_range", {
-        p_from: fromISO,
-        p_to:   toISO,
+      const params = new URLSearchParams({
+        page: String(nextPage),
+        pageSize: String(pageSize),
+        from: fromISO,
+        to: toISO,
       });
-      if (rpcErr) throw rpcErr;
+      if (selectedUser !== "all") params.set("profileId", selectedUser);
+      if (selectedStore !== "all") params.set("storeId", selectedStore);
 
-      type RpcRow = { id: string; user_id: string; store_id: string; start_at: string; end_at: string };
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || "";
+      if (!token) throw new Error("Unauthorized");
 
-      // optional client-side filtering for user/store dropdowns
-      let raw: RpcRow[] = (rpcRows ?? []) as RpcRow[];
-      if (selectedUser !== "all")  raw = raw.filter(r => r.user_id === selectedUser);
-      if (selectedStore !== "all") raw = raw.filter(r => r.store_id === selectedStore);
-
-      // 2) fetch names for those user_ids
-      const userIds = Array.from(new Set(raw.map(r => r.user_id)));
-      const nameMap = new Map<string, string | null>();
-      if (userIds.length) {
-        const { data: profs, error: profErr } = await supabase
-          .from("profiles")
-          .select("id, name")
-          .in("id", userIds);
-        if (profErr) throw profErr;
-        (profs ?? []).forEach(p => nameMap.set(p.id, p.name));
+      const res = await fetch(`/api/admin/payroll?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = (await res.json()) as PayrollResponse;
+      if (!res.ok || "error" in json) {
+        throw new Error("error" in json ? json.error : "Failed to run report");
       }
 
-      // 3) compute durations
-      const processed: ShiftRow[] = raw.map(r => {
-        const start = new Date(r.start_at);
-        const end   = new Date(r.end_at);
-        const mins  = Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));
-        return {
-          id: r.id,
-          user_id: r.user_id,
-          full_name: nameMap.get(r.user_id) ?? null,
-          store_id: r.store_id,
-          start_at: r.start_at,
-          end_at: r.end_at,
-          minutes: mins,
-          rounded_hours: roundMinutes(mins),
-        };
-      });
-
-      setRows(processed);
+      setRows(json.rows);
+      setPage(json.page);
+      setTotal(json.total);
     } catch (e: unknown) {
       console.error("Payroll run error:", e);
       setErr(e instanceof Error ? e.message : "Failed to run report");
@@ -126,9 +106,9 @@ export default function PayrollAdminPage() {
     } finally {
       setLoading(false);
     }
-  }, [from, to, selectedUser, selectedStore]);
+  }, [from, to, selectedUser, selectedStore, page]);
 
-  useEffect(() => { void runReport(); }, [runReport]);
+  useEffect(() => { void runReport(1); }, [from, to, selectedUser, selectedStore]);
 
   const totalMinutes = useMemo(() => rows.reduce((a, r) => a + r.minutes, 0), [rows]);
   const totalRounded = useMemo(() => rows.reduce((a, r) => a + r.rounded_hours, 0), [rows]);
@@ -188,7 +168,7 @@ export default function PayrollAdminPage() {
               ))}
             </select>
           </div>
-          <button onClick={runReport} className="h-12 btn-primary px-4 disabled:opacity-50" disabled={loading}>
+          <button onClick={() => runReport(1)} className="h-12 btn-primary px-4 disabled:opacity-50" disabled={loading}>
             {loading ? "Running..." : "Run"}
           </button>
           <button onClick={exportCsv} className="h-12 btn-secondary px-4 disabled:opacity-50" disabled={!rows.length}>
@@ -215,7 +195,7 @@ export default function PayrollAdminPage() {
               {rows.map(r => (
                 <tr key={r.id} className="border-t border-white/10">
                   <td className="px-3 py-2">{r.full_name || "Unknown"}</td>
-                  <td className="px-3 py-2">{r.store_id}</td>
+                  <td className="px-3 py-2">{r.store_name || r.store_id}</td>
                   <td className="px-3 py-2">{new Date(r.start_at).toLocaleString()}</td>
                   <td className="px-3 py-2">{new Date(r.end_at).toLocaleString()}</td>
                   <td className="px-3 py-2 text-right">{r.minutes}</td>
@@ -239,7 +219,54 @@ export default function PayrollAdminPage() {
             )}
           </table>
         </div>
+
+        {total > pageSize && (
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={p => runReport(p)}
+          />
+        )}
       </div>
+    </div>
+  );
+}
+
+function Pagination({
+  page,
+  pageSize,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
+  const totalPages = Math.ceil(total / pageSize);
+  if (totalPages <= 1) return null;
+
+  const pages: number[] = [];
+  for (let i = 1; i <= totalPages; i += 1) pages.push(i);
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button className="btn-secondary px-3 py-1.5" disabled={page <= 1} onClick={() => onPageChange(page - 1)}>
+        Prev
+      </button>
+      {pages.map(p => (
+        <button
+          key={p}
+          className={p === page ? "btn-primary px-3 py-1.5" : "btn-secondary px-3 py-1.5"}
+          onClick={() => onPageChange(p)}
+        >
+          {p}
+        </button>
+      ))}
+      <button className="btn-secondary px-3 py-1.5" disabled={page >= totalPages} onClick={() => onPageChange(page + 1)}>
+        Next
+      </button>
     </div>
   );
 }

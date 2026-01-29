@@ -30,7 +30,11 @@ create table if not exists public.shift_assignments (
   -- admin audit note
   audit_note text,
   audit_note_updated_at timestamptz,
-  audit_note_by uuid references auth.users(id) on delete set null
+  audit_note_by uuid references auth.users(id) on delete set null,
+
+  -- soft delete
+  deleted_at timestamptz,
+  deleted_by uuid references auth.users(id) on delete set null
 );
 
 alter table public.shift_assignments
@@ -57,3 +61,7 @@ create index if not exists idx_shift_assignments_pending
 
 create index if not exists idx_shift_assignments_delivered_shift
   on public.shift_assignments (delivered_shift_id);
+
+create index if not exists idx_shift_assignments_deleted
+  on public.shift_assignments (deleted_at)
+  where deleted_at is not null;
