@@ -4,7 +4,8 @@ import { supabaseServer } from "@/lib/supabaseServer";
 import { isOutOfThreshold, roundTo30Minutes, ShiftType } from "@/lib/kioskRules";
 
 type Body = {
-  qrToken: string;
+  qrToken?: string;
+  storeId?: string;
   profileId: string;
   shiftType: ShiftType;
   plannedStartAt: string; // ISO string
@@ -21,7 +22,9 @@ export async function POST(req: Request) {
     const body = (await req.json()) as Body;
 
     // Basic validation
-    if (!body.qrToken) return NextResponse.json({ error: "Missing qrToken." }, { status: 400 });
+    if (!body.qrToken && !body.storeId) {
+      return NextResponse.json({ error: "Missing qrToken or storeId." }, { status: 400 });
+    }
     if (!body.profileId) return NextResponse.json({ error: "Missing profileId." }, { status: 400 });
     if (!body.shiftType) return NextResponse.json({ error: "Missing shiftType." }, { status: 400 });
     if (!ALLOWED_SHIFT_TYPES.includes(body.shiftType))
@@ -29,15 +32,17 @@ export async function POST(req: Request) {
 
     if (!body.plannedStartAt) return NextResponse.json({ error: "Missing plannedStartAt." }, { status: 400 });
 
-    // 1) Resolve store by QR token
-    const { data: store, error: storeErr } = await supabaseServer
+    // 1) Resolve store by QR token or storeId
+    const storeQuery = supabaseServer
       .from("stores")
-      .select("id, expected_drawer_cents")
-      .eq("qr_token", body.qrToken)
-      .maybeSingle();
+      .select("id, expected_drawer_cents");
+
+    const { data: store, error: storeErr } = body.qrToken
+      ? await storeQuery.eq("qr_token", body.qrToken).maybeSingle()
+      : await storeQuery.eq("id", body.storeId).maybeSingle();
 
     if (storeErr) return NextResponse.json({ error: storeErr.message }, { status: 500 });
-    if (!store) return NextResponse.json({ error: "Invalid QR token." }, { status: 401 });
+    if (!store) return NextResponse.json({ error: "Invalid store." }, { status: 401 });
 
     // 2) Validate profile exists + active
     const { data: prof, error: profErr } = await supabaseServer
@@ -80,9 +85,9 @@ export async function POST(req: Request) {
       }
 
       const out = isOutOfThreshold(startCents, store.expected_drawer_cents);
-      if (out && !body.confirmed) {
+      if (out && !body.notifiedManager) {
         return NextResponse.json(
-          { error: "Start drawer outside threshold. Must confirm.", requiresConfirm: true },
+          { error: "Start drawer outside threshold. Must notify manager.", requiresConfirm: true },
           { status: 400 }
         );
       }
@@ -90,9 +95,9 @@ export async function POST(req: Request) {
       // "other" is exempt, but if they provide a number, still enforce confirm if it's wild
       if (startCents !== null && startCents !== undefined) {
         const out = isOutOfThreshold(startCents, store.expected_drawer_cents);
-        if (out && !body.confirmed) {
+        if (out && !body.notifiedManager) {
           return NextResponse.json(
-            { error: "Start drawer outside threshold. Must confirm.", requiresConfirm: true },
+            { error: "Start drawer outside threshold. Must notify manager.", requiresConfirm: true },
             { status: 400 }
           );
         }

@@ -79,7 +79,6 @@ export default function ClockPageClient() {
   }, [requiresStartDrawer, parsedStart, expectedDrawerCents]);
 
   const canStart = useMemo(() => {
-    if (!qrToken) return false;
     if (!storeId || !profileId || !plannedStartLocal) return false;
 
     const plannedMs = new Date(plannedStartLocal).getTime();
@@ -89,19 +88,18 @@ export default function ClockPageClient() {
 
     if (parsedStart == null) return false;
 
-    // If outside threshold, user must explicitly confirm.
-    if (startOutOfThreshold && !startConfirmThreshold) return false;
+    // If outside threshold, user must confirm they notified a manager.
+    if (startOutOfThreshold && !startNotifiedManager) return false;
 
     return true;
   }, [
-    qrToken,
     storeId,
     profileId,
     plannedStartLocal,
     requiresStartDrawer,
     parsedStart,
     startOutOfThreshold,
-    startConfirmThreshold,
+    startNotifiedManager,
   ]);
 
   useEffect(() => {
@@ -170,11 +168,6 @@ export default function ClockPageClient() {
   async function startShift() {
     setError(null);
 
-    if (!qrToken) {
-      setError("Missing QR token in URL (?t=...). Scan the store QR code.");
-      return;
-    }
-
     const planned = new Date(plannedStartLocal);
     if (Number.isNaN(planned.getTime())) {
       setError("Invalid planned start date/time.");
@@ -197,8 +190,8 @@ export default function ClockPageClient() {
       const out = isOutOfThreshold(parsedStart, expectedDrawerCents);
       confirmed = out ? Boolean(startConfirmThreshold) : false;
 
-      if (out && !confirmed) {
-        setError("Drawer is outside threshold. Check the confirm box to proceed.");
+      if (out && !startNotifiedManager) {
+        setError("Drawer is outside threshold. Notify manager to proceed.");
         return;
       }
     }
