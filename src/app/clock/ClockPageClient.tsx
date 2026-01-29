@@ -298,6 +298,9 @@ export default function ClockPageClient() {
           {qrToken && tokenStore && (
             <div className="banner text-sm">
               Token store: <b>{tokenStore.name}</b>. Store selection is locked to this location.
+              <div className="mt-2">
+                <a className="underline" href="/clock">Not at this store?</a>
+              </div>
             </div>
           )}
 
@@ -309,21 +312,23 @@ export default function ClockPageClient() {
             <div className="banner banner-error text-sm">{error}</div>
           )}
 
-          <div className="space-y-2">
-            <label className="text-sm muted">Store</label>
-            <select
-              className="select"
-              value={storeId}
-              onChange={e => setStoreId(e.target.value)}
-              disabled={submitting || Boolean(qrToken)}
-            >
-              {stores.map(s => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
+          {!qrToken && (
+            <div className="space-y-2">
+              <label className="text-sm muted">Store</label>
+              <select
+                className="select"
+                value={storeId}
+                onChange={e => setStoreId(e.target.value)}
+                disabled={submitting}
+              >
+                {stores.map(s => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="space-y-2">
             <label className="text-sm muted">Employee</label>
