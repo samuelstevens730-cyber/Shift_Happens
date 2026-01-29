@@ -62,12 +62,15 @@ export async function GET(
   // fetch shift
   const { data: shift, error: shiftErr } = await supabaseServer
     .from("shifts")
-    .select("id, store_id, profile_id, shift_type, planned_start_at, started_at, ended_at")
+    .select("id, store_id, profile_id, shift_type, planned_start_at, started_at, ended_at, last_action")
     .eq("id", shiftId)
     .maybeSingle();
 
   if (shiftErr) return NextResponse.json({ error: shiftErr.message }, { status: 500 });
   if (!shift) return NextResponse.json({ error: "Shift not found." }, { status: 404 });
+  if (shift.last_action === "removed") {
+    return NextResponse.json({ error: "Shift was removed." }, { status: 404 });
+  }
 
   let store: { id: string; name: string; expected_drawer_cents: number } | null = null;
 

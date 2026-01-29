@@ -94,6 +94,7 @@ export async function GET(req: Request) {
   query = query.in("shift.store_id", managerStoreIds);
   if (storeId) query = query.eq("shift.store_id", storeId);
   if (profileId) query = query.eq("shift.profile_id", profileId);
+  query = query.neq("shift.last_action", "removed");
 
   const { data, error, count } = await query
     .order("counted_at", { ascending: false })

@@ -114,6 +114,17 @@ export default function AdminIndex() {
             </p>
           </Link>
 
+          {/* Shifts */}
+          <Link href="/admin/shifts" className="tile">
+            <div className="flex items-center gap-2">
+              <span className="tile-dot" />
+              <div className="text-lg font-medium">Shifts</div>
+            </div>
+            <p className="mt-2 text-sm muted">
+              View, edit, add, or remove shifts.
+            </p>
+          </Link>
+
           {/* Long Shift Overrides */}
           <Link href="/admin/overrides" className="tile">
             <div className="flex items-center gap-2">

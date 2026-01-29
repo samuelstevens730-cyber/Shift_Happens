@@ -57,6 +57,8 @@ create table if not exists public.shifts (
   override_at timestamptz,
   override_by uuid,
   override_note text,
+  last_action text not null default 'added' check (last_action in ('added','edited','removed')),
+  last_action_by uuid,
 
   created_at timestamptz not null default now()
 );

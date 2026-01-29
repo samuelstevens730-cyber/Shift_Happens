@@ -1,0 +1,204 @@
+import { NextResponse } from "next/server";
+import { supabaseServer } from "@/lib/supabaseServer";
+import { ShiftType } from "@/lib/kioskRules";
+
+type StoreRow = { id: string; name: string };
+type ProfileRow = { id: string; name: string | null; active: boolean | null };
+type ShiftRow = {
+  id: string;
+  store_id: string;
+  profile_id: string;
+  shift_type: ShiftType;
+  planned_start_at: string;
+  started_at: string;
+  ended_at: string | null;
+  last_action: string | null;
+  last_action_by: string | null;
+  store: { id: string; name: string } | null;
+  profile: { id: string; name: string | null } | null;
+};
+
+function getBearerToken(req: Request) {
+  const auth = req.headers.get("authorization") || "";
+  if (!auth.toLowerCase().startsWith("bearer ")) return null;
+  return auth.slice(7);
+}
+
+async function getManagerStoreIds(userId: string) {
+  const { data, error } = await supabaseServer
+    .from("store_managers")
+    .select("store_id")
+    .eq("user_id", userId)
+    .returns<{ store_id: string }[]>();
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(r => r.store_id);
+}
+
+export async function GET(req: Request) {
+  try {
+    const token = getBearerToken(req);
+    if (!token) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+    const { data: { user }, error: authErr } = await supabaseServer.auth.getUser(token);
+    if (authErr || !user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+    const managerStoreIds = await getManagerStoreIds(user.id);
+    if (managerStoreIds.length === 0) {
+      return NextResponse.json({ stores: [], profiles: [], rows: [], page: 1, pageSize: 25, total: 0 });
+    }
+
+    const url = new URL(req.url);
+    const page = Math.max(1, Number(url.searchParams.get("page") || "1"));
+    const pageSize = Math.min(100, Math.max(1, Number(url.searchParams.get("pageSize") || "25")));
+    const offset = (page - 1) * pageSize;
+    const from = url.searchParams.get("from");
+    const to = url.searchParams.get("to");
+    const storeId = url.searchParams.get("storeId") || "";
+    const profileId = url.searchParams.get("profileId") || "";
+
+    if (storeId && !managerStoreIds.includes(storeId)) {
+      return NextResponse.json({ error: "Invalid store selection." }, { status: 403 });
+    }
+
+    if (profileId) {
+      const { data: mem, error: memErr } = await supabaseServer
+        .from("store_memberships")
+        .select("store_id")
+        .eq("profile_id", profileId)
+        .in("store_id", managerStoreIds)
+        .limit(1)
+        .maybeSingle()
+        .returns<{ store_id: string }>();
+      if (memErr) return NextResponse.json({ error: memErr.message }, { status: 500 });
+      if (!mem) return NextResponse.json({ error: "Invalid profile selection." }, { status: 403 });
+    }
+
+    const { data: stores, error: storeErr } = await supabaseServer
+      .from("stores")
+      .select("id, name")
+      .in("id", managerStoreIds)
+      .order("name", { ascending: true })
+      .returns<StoreRow[]>();
+    if (storeErr) return NextResponse.json({ error: storeErr.message }, { status: 500 });
+
+    const { data: memberships, error: memErr } = await supabaseServer
+      .from("store_memberships")
+      .select("profile_id")
+      .in("store_id", managerStoreIds)
+      .returns<{ profile_id: string }[]>();
+    if (memErr) return NextResponse.json({ error: memErr.message }, { status: 500 });
+
+    const profileIds = Array.from(new Set((memberships ?? []).map(m => m.profile_id)));
+    const { data: profiles, error: profErr } = profileIds.length
+      ? await supabaseServer
+          .from("profiles")
+          .select("id, name, active")
+          .in("id", profileIds)
+          .order("name", { ascending: true })
+          .returns<ProfileRow[]>()
+      : { data: [], error: null };
+    if (profErr) return NextResponse.json({ error: profErr.message }, { status: 500 });
+
+    let query = supabaseServer
+      .from("shifts")
+      .select(
+        "id, store_id, profile_id, shift_type, planned_start_at, started_at, ended_at, last_action, last_action_by, store:store_id(id,name), profile:profile_id(id,name)",
+        { count: "exact" }
+      )
+      .in("store_id", managerStoreIds)
+      .neq("last_action", "removed");
+
+    if (from) query = query.gte("started_at", from);
+    if (to) query = query.lte("started_at", to);
+    if (storeId) query = query.eq("store_id", storeId);
+    if (profileId) query = query.eq("profile_id", profileId);
+
+    const { data, error, count } = await query
+      .order("started_at", { ascending: false })
+      .range(offset, offset + pageSize - 1)
+      .returns<ShiftRow[]>();
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    const rows = (data ?? []).map(r => ({
+      id: r.id,
+      storeId: r.store_id,
+      storeName: r.store?.name ?? null,
+      profileId: r.profile_id,
+      profileName: r.profile?.name ?? null,
+      shiftType: r.shift_type,
+      plannedStartAt: r.planned_start_at,
+      startedAt: r.started_at,
+      endedAt: r.ended_at,
+      lastAction: r.last_action,
+      lastActionBy: r.last_action_by,
+    }));
+
+    return NextResponse.json({ stores: stores ?? [], profiles: profiles ?? [], rows, page, pageSize, total: count ?? 0 });
+  } catch (e: unknown) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Failed to load shifts." }, { status: 500 });
+  }
+}
+
+export async function POST(req: Request) {
+  try {
+    const token = getBearerToken(req);
+    if (!token) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+    const { data: { user }, error: authErr } = await supabaseServer.auth.getUser(token);
+    if (authErr || !user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+    const body = (await req.json()) as {
+      storeId?: string;
+      profileId?: string;
+      shiftType?: ShiftType;
+      plannedStartAt?: string;
+      startedAt?: string;
+      endedAt?: string | null;
+    };
+
+    const storeId = body.storeId || "";
+    const profileId = body.profileId || "";
+    const shiftType = body.shiftType;
+    const plannedStartAt = body.plannedStartAt || "";
+    const startedAt = body.startedAt || "";
+    const endedAt = body.endedAt ?? null;
+
+    if (!storeId || !profileId || !shiftType || !plannedStartAt || !startedAt) {
+      return NextResponse.json({ error: "Missing fields." }, { status: 400 });
+    }
+
+    const managerStoreIds = await getManagerStoreIds(user.id);
+    if (!managerStoreIds.includes(storeId)) {
+      return NextResponse.json({ error: "Invalid store selection." }, { status: 403 });
+    }
+
+    const { data: mem, error: memErr } = await supabaseServer
+      .from("store_memberships")
+      .select("store_id")
+      .eq("profile_id", profileId)
+      .eq("store_id", storeId)
+      .limit(1)
+      .maybeSingle()
+      .returns<{ store_id: string }>();
+    if (memErr) return NextResponse.json({ error: memErr.message }, { status: 500 });
+    if (!mem) return NextResponse.json({ error: "Employee not assigned to this store." }, { status: 403 });
+
+    const { error: insertErr } = await supabaseServer
+      .from("shifts")
+      .insert({
+        store_id: storeId,
+        profile_id: profileId,
+        shift_type: shiftType,
+        planned_start_at: plannedStartAt,
+        started_at: startedAt,
+        ended_at: endedAt,
+        last_action: "added",
+        last_action_by: user.id,
+      });
+    if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 });
+
+    return NextResponse.json({ ok: true });
+  } catch (e: unknown) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Failed to add shift." }, { status: 500 });
+  }
+}

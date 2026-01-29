@@ -87,6 +87,8 @@ export async function POST(
     .update({
       ended_at: endAt.toISOString(),
       requires_override: requiresOverride,
+      last_action: "edited",
+      last_action_by: user.id,
     })
     .eq("id", shiftId)
     .select("id")

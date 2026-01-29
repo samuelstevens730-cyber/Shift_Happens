@@ -70,7 +70,8 @@ export async function GET(req: Request) {
       .from("shifts")
       .select("id, store_id, profile_id, started_at, ended_at, store:store_id(id,name), profile:profile_id(id,name)", { count: "exact" })
       .in("store_id", managerStoreIds)
-      .not("ended_at", "is", null);
+      .not("ended_at", "is", null)
+      .neq("last_action", "removed");
 
     if (from) query = query.gte("started_at", from);
     if (to) query = query.lte("ended_at", to);

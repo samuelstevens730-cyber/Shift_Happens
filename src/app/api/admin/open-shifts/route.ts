@@ -42,6 +42,7 @@ export async function GET(req: Request) {
       "id, shift_type, planned_start_at, started_at, ended_at, created_at, store:store_id(id,name,expected_drawer_cents), profile:profile_id(id,name)"
     )
     .is("ended_at", null)
+    .neq("last_action", "removed")
     .order("started_at", { ascending: false })
     .returns<ShiftJoinRow[]>();
 
