@@ -5,12 +5,16 @@ export default async function RunShiftPage({
   searchParams,
 }: {
   params: Promise<{ shiftId: string }>;
-  searchParams?: Promise<{ t?: string }>;
+  searchParams?: Promise<{ t?: string; reused?: string; startedAt?: string }>;
 }) {
   const { shiftId } = await params;
   const sp = searchParams ? await searchParams : undefined;
   const token = sp?.t ?? "";
-  const qs = token ? `?t=${encodeURIComponent(token)}` : "";
+  const paramsOut = new URLSearchParams();
+  if (token) paramsOut.set("t", token);
+  if (sp?.reused) paramsOut.set("reused", sp.reused);
+  if (sp?.startedAt) paramsOut.set("startedAt", sp.startedAt);
+  const qs = paramsOut.toString() ? `?${paramsOut.toString()}` : "";
 
   redirect(`/shift/${shiftId}${qs}`);
 }

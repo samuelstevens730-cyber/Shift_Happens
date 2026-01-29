@@ -70,6 +70,8 @@ export default function ShiftPage() {
   const router = useRouter();
   const search = useSearchParams();
   const qrToken = search.get("t") || "";
+  const reused = search.get("reused") === "1";
+  const reusedStartedAt = search.get("startedAt");
 
   const [state, setState] = useState<ShiftState | null>(null);
 
@@ -79,6 +81,7 @@ export default function ShiftPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [showClockOut, setShowClockOut] = useState(false);
+  const [showReuseBanner, setShowReuseBanner] = useState(reused);
 
   // Convert backend "checkedGroupLabels" -> frontend Set of group.norm keys
   const seedDoneFromState = useCallback((json: ShiftState) => {
@@ -206,10 +209,26 @@ export default function ShiftPage() {
   if (err) return <div className="p-6 text-red-600">{err}</div>;
   if (!state) return <div className="p-6">No data.</div>;
 
+  const reuseLabel = reusedStartedAt
+    ? new Date(reusedStartedAt).toLocaleString()
+    : "an earlier time";
+
   return (
     <div className="min-h-screen p-6">
       <div className="max-w-md mx-auto space-y-4">
         <h1 className="text-2xl font-semibold">Shift</h1>
+
+        {showReuseBanner && (
+          <div className="banner text-sm">
+            Redirected to currently open shift started at {reuseLabel}.
+            <button
+              className="ml-3 underline"
+              onClick={() => setShowReuseBanner(false)}
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         <div className="text-sm text-gray-600">
           Store: <b>{state.store.name}</b> · Employee: <b>{state.employee || "Unknown"}</b> · Type:{" "}

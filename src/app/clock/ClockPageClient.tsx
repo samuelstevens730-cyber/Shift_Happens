@@ -243,7 +243,14 @@ export default function ClockPageClient() {
       if (!shiftId) throw new Error("API did not return shiftId.");
 
       const base = shiftKind === "open" || shiftKind === "double" ? `/run/${shiftId}` : `/shift/${shiftId}`;
-      router.replace(`${base}?t=${encodeURIComponent(qrToken)}`);
+      const params = new URLSearchParams();
+      if (qrToken) params.set("t", qrToken);
+      if (json?.reused) {
+        params.set("reused", "1");
+        if (json.startedAt) params.set("startedAt", json.startedAt);
+      }
+      const qs = params.toString();
+      router.replace(qs ? `${base}?${qs}` : base);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to start shift.");
     } finally {

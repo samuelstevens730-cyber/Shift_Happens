@@ -107,7 +107,7 @@ export async function POST(req: Request) {
     // 6) Prevent duplicate active shifts (employee taps twice, phone refreshes, life happens)
     const { data: existing, error: existingErr } = await supabaseServer
       .from("shifts")
-      .select("id, store_id")
+      .select("id, store_id, started_at")
       .eq("profile_id", body.profileId)
       .is("ended_at", null)
       .maybeSingle();
@@ -124,7 +124,11 @@ export async function POST(req: Request) {
       }
 
       // Same store: return existing shift as idempotent behavior
-      return NextResponse.json({ shiftId: existing.id, reused: true });
+      return NextResponse.json({
+        shiftId: existing.id,
+        reused: true,
+        startedAt: existing.started_at ?? null,
+      });
     }
 
     // 7) Create shift
