@@ -157,7 +157,6 @@ export default function PayrollAdminPage() {
   }
 
   return (
-  return (
     <div className="app-shell">
       <div className="max-w-5xl mx-auto space-y-6">
         <h1 className="text-2xl font-semibold">Payroll Admin</h1>
