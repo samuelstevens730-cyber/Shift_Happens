@@ -245,7 +245,7 @@ export default function ShiftPage() {
                       <button
                         onClick={() => checkGroup(g)}
                         disabled={isDone}
-                        className={`px-3 py-1 rounded ${isDone ? "bg-green-500 text-white" : "bg-gray-200"}`}
+                        className={`px-3 py-1 rounded text-black ${isDone ? "bg-green-500" : "bg-gray-200"}`}
                       >
                         {isDone ? "Done" : "Check"}
                       </button>
@@ -500,7 +500,7 @@ function ClockOutModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 grid place-items-center p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl p-4 space-y-3">
+      <div className="w-full max-w-md bg-white text-black rounded-2xl p-4 space-y-3">
         <h2 className="text-lg font-semibold">End Shift</h2>
 
         <label className="text-sm">End time</label>
