@@ -33,38 +33,40 @@ export default function ClientHeader() {
   const loginHref = `/login?next=${encodeURIComponent(pathname || "/")}`;
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-white/90 backdrop-blur">
+    <header className="sticky top-0 z-40 header-bar backdrop-blur">
       <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between gap-3">
         {/* Left: logo links home */}
-        <Link href="/" className="flex items-center gap-2" aria-label="Go to home">
+        <Link href="/" className="flex items-center gap-3" aria-label="Go to home">
           <Image
             src="/brand/no_cap_logo.jpg"
             alt="No Cap Smoke Shop"
-            width={140}
-            height={32}
+            width={220}
+            height={56}
             priority
-            className="h-8 w-auto"
+            className="h-10 sm:h-12 md:h-14 w-auto"
           />
-          <span className="sr-only">Home</span>
+          <span className="hidden sm:inline text-sm font-semibold tracking-wide text-[var(--text)]">
+            Shift Happens
+          </span>
         </Link>
 
         {/* Right: Home + Login/Logout */}
         <nav className="flex items-center gap-2">
-          <Link href="/" className="border px-4 py-2 rounded hover:bg-gray-50">
+          <Link href="/" className="btn-secondary px-4 py-2">
             Home
           </Link>
 
           {isLoggedIn ? (
             <button
               onClick={handleLogout}
-              className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded"
+              className="btn-danger px-4 py-2"
             >
               Logout
             </button>
           ) : (
             <Link
               href={loginHref}
-              className="bg-black hover:bg-black/90 text-white px-4 py-2 rounded"
+              className="btn-primary px-4 py-2"
             >
               Login
             </Link>

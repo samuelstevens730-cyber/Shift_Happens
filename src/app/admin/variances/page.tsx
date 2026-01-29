@@ -23,7 +23,7 @@ type VarianceResponse = { rows: VarianceRow[] } | { error: string };
 type ReviewResponse = { ok: true } | { error: string };
 
 function formatMoney(cents: number | null) {
-  if (cents == null || !Number.isFinite(cents)) return "—";
+  if (cents == null || !Number.isFinite(cents)) return "--";
   return `$${(cents / 100).toFixed(2)}`;
 }
 
@@ -150,65 +150,65 @@ export default function VarianceReviewPage() {
     }
   }
 
-  if (loading) return <div className="p-6">Loading...</div>;
+  if (loading) return <div className="app-shell">Loading...</div>;
   if (!isAuthed) return null;
 
   return (
-    <div className="min-h-screen p-6">
+    <div className="app-shell">
       <div className="max-w-5xl mx-auto space-y-6">
         <h1 className="text-2xl font-semibold">Variance Review</h1>
 
-        {error && <div className="text-sm text-red-600 border border-red-300 rounded p-3">{error}</div>}
+        {error && <div className="banner banner-error text-sm">{error}</div>}
 
         <div className="space-y-3">
           {rows.map(r => {
             const delta = deltaById.get(r.id);
             return (
-              <div key={r.id} className="border rounded p-4 space-y-2">
+              <div key={r.id} className="card card-pad space-y-2">
                 <div className="flex flex-wrap gap-3 items-center justify-between">
-                  <div className="text-sm text-gray-600">
+                  <div className="text-sm muted">
                     <b>{r.storeName || "Unknown Store"}</b>{" "}
                     {r.expectedDrawerCents != null && (
                       <span>(expected {formatMoney(r.expectedDrawerCents)})</span>
                     )}
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs muted">
                     {new Date(r.countedAt).toLocaleString()}
                   </div>
                 </div>
 
                 <div className="text-sm">
                   Employee: <b>{r.employeeName || "Unknown"}</b>{" "}
-                  {r.shiftType && <span>• Shift: {r.shiftType}</span>}
+                  {r.shiftType && <span>- Shift: {r.shiftType}</span>}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
                   <div>Type: <b>{r.countType}</b></div>
                   <div>Drawer: <b>{formatMoney(r.drawerCents)}</b></div>
                   <div>
-                    Delta: <b>{delta == null ? "—" : formatMoney(delta)}</b>
+                    Delta: <b>{delta == null ? "--" : formatMoney(delta)}</b>
                   </div>
                 </div>
 
-                <div className="text-xs text-gray-600">
-                  Confirmed: {r.confirmed ? "Yes" : "No"} • Notified: {r.notifiedManager ? "Yes" : "No"}
+                <div className="text-xs muted">
+                  Confirmed: {r.confirmed ? "Yes" : "No"} - Notified: {r.notifiedManager ? "Yes" : "No"}
                 </div>
 
                 {r.note && (
-                  <div className="text-sm border rounded p-2 bg-gray-50">
+                  <div className="text-sm card card-muted card-pad">
                     Note: {r.note}
                   </div>
                 )}
 
                 <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
                   <input
-                    className="flex-1 border rounded p-2 text-sm"
+                    className="input text-sm"
                     placeholder="Review note (optional)"
                     value={notes[r.id] ?? ""}
                     onChange={e => setNotes(prev => ({ ...prev, [r.id]: e.target.value }))}
                   />
                   <button
-                    className="rounded bg-black text-white px-3 py-2 text-sm disabled:opacity-50"
+                    className="btn-primary px-3 py-2 text-sm disabled:opacity-50"
                     onClick={() => markReviewed(r.id)}
                     disabled={savingIds.has(r.id)}
                   >
@@ -220,7 +220,7 @@ export default function VarianceReviewPage() {
           })}
 
           {!rows.length && (
-            <div className="border rounded p-6 text-center text-gray-500 text-sm">
+            <div className="card card-pad text-center text-sm muted">
               No open variances.
             </div>
           )}
@@ -229,3 +229,4 @@ export default function VarianceReviewPage() {
     </div>
   );
 }
+

@@ -236,137 +236,144 @@ export default function ClockPageClient() {
     }
   }
 
-  if (loading) return <div className="p-6">Loading…</div>;
+  if (loading) return <div className="app-shell">Loading...</div>;
 
   return (
-    <div className="min-h-screen p-6">
+    <div className="app-shell">
       <div className="max-w-md mx-auto space-y-4">
-        <h1 className="text-2xl font-semibold">Clock In</h1>
-
-        {!qrToken && (
-          <div className="text-sm border border-amber-300 text-amber-800 rounded p-3">
-            Missing QR token. Use the store QR code so the URL includes <b>?t=...</b>
-          </div>
-        )}
-
-        {error && (
-          <div className="text-sm text-red-600 border border-red-300 rounded p-3">{error}</div>
-        )}
-
-        <div className="space-y-2">
-          <label className="text-sm">Store</label>
-          <select
-            className="w-full border rounded p-2"
-            value={storeId}
-            onChange={e => setStoreId(e.target.value)}
-            disabled={submitting}
-          >
-            {stores.map(s => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+        <div className="flex items-center justify-between">
+          <h1 className="text-2xl font-semibold">Clock In</h1>
+          <span className="text-xs muted">Employee</span>
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm">Employee</label>
-          <select
-            className="w-full border rounded p-2"
-            value={profileId}
-            onChange={e => setProfileId(e.target.value)}
-            disabled={submitting}
-          >
-            {profiles.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm">Shift type</label>
-          <select
-            className="w-full border rounded p-2"
-            value={shiftKind}
-            onChange={e => {
-              const next = e.target.value as ShiftKind;
-              setShiftKind(next);
-              setStartConfirmThreshold(false);
-              setStartNotifiedManager(false);
-            }}
-            disabled={submitting}
-          >
-            <option value="open">Open</option>
-            <option value="close">Close</option>
-            <option value="double">Double</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm">Planned start time</label>
-          <input
-            type="datetime-local"
-            className="w-full border rounded p-2"
-            value={plannedStartLocal}
-            onChange={e => setPlannedStartLocal(e.target.value)}
-            disabled={submitting}
-          />
-          <div className="text-xs text-gray-500">Rounded to 30 minutes on submit.</div>
-        </div>
-
-        <div className="space-y-2">
-          <label className="text-sm">
-            Beginning drawer count ($){requiresStartDrawer ? "" : " (optional)"}
-          </label>
-          <input
-            className="w-full border rounded p-2"
-            inputMode="decimal"
-            value={startDrawer}
-            onChange={e => setStartDrawer(e.target.value)}
-            disabled={submitting}
-          />
-
-          {requiresStartDrawer && thresholdMsg && (
-            <div className="text-sm border rounded p-2 text-amber-700 border-amber-300">
-              {thresholdMsg}
+        <div className="card card-pad space-y-4">
+          {!qrToken && (
+            <div className="banner text-sm">
+              Missing QR token. Use the store QR code so the URL includes <b>?t=...</b>
             </div>
           )}
 
-          {requiresStartDrawer && startOutOfThreshold && (
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={startConfirmThreshold}
-                onChange={e => setStartConfirmThreshold(e.target.checked)}
-                disabled={submitting}
-              />
-              I confirm this count is correct (required if outside threshold)
-            </label>
+          {error && (
+            <div className="banner banner-error text-sm">{error}</div>
           )}
 
-          {requiresStartDrawer && startOutOfThreshold && (
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={startNotifiedManager}
-                onChange={e => setStartNotifiedManager(e.target.checked)}
-                disabled={submitting}
-              />
-              I notified manager
+          <div className="space-y-2">
+            <label className="text-sm muted">Store</label>
+            <select
+              className="select"
+              value={storeId}
+              onChange={e => setStoreId(e.target.value)}
+              disabled={submitting}
+            >
+              {stores.map(s => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm muted">Employee</label>
+            <select
+              className="select"
+              value={profileId}
+              onChange={e => setProfileId(e.target.value)}
+              disabled={submitting}
+            >
+              {profiles.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm muted">Shift type</label>
+            <select
+              className="select"
+              value={shiftKind}
+              onChange={e => {
+                const next = e.target.value as ShiftKind;
+                setShiftKind(next);
+                setStartConfirmThreshold(false);
+                setStartNotifiedManager(false);
+              }}
+              disabled={submitting}
+            >
+              <option value="open">Open</option>
+              <option value="close">Close</option>
+              <option value="double">Double</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm muted">Planned start time</label>
+            <input
+              type="datetime-local"
+              className="input"
+              value={plannedStartLocal}
+              onChange={e => setPlannedStartLocal(e.target.value)}
+              disabled={submitting}
+            />
+            <div className="text-xs muted">Rounded to 30 minutes on submit.</div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-sm muted">
+              Beginning drawer count ($){requiresStartDrawer ? "" : " (optional)"}
             </label>
-          )}
+            <input
+              className="input"
+              inputMode="decimal"
+              value={startDrawer}
+              onChange={e => setStartDrawer(e.target.value)}
+              disabled={submitting}
+            />
+
+            {requiresStartDrawer && thresholdMsg && (
+              <div className="banner text-sm">
+                {thresholdMsg}
+              </div>
+            )}
+
+            {requiresStartDrawer && startOutOfThreshold && (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={startConfirmThreshold}
+                  onChange={e => setStartConfirmThreshold(e.target.checked)}
+                  disabled={submitting}
+                />
+                I confirm this count is correct (required if outside threshold)
+              </label>
+            )}
+
+            {requiresStartDrawer && startOutOfThreshold && (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={startNotifiedManager}
+                  onChange={e => setStartNotifiedManager(e.target.checked)}
+                  disabled={submitting}
+                />
+                I notified manager
+              </label>
+            )}
+          </div>
+
+          <div className="sticky-cta">
+            <button
+              className="btn-primary w-full py-3 text-sm disabled:opacity-50"
+              disabled={!canStart || submitting}
+              onClick={startShift}
+            >
+              {submitting ? "Starting..." : "Start Shift"}
+            </button>
+          </div>
         </div>
-
-        <button
-          className="w-full rounded bg-black text-white py-2 disabled:opacity-50"
-          disabled={!canStart || submitting}
-          onClick={startShift}
-        >
-          {submitting ? "Starting…" : "Start Shift"}
-        </button>
       </div>
     </div>
   );

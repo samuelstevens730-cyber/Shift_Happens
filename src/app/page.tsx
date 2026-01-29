@@ -2,16 +2,26 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <div className="min-h-screen p-6">
-      <div className="max-w-md mx-auto space-y-4">
-        <h1 className="text-2xl font-semibold">Shift Happens</h1>
-        <div className="flex gap-4">
-          <Link href="/clock" className="flex-1 text-center rounded bg-black text-white py-2">
-            Employee
-          </Link>
-          <Link href="/login?next=/admin" className="flex-1 text-center rounded border py-2">
-            Admin
-          </Link>
+    <div className="app-shell">
+      <div className="max-w-md mx-auto space-y-6">
+        <div className="text-center space-y-2">
+          <h1 className="text-3xl font-semibold tracking-tight">Shift Happens</h1>
+          <p className="text-sm muted">Choose your access mode to continue.</p>
+        </div>
+
+        <div className="card card-pad space-y-4">
+          <div className="segmented">
+            <Link href="/clock" className="segment segment-active">
+              Employee
+            </Link>
+            <Link href="/login?next=/admin" className="segment">
+              Admin
+            </Link>
+          </div>
+
+          <div className="text-xs muted">
+            Employees can clock in manually if they missed the QR scan. Admins review variances, payroll, and open shifts.
+          </div>
         </div>
       </div>
     </div>

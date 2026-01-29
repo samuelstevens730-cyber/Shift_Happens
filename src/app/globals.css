@@ -1,8 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0d0f12;
+  --foreground: #e6e6e6;
+  --bg0: #0b0e11;
+  --bg1: #141820;
+  --card: #12151b;
+  --cardBorder: rgba(173, 116, 255, 0.35);
+  --text: #e6e6e6;
+  --muted: #9aa3b2;
+  --green: #20f08a;
+  --purple: #b470ff;
+  --danger: #ff5c6b;
 }
 
 @theme inline {
@@ -21,8 +30,206 @@
 
 body {
   background: var(--background);
-  color: var(--foreground);
+  color: var(--text);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+.app-shell {
+  min-height: 100vh;
+  padding: 24px 16px 28px;
+  background:
+    radial-gradient(600px 300px at 10% 10%, rgba(180, 112, 255, 0.08), transparent 60%),
+    radial-gradient(700px 400px at 90% 0%, rgba(32, 240, 138, 0.08), transparent 60%),
+    linear-gradient(180deg, var(--bg0), var(--bg1));
+  color: var(--text);
+  position: relative;
+}
+
+.app-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.18;
+  background:
+    radial-gradient(800px 300px at 20% 80%, rgba(255, 255, 255, 0.05), transparent 70%),
+    radial-gradient(700px 400px at 80% 20%, rgba(255, 255, 255, 0.04), transparent 70%);
+}
+
+.app-shell::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.12;
+  background:
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.03) 1px, transparent 1px, transparent 2px),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.06), rgba(0, 0, 0, 0.06) 1px, transparent 1px, transparent 3px);
+  mix-blend-mode: soft-light;
+}
+
+.app-shell > * {
+  position: relative;
+  z-index: 1;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--cardBorder);
+  border-radius: 18px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+.card-muted {
+  background: rgba(18, 21, 27, 0.7);
+}
+
+.card-pad {
+  padding: 16px;
+}
+
+.btn-primary {
+  background: var(--green);
+  color: #0b0e11;
+  border: 1px solid rgba(32, 240, 138, 0.6);
+  border-radius: 12px;
+  font-weight: 600;
+  transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+}
+
+.btn-primary:hover {
+  box-shadow: 0 0 0 2px rgba(32, 240, 138, 0.18);
+  filter: brightness(1.02);
+}
+
+.btn-primary:active {
+  transform: translateY(1px);
+}
+
+.btn-secondary {
+  background: transparent;
+  color: var(--purple);
+  border: 1px solid rgba(180, 112, 255, 0.7);
+  border-radius: 12px;
+  font-weight: 600;
+  transition: transform 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+}
+
+.btn-secondary:hover {
+  box-shadow: 0 0 0 2px rgba(180, 112, 255, 0.2);
+}
+
+.btn-secondary:active {
+  transform: translateY(1px);
+}
+
+.btn-danger {
+  background: transparent;
+  color: var(--danger);
+  border: 1px solid rgba(255, 92, 107, 0.7);
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.banner {
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid rgba(255, 196, 93, 0.4);
+  background: rgba(255, 196, 93, 0.1);
+  color: #ffd9a6;
+}
+
+.banner-error {
+  border: 1px solid rgba(255, 92, 107, 0.5);
+  background: rgba(255, 92, 107, 0.12);
+  color: #ffc4c9;
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  background: rgba(8, 10, 14, 0.9);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: none;
+  border-color: rgba(32, 240, 138, 0.6);
+  box-shadow: 0 0 0 2px rgba(32, 240, 138, 0.18);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.segmented {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  background: rgba(18, 21, 27, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+}
+
+.segment {
+  flex: 1;
+  text-align: center;
+  border-radius: 999px;
+  padding: 10px 14px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--muted);
+}
+
+.segment-active {
+  background: var(--green);
+  color: #0b0e11;
+}
+
+.tile {
+  display: block;
+  border-radius: 18px;
+  border: 1px solid rgba(180, 112, 255, 0.35);
+  background: rgba(18, 21, 27, 0.8);
+  padding: 18px;
+  transition: transform 120ms ease, box-shadow 120ms ease;
+}
+
+.tile:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+}
+
+.tile-disabled {
+  opacity: 0.5;
+  filter: grayscale(1);
+  cursor: not-allowed;
+}
+
+.tile-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--purple);
+  box-shadow: 0 0 0 2px rgba(180, 112, 255, 0.2);
+}
+
+.header-bar {
+  background: rgba(10, 12, 16, 0.85);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sticky-cta {
+  position: sticky;
+  bottom: 0;
+  padding: 12px 0 4px;
+  background: linear-gradient(180deg, rgba(12, 15, 20, 0), rgba(12, 15, 20, 0.9));
 }
 
 /* Hide the small built-in "Forgot your password?" link inside Supabase Auth form */

@@ -61,9 +61,9 @@ export default function LoginPage() {
   if (!ready || !nextPath) return null;
 
   return (
-    <div className="min-h-screen grid place-items-center p-6">
-      <div className="w-full max-w-md rounded-2xl shadow p-6 border">
-        <h1 className="text-2xl font-semibold mb-4">Shift Happens</h1>
+    <div className="app-shell grid place-items-center">
+      <div className="w-full max-w-md card card-pad space-y-4">
+        <h1 className="text-2xl font-semibold">Shift Happens</h1>
         <Auth
           supabaseClient={supabase}
           providers={[]}
@@ -71,7 +71,7 @@ export default function LoginPage() {
           redirectTo={`${origin}${nextPath}`}
         />
         <button
-          className="text-sm underline mt-3"
+          className="btn-secondary px-3 py-2 text-sm w-full"
           onClick={handleForgot}
         >
           Forgot password?

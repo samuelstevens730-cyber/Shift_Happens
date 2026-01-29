@@ -157,22 +157,23 @@ export default function PayrollAdminPage() {
   }
 
   return (
-    <div className="min-h-screen p-6">
+  return (
+    <div className="app-shell">
       <div className="max-w-5xl mx-auto space-y-6">
         <h1 className="text-2xl font-semibold">Payroll Admin</h1>
 
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+        <div className="card card-pad grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
           <div>
-            <label className="text-sm">From</label>
-            <input type="date" className="w-full border rounded p-2" value={from} onChange={e => setFrom(e.target.value)} />
+            <label className="text-sm muted">From</label>
+            <input type="date" className="input" value={from} onChange={e => setFrom(e.target.value)} />
           </div>
           <div>
-            <label className="text-sm">To</label>
-            <input type="date" className="w-full border rounded p-2" value={to} onChange={e => setTo(e.target.value)} />
+            <label className="text-sm muted">To</label>
+            <input type="date" className="input" value={to} onChange={e => setTo(e.target.value)} />
           </div>
           <div>
-            <label className="text-sm">User</label>
-            <select className="w-full border rounded p-2" value={selectedUser} onChange={e => setSelectedUser(e.target.value)}>
+            <label className="text-sm muted">User</label>
+            <select className="select" value={selectedUser} onChange={e => setSelectedUser(e.target.value)}>
               <option value="all">All</option>
               {profiles.map(p => (
                 <option key={p.id} value={p.id}>{p.full_name || p.id.slice(0,8)}</option>
@@ -180,28 +181,28 @@ export default function PayrollAdminPage() {
             </select>
           </div>
           <div>
-            <label className="text-sm">Store</label>
-            <select className="w-full border rounded p-2" value={selectedStore} onChange={e => setSelectedStore(e.target.value)}>
+            <label className="text-sm muted">Store</label>
+            <select className="select" value={selectedStore} onChange={e => setSelectedStore(e.target.value)}>
               <option value="all">All</option>
               {stores.map(s => (
                 <option key={s.id} value={s.id}>{s.name || s.id}</option>
               ))}
             </select>
           </div>
-          <button onClick={runReport} className="h-10 rounded bg-black text-white px-4 disabled:opacity-50" disabled={loading}>
-            {loading ? "Running…" : "Run"}
+          <button onClick={runReport} className="h-12 btn-primary px-4 disabled:opacity-50" disabled={loading}>
+            {loading ? "Running..." : "Run"}
           </button>
-          <button onClick={exportCsv} className="h-10 rounded border px-4 disabled:opacity-50" disabled={!rows.length}>
+          <button onClick={exportCsv} className="h-12 btn-secondary px-4 disabled:opacity-50" disabled={!rows.length}>
             Export CSV
           </button>
         </div>
 
-        {err && <div className="text-sm text-red-600 border border-red-300 rounded p-3">{err}</div>}
+        {err && <div className="banner banner-error text-sm">{err}</div>}
 
-        <div className="border rounded">
-          <div className="px-3 py-2 font-medium border-b">Shifts</div>
+        <div className="card">
+          <div className="px-3 py-2 font-medium border-b border-white/10">Shifts</div>
           <table className="w-full text-sm">
-            <thead className="bg-gray-50">
+            <thead className="bg-black/40">
               <tr>
                 <th className="text-left px-3 py-2">Employee</th>
                 <th className="text-left px-3 py-2">Store</th>
@@ -213,7 +214,7 @@ export default function PayrollAdminPage() {
             </thead>
             <tbody>
               {rows.map(r => (
-                <tr key={r.id} className="border-t">
+                <tr key={r.id} className="border-t border-white/10">
                   <td className="px-3 py-2">{r.full_name || "Unknown"}</td>
                   <td className="px-3 py-2">{r.store_id}</td>
                   <td className="px-3 py-2">{new Date(r.start_at).toLocaleString()}</td>
@@ -224,12 +225,12 @@ export default function PayrollAdminPage() {
               ))}
               {!rows.length && (
                 <tr>
-                  <td className="px-3 py-6 text-center text-gray-500" colSpan={6}>No shifts in range.</td>
+                  <td className="px-3 py-6 text-center muted" colSpan={6}>No shifts in range.</td>
                 </tr>
               )}
             </tbody>
             {rows.length > 0 && (
-              <tfoot className="bg-gray-50">
+              <tfoot className="bg-black/40">
                 <tr className="font-medium">
                   <td className="px-3 py-2 text-right" colSpan={4}>Totals:</td>
                   <td className="px-3 py-2 text-right">{totalMinutes}</td>

@@ -24,9 +24,9 @@ function toLocalInputValue(d = new Date()) {
 }
 
 function formatDate(value: string | null) {
-  if (!value) return "—";
+  if (!value) return "--";
   const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return "—";
+  if (Number.isNaN(d.getTime())) return "--";
   return d.toLocaleString();
 }
 
@@ -164,27 +164,27 @@ export default function OpenShiftsPage() {
     }
   }
 
-  if (loading) return <div className="p-6">Loading...</div>;
+  if (loading) return <div className="app-shell">Loading...</div>;
   if (!isAuthed) return null;
 
   return (
-    <div className="min-h-screen p-6">
+    <div className="app-shell">
       <div className="max-w-5xl mx-auto space-y-6">
         <h1 className="text-2xl font-semibold">Open Shifts</h1>
 
-        {error && <div className="text-sm text-red-600 border border-red-300 rounded p-3">{error}</div>}
+        {error && <div className="banner banner-error text-sm">{error}</div>}
 
         <div className="space-y-3">
           {sortedRows.map(r => (
-            <div key={r.id} className="border rounded p-4 space-y-2">
+            <div key={r.id} className="card card-pad space-y-2">
               <div className="flex flex-wrap gap-3 items-center justify-between">
-                <div className="text-sm text-gray-600">
+                <div className="text-sm muted">
                   <b>{r.storeName || "Unknown Store"}</b>
                   {r.expectedDrawerCents != null && (
                     <span> (expected ${(r.expectedDrawerCents / 100).toFixed(2)})</span>
                   )}
                 </div>
-                <div className="text-xs text-gray-500">
+                <div className="text-xs muted">
                   Started: {formatDate(r.startedAt)}
                 </div>
               </div>
@@ -197,19 +197,19 @@ export default function OpenShiftsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
                 <div>Planned: <b>{formatDate(r.plannedStartAt)}</b></div>
                 <div>Created: <b>{formatDate(r.createdAt)}</b></div>
-                <div>Shift ID: <span className="text-gray-500">{r.id.slice(0, 8)}</span></div>
+                <div>Shift ID: <span className="muted">{r.id.slice(0, 8)}</span></div>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-                <label className="text-sm">End time</label>
+                <label className="text-sm muted">End time</label>
                 <input
                   type="datetime-local"
-                  className="border rounded p-2 text-sm"
+                  className="input text-sm"
                   value={endTimes[r.id] ?? ""}
                   onChange={e => setEndTimes(prev => ({ ...prev, [r.id]: e.target.value }))}
                 />
                 <button
-                  className="rounded bg-black text-white px-3 py-2 text-sm disabled:opacity-50"
+                  className="btn-primary px-3 py-2 text-sm disabled:opacity-50"
                   onClick={() => setConfirmShiftId(r.id)}
                   disabled={savingIds.has(r.id)}
                 >
@@ -220,7 +220,7 @@ export default function OpenShiftsPage() {
           ))}
 
           {!sortedRows.length && (
-            <div className="border rounded p-6 text-center text-gray-500 text-sm">
+            <div className="card card-pad text-center text-sm muted">
               No open shifts.
             </div>
           )}
@@ -228,22 +228,22 @@ export default function OpenShiftsPage() {
       </div>
 
       {confirmShiftId && (
-        <div className="fixed inset-0 bg-black/40 grid place-items-center p-4">
-          <div className="w-full max-w-md bg-white rounded-2xl p-4 space-y-4">
+        <div className="fixed inset-0 bg-black/60 grid place-items-center p-4">
+          <div className="w-full max-w-md card card-pad space-y-4">
             <h2 className="text-lg font-semibold">Confirm End Shift</h2>
-            <p className="text-sm text-gray-600">
+            <p className="text-sm muted">
               This will end the shift and record an admin placeholder drawer count.
             </p>
             <div className="flex gap-2 justify-end">
               <button
-                className="px-3 py-1.5 rounded border"
+                className="btn-secondary px-3 py-1.5"
                 onClick={() => setConfirmShiftId(null)}
                 disabled={savingIds.has(confirmShiftId)}
               >
                 Cancel
               </button>
               <button
-                className="px-3 py-1.5 rounded bg-black text-white disabled:opacity-50"
+                className="btn-primary px-3 py-1.5 disabled:opacity-50"
                 onClick={() => {
                   const id = confirmShiftId;
                   setConfirmShiftId(null);
@@ -260,3 +260,5 @@ export default function OpenShiftsPage() {
     </div>
   );
 }
+
+
