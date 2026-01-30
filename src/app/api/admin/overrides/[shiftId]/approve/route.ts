@@ -1,3 +1,35 @@
+/**
+ * POST /api/admin/overrides/[shiftId]/approve - Approve a Long Shift Override
+ *
+ * Approves a shift that was flagged as requiring manager override (typically
+ * because it exceeded the 13-hour maximum duration). Requires an approval note
+ * explaining why the long shift is being accepted.
+ *
+ * Auth: Bearer token required (manager access via store_managers table)
+ *
+ * URL params:
+ *   - shiftId: UUID of the shift to approve
+ *
+ * Request body:
+ *   - note: Approval note explaining the override (required, non-empty string)
+ *
+ * Returns: { ok: true } on success
+ *
+ * Error responses:
+ *   - 400: Missing shiftId, missing/empty note, override not required, or already approved
+ *   - 401: Unauthorized (invalid/missing token)
+ *   - 403: User is not a manager of the shift's store
+ *   - 404: Shift not found
+ *   - 500: Database error
+ *
+ * Business logic:
+ *   - Only managers of the shift's store can approve
+ *   - Shift must have requires_override = true
+ *   - Shift must not already be approved (override_at must be null)
+ *   - Sets override_at to current timestamp
+ *   - Sets override_by to the authenticated user's ID
+ *   - Stores the approval note in override_note
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 

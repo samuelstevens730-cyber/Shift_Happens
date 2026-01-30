@@ -1,3 +1,26 @@
+/**
+ * Assignments Admin Page - Task and message assignment management
+ *
+ * This administrative page allows managers to create, view, and manage tasks and messages
+ * that are assigned to employees or stores. Assignments are delivered to employees at the
+ * start of their next shift and must be acknowledged (messages) or completed (tasks).
+ *
+ * Features:
+ * - Create new tasks or messages targeted to specific employees or entire stores
+ * - Filter assignments by date range, store, employee, and completion status
+ * - View assignment details including delivery status, acknowledgment, and completion times
+ * - Add audit notes to assignments for administrative tracking
+ * - Delete individual assignments or bulk delete based on current filters
+ * - Paginated list view with 25 assignments per page
+ *
+ * Business Logic:
+ * - Tasks require completion confirmation; messages only require acknowledgment
+ * - Store-targeted assignments are delivered to the next employee who clocks in at that store
+ * - Employee-targeted assignments wait until that specific employee starts a shift
+ * - Delivery tracking shows which shift and employee received the assignment
+ * - Audit notes provide a way for admins to add context without modifying the original message
+ * - Bulk delete respects current filters to allow targeted cleanup of old assignments
+ */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";

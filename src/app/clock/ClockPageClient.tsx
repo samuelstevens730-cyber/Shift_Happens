@@ -1,3 +1,23 @@
+/**
+ * Clock Page Client - Employee Clock-In Flow
+ *
+ * Main clock-in interface for employees. Supports two entry modes:
+ * 1. QR scan - URL contains ?t=<token>, locks store selection to that location
+ * 2. Manual - No token, employee selects store from dropdown
+ *
+ * Flow:
+ * 1. Select store (or auto-selected via QR)
+ * 2. Select employee name
+ * 3. Choose shift type (open/close/double/other)
+ * 4. Enter planned start time (rounded to 30-min increments for payroll)
+ * 5. Enter starting drawer count (required for open/close/double, optional for other)
+ * 6. If drawer out of threshold: must confirm count and notify manager
+ * 7. Confirmation modal before submitting
+ * 8. Redirect to shift detail page on success
+ *
+ * Local storage persists last-used store/employee for faster repeat clock-ins.
+ */
+
 // src/app/clock/page.tsx
 "use client";
 
@@ -32,6 +52,7 @@ function roundTo30Minutes(d: Date) {
 export default function ClockPageClient() {
   const router = useRouter();
   const search = useSearchParams();
+  // QR token from store-specific QR code, locks store selection if valid
   const qrToken = search.get("t") || "";
 
   const [loading, setLoading] = useState(true);
@@ -47,35 +68,42 @@ export default function ClockPageClient() {
   const [tokenStore, setTokenStore] = useState<Store | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
 
+  // Default to current time rounded to nearest 30 minutes
   const [plannedStartLocal, setPlannedStartLocal] = useState(() =>
     toLocalInputValue(roundTo30Minutes(new Date()))
   );
 
+  // Drawer count state - default $200 to speed up entry
   const [startDrawer, setStartDrawer] = useState<string>("200");
   const [startConfirmThreshold, setStartConfirmThreshold] = useState(false);
   const [startNotifiedManager, setStartNotifiedManager] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmChecked, setConfirmChecked] = useState(false);
 
+  // "other" shifts don't require drawer counts (e.g., training, inventory)
   const requiresStartDrawer = shiftKind !== "other";
 
+  // Get expected drawer amount for selected store (used for threshold checking)
   const expectedDrawerCents = useMemo(() => {
     const s = stores.find(x => x.id === storeId);
     return s?.expected_drawer_cents ?? 20000; // safe default
   }, [stores, storeId]);
 
+  // Parse drawer input to cents (null if invalid)
   const parsedStart = useMemo(() => {
     const dollars = Number(startDrawer);
     if (Number.isNaN(dollars) || dollars < 0) return null;
     return Math.round(dollars * 100);
   }, [startDrawer]);
 
+  // Check if drawer count is outside acceptable variance range
   const startOutOfThreshold = useMemo(() => {
     if (!requiresStartDrawer) return false;
     if (parsedStart == null) return false;
     return isOutOfThreshold(parsedStart, expectedDrawerCents);
   }, [requiresStartDrawer, parsedStart, expectedDrawerCents]);
 
+  // Generate threshold warning message for display
   const thresholdMsg = useMemo(() => {
     if (!requiresStartDrawer) return null;
     if (parsedStart == null) return "Enter a valid drawer amount.";
@@ -97,6 +125,7 @@ export default function ClockPageClient() {
     return dt.toLocaleString();
   }, [plannedStartLocal]);
 
+  // Validation: all required fields filled and threshold rules satisfied
   const canStart = useMemo(() => {
     if (!storeId || !profileId || !plannedStartLocal) return false;
 
@@ -121,6 +150,7 @@ export default function ClockPageClient() {
     startNotifiedManager,
   ]);
 
+  // Load stores, profiles, and validate QR token on mount
   useEffect(() => {
     let alive = true;
 
@@ -147,11 +177,13 @@ export default function ClockPageClient() {
         if (!alive) return;
         if (profErr) throw profErr;
 
+        // Filter out inactive employees
         const filteredProfiles = (profileData ?? []).filter(p => p.active !== false);
 
         setStores(storeData ?? []);
         setProfiles(filteredProfiles);
 
+        // Validate QR token and lock store if valid
         if (qrToken) {
           const { data: tokenStoreRow, error: tokenErr } = await supabase
             .from("stores")
@@ -170,7 +202,7 @@ export default function ClockPageClient() {
           }
         }
 
-        // Restore last selections if still valid
+        // Restore last selections if still valid (for faster repeat clock-ins)
         const lastStore = localStorage.getItem("sh_store") || "";
         const lastProfile = localStorage.getItem("sh_profile") || "";
 
@@ -194,6 +226,7 @@ export default function ClockPageClient() {
     };
   }, []);
 
+  // Persist selections to localStorage for faster repeat clock-ins
   useEffect(() => {
     if (storeId) localStorage.setItem("sh_store", storeId);
   }, [storeId]);
@@ -202,6 +235,7 @@ export default function ClockPageClient() {
     if (profileId) localStorage.setItem("sh_profile", profileId);
   }, [profileId]);
 
+  // Reset confirmation state when form fields change
   useEffect(() => {
     setConfirmChecked(false);
     setConfirmOpen(false);
@@ -262,9 +296,11 @@ export default function ClockPageClient() {
       const shiftId = json.shiftId as string;
       if (!shiftId) throw new Error("API did not return shiftId.");
 
+      // Redirect based on shift type - open/double go through run page first
       const base = shiftKind === "open" || shiftKind === "double" ? `/run/${shiftId}` : `/shift/${shiftId}`;
       const params = new URLSearchParams();
       if (qrToken) params.set("t", qrToken);
+      // Handle reused shift (employee already clocked in today)
       if (json?.reused) {
         params.set("reused", "1");
         if (json.startedAt) params.set("startedAt", json.startedAt);
@@ -289,12 +325,14 @@ export default function ClockPageClient() {
         </div>
 
         <div className="card card-pad space-y-4">
+          {/* Manual mode banner - shown when no QR token */}
           {!qrToken && (
             <div className="banner text-sm">
               QR token missing - manual clock-in is allowed. Select a store and employee to continue.
             </div>
           )}
 
+          {/* QR token validated - show locked store info */}
           {qrToken && tokenStore && (
             <div className="banner text-sm">
               Token store: <b>{tokenStore.name}</b>. Store selection is locked to this location.
@@ -304,6 +342,7 @@ export default function ClockPageClient() {
             </div>
           )}
 
+          {/* Invalid QR token error */}
           {qrToken && tokenError && (
             <div className="banner banner-error text-sm">{tokenError}</div>
           )}
@@ -312,6 +351,7 @@ export default function ClockPageClient() {
             <div className="banner banner-error text-sm">{error}</div>
           )}
 
+          {/* Store selector - hidden when QR token locks the store */}
           {!qrToken && (
             <div className="space-y-2">
               <label className="text-sm muted">Store</label>
@@ -354,6 +394,7 @@ export default function ClockPageClient() {
               onChange={e => {
                 const next = e.target.value as ShiftKind;
                 setShiftKind(next);
+                // Reset threshold confirmations when shift type changes
                 setStartConfirmThreshold(false);
                 setStartNotifiedManager(false);
               }}
@@ -390,12 +431,14 @@ export default function ClockPageClient() {
               disabled={submitting}
             />
 
+            {/* Threshold warning message */}
             {requiresStartDrawer && thresholdMsg && (
               <div className="banner text-sm">
                 {thresholdMsg}
               </div>
             )}
 
+            {/* Threshold confirmation checkboxes - shown only when drawer is out of range */}
             {requiresStartDrawer && startOutOfThreshold && (
               <label className="flex items-center gap-2 text-sm">
                 <input
@@ -435,6 +478,7 @@ export default function ClockPageClient() {
         </div>
       </div>
 
+      {/* Confirmation modal - prevents accidental clock-ins */}
       {confirmOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
           <div className="card card-pad w-full max-w-md space-y-4">

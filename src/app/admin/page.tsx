@@ -1,3 +1,18 @@
+/**
+ * Admin Dashboard - Main Navigation Hub
+ *
+ * Entry point for all admin functionality. Requires authentication.
+ * Shows navigation tiles for all admin modules with quick access.
+ *
+ * Features:
+ * - Auth check: redirects to login if not authenticated
+ * - Variance badge: shows count of unreviewed drawer variances
+ * - Module navigation: payroll, variances, shifts, overrides, users, assignments, settings
+ *
+ * Authorization is enforced at the API level - this page only checks
+ * if user is logged in, not if they have admin privileges.
+ */
+
 "use client";
 
 import Link from "next/link";
@@ -12,8 +27,10 @@ export default function AdminIndex() {
   const [loading, setLoading] = useState(true);
   const [error, setError]   = useState<string | null>(null);
   const [isAuthed, setIsAuthed] = useState(false);
+  // Badge count for unreviewed drawer variances
   const [varianceCount, setVarianceCount] = useState<number | null>(null);
 
+  // Auth check - redirect to login if not authenticated
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -36,6 +53,7 @@ export default function AdminIndex() {
     return () => { alive = false; };
   }, [router]);
 
+  // Fetch variance count for badge display
   useEffect(() => {
     if (!isAuthed) return;
     let alive = true;
@@ -76,7 +94,7 @@ export default function AdminIndex() {
         </header>
 
         <section className="grid gap-4 sm:grid-cols-2">
-          {/* Payroll */}
+          {/* Payroll - export shift data for payroll processing */}
           <Link href="/admin/payroll" className="tile">
             <div className="flex items-center gap-2">
               <span className="tile-dot" />
@@ -87,11 +105,12 @@ export default function AdminIndex() {
             </p>
           </Link>
 
-          {/* Variance Review */}
+          {/* Variance Review - drawer counts outside threshold requiring review */}
           <Link href="/admin/variances" className="tile">
             <div className="flex items-center gap-2">
               <span className="tile-dot" />
               <div className="text-lg font-medium">Variance Review</div>
+              {/* Badge shows count of pending variances */}
               {typeof varianceCount === "number" && varianceCount > 0 && (
                 <span className="text-xs rounded-full bg-black text-white px-2 py-0.5">
                   {varianceCount}
@@ -103,7 +122,7 @@ export default function AdminIndex() {
             </p>
           </Link>
 
-          {/* Open Shifts */}
+          {/* Open Shifts - monitor and close stale/abandoned shifts */}
           <Link href="/admin/open-shifts" className="tile">
             <div className="flex items-center gap-2">
               <span className="tile-dot" />
@@ -114,7 +133,7 @@ export default function AdminIndex() {
             </p>
           </Link>
 
-          {/* Shifts */}
+          {/* Shifts - full CRUD for all shift records */}
           <Link href="/admin/shifts" className="tile">
             <div className="flex items-center gap-2">
               <span className="tile-dot" />
@@ -125,7 +144,7 @@ export default function AdminIndex() {
             </p>
           </Link>
 
-          {/* Long Shift Overrides */}
+          {/* Long Shift Overrides - approve shifts >13 hours */}
           <Link href="/admin/overrides" className="tile">
             <div className="flex items-center gap-2">
               <span className="tile-dot" />
@@ -136,7 +155,7 @@ export default function AdminIndex() {
             </p>
           </Link>
 
-          {/* Users */}
+          {/* Users - employee profile management */}
           <Link href="/admin/users" className="tile">
             <div className="flex items-center gap-2">
               <span className="tile-dot" />
@@ -147,7 +166,7 @@ export default function AdminIndex() {
             </p>
           </Link>
 
-          {/* Tasks & Messages */}
+          {/* Tasks & Messages - assign work to employees for next shift */}
           <Link href="/admin/assignments" className="tile">
             <div className="flex items-center gap-2">
               <span className="tile-dot" />
@@ -158,7 +177,7 @@ export default function AdminIndex() {
             </p>
           </Link>
 
-          {/* Settings */}
+          {/* Settings - store configuration and checklists */}
           <Link href="/admin/settings" className="tile">
             <div className="flex items-center gap-2">
               <span className="tile-dot" />

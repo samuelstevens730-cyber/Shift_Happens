@@ -1,3 +1,44 @@
+/**
+ * GET /api/admin/missing-counts - List Missing Drawer Counts Report
+ *
+ * Returns drawer counts that were flagged as missing (count_missing = true),
+ * typically created when an admin force-closes a shift without the employee
+ * completing their drawer count.
+ *
+ * Auth: Bearer token required (manager access via store_managers table)
+ *
+ * Query params:
+ *   - page: Page number (default 1)
+ *   - pageSize: Items per page (default 25, max 100)
+ *   - from: Filter counts at or after this ISO date
+ *   - to: Filter counts at or before this ISO date
+ *   - storeId: Filter by specific store (must be a managed store)
+ *   - profileId: Filter by specific employee profile
+ *
+ * Returns: {
+ *   rows: Array of {
+ *     id: Drawer count UUID,
+ *     shiftId: Associated shift UUID,
+ *     storeName: Name of the store,
+ *     employeeName: Name of the employee,
+ *     shiftType: Type of shift (open, close, other),
+ *     countType: "start", "changeover", or "end",
+ *     countedAt: Timestamp of the count,
+ *     drawerCents: Placeholder amount in cents (usually expected drawer),
+ *     note: Note explaining why count is missing
+ *   },
+ *   page: Current page number,
+ *   pageSize: Items per page,
+ *   total: Total matching records
+ * }
+ *
+ * Business logic:
+ *   - Only returns counts where count_missing = true
+ *   - Only returns counts for stores the user manages
+ *   - Excludes counts from soft-deleted shifts
+ *   - Ordered by counted_at descending (most recent first)
+ *   - Missing counts are typically created by admin force-close operations
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 

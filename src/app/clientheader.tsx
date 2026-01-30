@@ -1,3 +1,11 @@
+/**
+ * Client Header Component
+ *
+ * Global navigation header displayed on all pages.
+ * Handles auth state to show Login/Logout button appropriately.
+ * Preserves current path in login redirect so users return after auth.
+ */
+
 // src/app/ClientHeader.tsx  (CLIENT component)
 "use client";
 
@@ -12,6 +20,7 @@ export default function ClientHeader() {
   const pathname = usePathname();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
+  // Subscribe to auth state changes to update Login/Logout button
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setIsLoggedIn(!!data.user));
     const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
@@ -30,6 +39,7 @@ export default function ClientHeader() {
     router.push("/login");
   }
 
+  // Preserve current path so user returns here after login
   const loginHref = `/login?next=${encodeURIComponent(pathname || "/")}`;
 
   return (

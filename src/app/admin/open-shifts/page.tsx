@@ -1,3 +1,24 @@
+/**
+ * Open Shifts Page - Monitor and force-close stale or abandoned shifts
+ *
+ * This administrative page displays all shifts that are currently open (started but not ended).
+ * It allows managers to identify stale shifts that employees may have forgotten to clock out of
+ * and provides the ability to manually force-close them with a specified end time.
+ *
+ * Features:
+ * - View all currently open shifts across all stores
+ * - Display shift details including store, employee, shift type, planned start, and actual start time
+ * - Show expected drawer amount for each shift's store
+ * - Set custom end time for force-closing shifts
+ * - Confirmation modal before ending a shift to prevent accidental closures
+ * - Automatic list refresh after successfully closing a shift
+ *
+ * Business Logic:
+ * - Shifts are sorted by start time (most recent first)
+ * - When force-closing a shift, an admin placeholder drawer count is recorded
+ * - This is typically used for shifts that have been open unusually long (e.g., employee forgot to clock out)
+ * - The force-close action records an audit trail of the administrative intervention
+ */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";

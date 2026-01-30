@@ -1,3 +1,34 @@
+/**
+ * GET /api/admin/overrides - List Shifts Requiring Override Approval
+ *
+ * Returns shifts that have been flagged as requiring manager override approval
+ * (typically due to exceeding maximum shift duration of 13 hours) and have not
+ * yet been approved.
+ *
+ * Auth: Bearer token required (manager access via store_managers table)
+ *
+ * Query params: None
+ *
+ * Returns: {
+ *   rows: Array of {
+ *     id: Shift UUID,
+ *     storeId: Store UUID,
+ *     storeName: Name of the store,
+ *     employeeName: Name of the employee,
+ *     shiftType: Type of shift (open, close, other),
+ *     startedAt: Actual start time ISO string,
+ *     endedAt: End time ISO string,
+ *     durationHours: Calculated shift duration in hours (rounded to 2 decimals)
+ *   }
+ * }
+ *
+ * Business logic:
+ *   - Only returns shifts where requires_override = true
+ *   - Only returns shifts where override_at IS NULL (not yet approved)
+ *   - Only returns shifts for stores the user manages
+ *   - Ordered by ended_at descending (most recent first)
+ *   - Duration is calculated as (ended_at - started_at) in hours
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 

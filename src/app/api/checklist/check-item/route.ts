@@ -1,4 +1,32 @@
-// src/app/api/checklist/check-item/route.ts
+/**
+ * POST /api/checklist/check-item - Mark Checklist Items Complete
+ *
+ * Records one or more checklist items as completed for a given shift.
+ *
+ * Request body:
+ * - shiftId: string - Shift ID to check items for (required)
+ * - qrToken?: string - QR token to validate store ownership (optional)
+ * - itemId?: string - Single checklist item ID to mark complete
+ * - itemIds?: string[] - Array of checklist item IDs to mark complete
+ * (At least one of itemId or itemIds is required)
+ *
+ * Returns:
+ * - Success: { ok: true, checked: number }
+ * - Error: { error: string, illegalItemIds?: string[] }
+ *
+ * Business logic:
+ * - Validates shift exists and is not already ended
+ * - Validates QR token matches shift's store if provided
+ * - "other" shift type has no checklist - checking items is blocked
+ * - Validates all item IDs exist in the database
+ * - Validates items belong to templates allowed for the shift type:
+ *   - "open" shifts: only open template items
+ *   - "close" shifts: only close template items
+ *   - "double" shifts: both open and close template items
+ * - Uses store-specific templates if available, falls back to legacy global templates
+ * - Uses upsert to handle duplicate submissions gracefully (idempotent)
+ * - Deduplicates input item IDs before processing
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { ShiftType } from "@/lib/kioskRules";

@@ -1,3 +1,48 @@
+/**
+ * GET/POST /api/admin/shifts - Shift Management
+ *
+ * GET: List shifts with pagination and filtering.
+ *   Returns shifts for stores the authenticated user manages, with store/profile
+ *   details joined. Excludes soft-deleted shifts (last_action = "removed").
+ *
+ * POST: Create a new shift record.
+ *   Creates a shift for an employee at a managed store with specified times
+ *   and shift type. Validates store management access and employee membership.
+ *
+ * Auth: Bearer token required (manager access via store_managers table)
+ *
+ * Query params (GET):
+ *   - page: Page number (default 1)
+ *   - pageSize: Items per page (default 25, max 100)
+ *   - from: Filter shifts starting at or after this ISO date
+ *   - to: Filter shifts starting at or before this ISO date
+ *   - storeId: Filter by specific store (must be a managed store)
+ *   - profileId: Filter by specific employee profile
+ *
+ * Request body (POST):
+ *   - storeId: Store UUID (required)
+ *   - profileId: Employee profile UUID (required)
+ *   - shiftType: Shift type enum - "open", "close", or "other" (required)
+ *   - plannedStartAt: Planned start time ISO string (required)
+ *   - startedAt: Actual start time ISO string (required)
+ *   - endedAt: End time ISO string (optional, null for open shifts)
+ *
+ * Returns (GET): {
+ *   stores: Array of { id, name } for managed stores,
+ *   profiles: Array of { id, name, active } for employees in managed stores,
+ *   rows: Array of shift objects with store/profile names,
+ *   page: Current page number,
+ *   pageSize: Items per page,
+ *   total: Total matching shifts
+ * }
+ *
+ * Returns (POST): { ok: true } on success
+ *
+ * Business logic:
+ *   - Only returns/creates shifts for stores where user is listed in store_managers
+ *   - Employee must have store_membership in the target store
+ *   - New shifts are marked with last_action = "added"
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { ShiftType } from "@/lib/kioskRules";

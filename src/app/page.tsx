@@ -1,3 +1,13 @@
+/**
+ * Home Page - Access Mode Selector
+ *
+ * Landing page that routes users to either:
+ * - Employee flow (/clock) - no auth required, for clock-in/out
+ * - Admin flow (/admin) - requires authentication
+ *
+ * Employees can access manually if they missed the store QR code scan.
+ */
+
 import Link from "next/link";
 
 export default function Home() {

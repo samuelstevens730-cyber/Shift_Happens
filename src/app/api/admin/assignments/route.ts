@@ -1,3 +1,49 @@
+/**
+ * GET/POST /api/admin/assignments - Task and Message Assignments
+ *
+ * GET: List assignments (tasks and messages) with pagination and filtering.
+ *   Returns assignments targeted at stores or employees the manager has access to,
+ *   along with stores and users lists for filter dropdowns.
+ *
+ * POST: Create a new assignment (task or message).
+ *   Assigns a task or message to either a specific employee or an entire store.
+ *
+ * Auth: Bearer token required (manager access via store_managers table)
+ *
+ * Query params (GET):
+ *   - page: Page number (default 1)
+ *   - pageSize: Items per page (default 25, max 100)
+ *   - from: Filter assignments created at or after this ISO date
+ *   - to: Filter assignments created at or before this ISO date
+ *   - storeId: Filter by specific store (must be a managed store)
+ *   - profileId: Filter by specific employee profile
+ *   - status: Filter by status - "all", "pending", or "completed"
+ *
+ * Request body (POST):
+ *   - type: "task" or "message" (required)
+ *   - message: The assignment content/text (required, non-empty)
+ *   - targetProfileId: Employee profile UUID (mutually exclusive with targetStoreId)
+ *   - targetStoreId: Store UUID (mutually exclusive with targetProfileId)
+ *
+ * Returns (GET): {
+ *   stores: Array of { id, name } for managed stores,
+ *   users: Array of { id, name, active } for employees in managed stores,
+ *   assignments: Array of assignment objects with creator/target names resolved,
+ *   page: Current page number,
+ *   pageSize: Items per page,
+ *   total: Total matching assignments
+ * }
+ *
+ * Returns (POST): { ok: true } on success
+ *
+ * Business logic:
+ *   - Assignments can target either a store OR an employee, not both
+ *   - "task" type is completed when completed_at is set
+ *   - "message" type is completed when acknowledged_at is set
+ *   - Soft-deleted assignments (deleted_at not null) are excluded
+ *   - Creator names come from app_users table
+ *   - Target/delivered profile names come from profiles table
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 

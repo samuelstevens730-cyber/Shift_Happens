@@ -1,3 +1,34 @@
+/**
+ * POST /api/admin/open-shifts/[shiftId]/end - Force Close an Open Shift
+ *
+ * Administratively ends an open shift, creating a placeholder drawer count
+ * if needed. Used when an employee fails to properly close their shift.
+ *
+ * Auth: Bearer token required (admin access)
+ *
+ * URL params:
+ *   - shiftId: UUID of the shift to end
+ *
+ * Request body:
+ *   - endAt: ISO timestamp for when the shift should be marked as ended (required)
+ *
+ * Returns: { ok: true } on success
+ *
+ * Error responses:
+ *   - 400: Missing/invalid endAt, shift already ended
+ *   - 401: Unauthorized (invalid/missing token)
+ *   - 404: Shift not found
+ *   - 500: Database error
+ *
+ * Business logic:
+ *   - For non-"other" shift types, creates a placeholder end drawer count:
+ *     - Uses store's expected_drawer_cents as the count value
+ *     - Sets count_missing = true to flag it needs review
+ *     - Adds note "Admin ended shift (no drawer count)."
+ *   - Calculates shift duration and sets requires_override = true if > 13 hours
+ *   - Updates shift with ended_at and marks last_action = "edited"
+ *   - Upserts drawer count using shift_id + count_type as conflict key
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 

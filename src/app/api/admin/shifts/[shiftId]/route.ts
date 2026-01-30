@@ -1,3 +1,40 @@
+/**
+ * PATCH/DELETE /api/admin/shifts/[shiftId] - Update or Soft-Delete a Specific Shift
+ *
+ * PATCH: Update shift details (times, type).
+ *   Allows modifying shift_type, planned_start_at, started_at, and ended_at.
+ *   At least one field must be provided. Updates are tracked via last_action.
+ *
+ * DELETE: Soft-delete a shift.
+ *   Sets last_action to "removed" instead of hard-deleting the record.
+ *   Idempotent - returns success if shift already removed.
+ *
+ * Auth: Bearer token required (manager access via store_managers table)
+ *
+ * URL params:
+ *   - shiftId: UUID of the shift to update/delete
+ *
+ * Request body (PATCH):
+ *   - shiftType: New shift type (optional)
+ *   - plannedStartAt: New planned start time ISO string (optional)
+ *   - startedAt: New actual start time ISO string (optional)
+ *   - endedAt: New end time ISO string or null (optional)
+ *
+ * Returns: { ok: true } on success
+ *
+ * Error responses:
+ *   - 400: Missing shiftId, no fields to update, or shift already removed
+ *   - 401: Unauthorized (invalid/missing token)
+ *   - 403: User is not a manager of the shift's store
+ *   - 404: Shift not found
+ *   - 500: Database error
+ *
+ * Business logic:
+ *   - Only managers of the shift's store can update/delete
+ *   - Cannot update shifts that have been soft-deleted (last_action = "removed")
+ *   - Updates set last_action = "edited" with last_action_by = user ID
+ *   - Deletes set last_action = "removed" with last_action_by = user ID
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { ShiftType } from "@/lib/kioskRules";

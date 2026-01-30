@@ -1,3 +1,40 @@
+/**
+ * GET/POST /api/admin/users - Employee Management
+ *
+ * GET: List employees (profiles) for stores the manager has access to.
+ *   Returns stores and aggregated user list with their store assignments.
+ *
+ * POST: Create a new employee profile.
+ *   Creates a profile record and assigns them to specified stores.
+ *
+ * Auth: Bearer token required (manager access via store_managers table)
+ *
+ * Query params (GET): None
+ *
+ * Request body (POST):
+ *   - name: Employee name (required, non-empty string)
+ *   - active: Whether employee is active (optional, defaults to true)
+ *   - storeIds: Array of store UUIDs to assign employee to (required, at least one)
+ *
+ * Returns (GET): {
+ *   stores: Array of { id, name } for managed stores,
+ *   users: Array of {
+ *     id: Profile UUID,
+ *     name: Employee name,
+ *     active: Whether employee is active,
+ *     storeIds: Array of store UUIDs they belong to
+ *   }
+ * }
+ *
+ * Returns (POST): { ok: true, id: newProfileUUID } on success
+ *
+ * Business logic:
+ *   - GET aggregates employees across all managed stores
+ *   - Employees can belong to multiple stores (storeIds array)
+ *   - POST validates all storeIds are stores the manager manages
+ *   - Creates profile first, then store_memberships records
+ *   - Employees sorted alphabetically by name
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 

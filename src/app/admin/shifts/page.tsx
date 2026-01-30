@@ -1,3 +1,23 @@
+/**
+ * Shift Management Page - Administrative CRUD interface for employee shifts
+ *
+ * This page provides administrators and managers with full control over shift records
+ * in the system. It serves as the central hub for manually managing shift data when
+ * automatic clock-in/out processes need correction or manual entry is required.
+ *
+ * Features:
+ * - Create new shifts with store, employee, shift type, planned start, actual start, and optional end time
+ * - Edit existing shifts including shift type, planned start, started at, and ended at timestamps
+ * - Soft-delete (remove) shifts from reports
+ * - Filter shifts by date range, store, and employee
+ * - Paginated list view with 25 shifts per page
+ *
+ * Business Logic:
+ * - Shift types include: open, close, double, and other
+ * - All date/time inputs are converted to ISO format for API submission
+ * - Removed shifts are soft-deleted and excluded from reports but not permanently destroyed
+ * - Audit trail tracks last action and who performed it for each shift
+ */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";

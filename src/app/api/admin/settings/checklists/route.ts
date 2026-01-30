@@ -1,3 +1,36 @@
+/**
+ * POST /api/admin/settings/checklists - Update Checklist Template Items
+ *
+ * Replaces the items in a checklist template with a new set of items.
+ * Supports adding new items, updating existing items, and removing items.
+ *
+ * Auth: Bearer token required (manager access via store_managers table)
+ *
+ * Request body:
+ *   - templateId: UUID of the checklist template to update (required)
+ *   - items: Array of checklist items (required)
+ *     - id: Item UUID (optional, omit for new items)
+ *     - label: Item text (required, non-empty after trim)
+ *     - sort_order: Display order number (optional, defaults to 0)
+ *     - required: Whether item is required (optional, defaults to false)
+ *
+ * Returns: { ok: true } on success
+ *
+ * Error responses:
+ *   - 400: Missing templateId, or template is not store-specific
+ *   - 401: Unauthorized (invalid/missing token)
+ *   - 403: User doesn't manage the template's store
+ *   - 404: Template not found
+ *   - 500: Database error
+ *
+ * Business logic:
+ *   - Only works on store-specific templates (store_id is not null)
+ *   - Deletes items not in the new items array (by ID)
+ *   - Upserts existing items (those with id)
+ *   - Inserts new items (those without id)
+ *   - Empty labels are filtered out
+ *   - This is a full replacement operation - items not included are deleted
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 

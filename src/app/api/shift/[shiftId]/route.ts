@@ -1,4 +1,39 @@
-// src/app/api/shift/[shiftId]/route.ts
+/**
+ * GET /api/shift/[shiftId] - Get Shift Details
+ *
+ * Retrieves comprehensive shift information including store, employee, drawer counts,
+ * checklist progress, and assigned tasks/messages.
+ *
+ * URL params:
+ * - shiftId: string - Shift ID to retrieve (required)
+ *
+ * Query params:
+ * - t: string - QR token to validate store ownership (optional)
+ *
+ * Returns:
+ * - Success: {
+ *     store: { id, name, expected_drawer_cents },
+ *     shift: { id, store_id, profile_id, shift_type, planned_start_at, started_at, ended_at, last_action },
+ *     employee: string | null,
+ *     counts: Array<{ count_type, drawer_cents, confirmed, notified_manager, note, counted_at }>,
+ *     checklistItems: Array<{ id, template_id, label, sort_order, required }>,
+ *     checkedItemIds: string[],
+ *     checklistGroups: Array<{ label, required, sort_order, itemIds[] }>,
+ *     checkedGroupLabels: string[],
+ *     assignments: Array<{ id, type, message, created_at, created_by, delivered_at, acknowledged_at, completed_at }>
+ *   }
+ * - Error: { error: string }
+ *
+ * Business logic:
+ * - Validates shift exists and was not removed (soft delete check via last_action)
+ * - Validates QR token matches shift's store if provided
+ * - Fetches checklist items for the shift type using store-specific or global templates
+ * - Deduplicates checklist items by label into groups for UI convenience
+ * - A group is "checked" only if ALL underlying items are checked
+ * - Claims pending assignments targeted to the employee or store (next-shift delivery)
+ * - Updates assignment delivery metadata when claimed
+ * - Returns both raw checklist data (backward compatibility) and grouped data (UI optimization)
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { ShiftType } from "@/lib/kioskRules";

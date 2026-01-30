@@ -1,3 +1,36 @@
+/**
+ * POST /api/admin/assignments/bulk-delete - Delete Multiple Assignments
+ *
+ * Soft-deletes multiple assignments at once, either by specific IDs or by
+ * applying the same filters used in the list view.
+ *
+ * Auth: Bearer token required (manager access via store_managers table)
+ *
+ * Request body:
+ *   - ids: Array of assignment UUIDs to delete (optional)
+ *   - filters: Filter object to match assignments (optional, used if ids empty)
+ *     - from: Filter by created_at >= this ISO date
+ *     - to: Filter by created_at <= this ISO date
+ *     - storeId: Filter by target store
+ *     - profileId: Filter by target profile
+ *     - status: "all", "pending", or "completed"
+ *
+ * Returns: { ok: true, deleted: number } with count of deleted assignments
+ *
+ * Error responses:
+ *   - 401: Unauthorized (invalid/missing token)
+ *   - 403: User doesn't manage any stores, or invalid store/profile selection
+ *   - 500: Database error
+ *
+ * Business logic:
+ *   - If ids array provided, deletes those specific assignments
+ *   - If ids empty/missing, builds a query from filters to find matching assignments
+ *   - Only deletes assignments where deleted_at IS NULL
+ *   - Sets deleted_at and deleted_by on matched records
+ *   - Filter logic matches GET /api/admin/assignments for consistency
+ *   - "pending" = messages not acknowledged OR tasks not completed
+ *   - "completed" = messages acknowledged OR tasks completed
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 

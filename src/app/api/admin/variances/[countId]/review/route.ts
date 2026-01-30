@@ -1,3 +1,31 @@
+/**
+ * POST /api/admin/variances/[countId]/review - Mark a Variance as Reviewed
+ *
+ * Marks a drawer count variance as reviewed by the manager, removing it from
+ * the unreviewed variances list. Optionally accepts a review note.
+ *
+ * Auth: Bearer token required (admin access)
+ *
+ * URL params:
+ *   - countId: UUID of the drawer count record to mark as reviewed
+ *
+ * Request body:
+ *   - reviewNote: Optional note explaining the review/resolution (string)
+ *
+ * Returns: { ok: true } on success
+ *
+ * Error responses:
+ *   - 400: Missing countId
+ *   - 401: Unauthorized (invalid/missing token)
+ *   - 404: Drawer count record not found
+ *   - 500: Database error
+ *
+ * Business logic:
+ *   - Sets reviewed_at to current timestamp
+ *   - Sets reviewed_by to the authenticated user's ID
+ *   - If reviewNote provided and review_note column exists, stores the note
+ *   - Dynamically checks for review_note column existence for backward compatibility
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 

@@ -1,3 +1,21 @@
+/**
+ * Password Reset Page - Set New Password
+ *
+ * Handles the password reset flow after user clicks the email link.
+ * Supabase sends reset links in two formats depending on configuration:
+ * 1. PKCE style: ?code=xxx (newer, more secure)
+ * 2. Token hash style: ?token_hash=xxx or #access_token=xxx (legacy)
+ *
+ * Flow:
+ * 1. Extract code/token from URL (query string or hash fragment)
+ * 2. Exchange for a recovery session with Supabase
+ * 3. Show password reset form
+ * 4. Update password and sign out
+ * 5. Redirect to login page
+ *
+ * Security: Signs out after password change to clear the recovery session.
+ */
+
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
@@ -14,13 +32,14 @@ function ResetPasswordInner() {
   const [pw2, setPw2] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // On mount, validate the reset token and establish a recovery session
   useEffect(() => {
     let alive = true;
 
     async function bootstrap() {
       setError(null);
 
-      // Read both query string and hash fragment (Supabase can use either)
+      // Supabase may put tokens in query string OR hash fragment
       const url = new URL(window.location.href);
       const search = url.searchParams;
       const hash = new URLSearchParams(url.hash.replace(/^#/, ""));
@@ -30,7 +49,7 @@ function ResetPasswordInner() {
 
       try {
         if (code) {
-          // PKCE / verification-code style
+          // PKCE / verification-code style (newer Supabase projects)
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
         } else if (token_hash) {
@@ -43,7 +62,7 @@ function ResetPasswordInner() {
         }
         // Else: hash access_token style should be auto-parsed by detectSessionInUrl=true
 
-        // Confirm we actually have a recovery session now
+        // Verify we have a valid recovery session
         const { data: { session } } = await supabase.auth.getSession();
         if (!session) throw new Error("This reset link is invalid or expired. Request a new one.");
       } catch (e) {
@@ -74,7 +93,7 @@ function ResetPasswordInner() {
       const { error } = await supabase.auth.updateUser({ password: pw1 });
       if (error) throw error;
 
-      // Sign out the recovery session, then send them to login
+      // Clear the recovery session and redirect to login
       await supabase.auth.signOut();
       router.replace("/login");
     } catch (e) {

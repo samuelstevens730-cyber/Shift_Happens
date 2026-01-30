@@ -1,3 +1,40 @@
+/**
+ * GET /api/admin/settings - Get Store Settings and Checklist Templates
+ *
+ * Returns store information and checklist templates for the selected store.
+ * Automatically creates default checklist templates if none exist for the store.
+ *
+ * Auth: Bearer token required (manager access via store_managers table)
+ *
+ * Query params:
+ *   - storeId: Store UUID to get settings for (optional, defaults to first managed store)
+ *
+ * Returns: {
+ *   stores: Array of { id, name, expected_drawer_cents } for managed stores,
+ *   storeId: The selected/default store UUID (or null if no stores),
+ *   templates: Array of {
+ *     id: Template UUID,
+ *     name: Template name,
+ *     shift_type: "open" or "close",
+ *     items: Array of {
+ *       id: Item UUID,
+ *       label: Checklist item text,
+ *       sort_order: Display order,
+ *       required: Whether item is required
+ *     }
+ *   }
+ * }
+ *
+ * Business logic:
+ *   - Only returns stores the user manages
+ *   - If storeId param is invalid or not managed, uses first managed store
+ *   - Auto-creates "open" and "close" templates if missing for selected store
+ *   - Template creation copies from legacy store_id=NULL templates if they exist
+ *   - Falls back to hardcoded DEFAULT_CHECKLISTS if no legacy templates
+ *   - Default open checklist: Count Drawer, Case Lights, Clean Glass, Cleaning List Tasks, Changeover
+ *   - Default close checklist: Changeover/Count Drawer, Cleaning List Tasks, Clean Glass,
+ *     Sweep/Mop/Vacuum, Check Bathroom & Other Supplies, Close Drawer/Fill out Report
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 

@@ -1,3 +1,47 @@
+/**
+ * GET /api/admin/variances - List Unreviewed Drawer Count Variances
+ *
+ * Returns drawer counts that are outside the acceptable threshold and have not
+ * yet been reviewed by a manager. Used for identifying discrepancies that need
+ * investigation.
+ *
+ * Auth: Bearer token required (manager access via store_managers table)
+ *
+ * Query params:
+ *   - page: Page number (default 1)
+ *   - pageSize: Items per page (default 25, max 100)
+ *   - from: Filter counts at or after this ISO date
+ *   - to: Filter counts at or before this ISO date
+ *   - storeId: Filter by specific store (must be a managed store)
+ *   - profileId: Filter by specific employee profile
+ *
+ * Returns: {
+ *   rows: Array of {
+ *     id: Drawer count UUID,
+ *     shiftId: Associated shift UUID,
+ *     storeName: Name of the store,
+ *     expectedDrawerCents: Store's expected drawer amount,
+ *     employeeName: Name of the employee,
+ *     shiftType: Type of shift,
+ *     countType: "start", "changeover", or "end",
+ *     countedAt: Timestamp of the count,
+ *     drawerCents: Actual counted amount in cents,
+ *     confirmed: Whether employee confirmed the count,
+ *     notifiedManager: Whether manager was notified,
+ *     note: Any note attached to the count
+ *   },
+ *   page: Current page number,
+ *   pageSize: Items per page,
+ *   total: Total matching records
+ * }
+ *
+ * Business logic:
+ *   - Only returns counts where out_of_threshold = true
+ *   - Excludes counts marked as count_missing = true
+ *   - Only returns counts where reviewed_at IS NULL
+ *   - Only returns counts for stores the user manages
+ *   - Excludes counts from soft-deleted shifts
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 

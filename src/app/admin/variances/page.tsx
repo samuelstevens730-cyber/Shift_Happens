@@ -1,3 +1,25 @@
+/**
+ * Variance Review Page - Review and resolve out-of-threshold drawer counts
+ *
+ * This administrative page displays drawer counts that have exceeded the acceptable variance
+ * threshold (difference between expected and actual drawer amounts). Managers use this page
+ * to review discrepancies, add notes, and mark them as reviewed for audit purposes.
+ *
+ * Features:
+ * - View all unreviewed drawer variances with store, employee, and shift details
+ * - Display expected vs actual drawer amounts and calculated delta
+ * - Filter by date range, store, and employee
+ * - Add review notes before marking a variance as reviewed
+ * - Separate section for admin-closed shifts that had no drawer count (missing counts)
+ * - Paginated views for both variance list and missing counts list
+ *
+ * Business Logic:
+ * - Variances include start, changeover, and end drawer counts
+ * - Each variance shows confirmation status and whether manager was notified
+ * - Employee notes from the original count are displayed for context
+ * - Reviewing a variance removes it from the active list and records the review in audit history
+ * - Missing counts section helps identify shifts closed by admin without proper drawer reconciliation
+ */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";

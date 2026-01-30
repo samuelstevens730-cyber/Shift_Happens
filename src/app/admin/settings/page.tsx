@@ -1,3 +1,26 @@
+/**
+ * Admin Settings Page - Store configuration and checklist management
+ *
+ * This administrative page provides configuration options for individual stores,
+ * including expected drawer amounts and shift checklists. Managers can customize
+ * the opening and closing procedures for each store location.
+ *
+ * Features:
+ * - Select and configure individual store locations
+ * - Set expected drawer amount (used for variance calculations)
+ * - Manage opening shift checklists with customizable tasks
+ * - Manage closing shift checklists with customizable tasks
+ * - Add, remove, and reorder checklist items
+ * - Mark checklist items as required or optional
+ *
+ * Business Logic:
+ * - Expected drawer amount is stored in cents and displayed/edited in dollars
+ * - Checklists are per-store and per-shift-type (open vs close)
+ * - Checklist items have a sort order that determines display sequence
+ * - Required items must be completed before an employee can finish their shift
+ * - Changes to checklists affect future shifts; existing shifts retain their original checklist
+ * - Client-side IDs are generated for new items until they are saved to the server
+ */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";

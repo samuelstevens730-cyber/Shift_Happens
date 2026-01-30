@@ -1,3 +1,24 @@
+/**
+ * Users Admin Page - Employee profile management interface
+ *
+ * This administrative page provides full CRUD operations for managing employee profiles
+ * in the system. Administrators can create new employees, update existing profiles,
+ * manage store assignments, and deactivate employees who no longer work at the company.
+ *
+ * Features:
+ * - Create new employee profiles with name, active status, and store assignments
+ * - Edit existing employee names and active status
+ * - Manage which stores each employee is assigned to (multi-select)
+ * - Deactivate employees (soft delete - preserves historical data)
+ * - View all employees with their current store assignments
+ *
+ * Business Logic:
+ * - Employees must be assigned to at least one store to be created
+ * - Name is required and must not be empty
+ * - Deactivation is a soft delete - the employee record remains for historical reporting
+ * - Store assignments determine which locations an employee can clock into
+ * - Active/inactive status controls whether employee appears in shift assignment dropdowns
+ */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";

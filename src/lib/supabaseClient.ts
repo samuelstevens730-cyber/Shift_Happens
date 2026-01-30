@@ -1,3 +1,14 @@
+/**
+ * Supabase Browser Client
+ *
+ * Client-side Supabase instance for use in React components.
+ * Uses the anon key which respects Row-Level Security policies.
+ * Session is persisted in localStorage and auto-refreshed.
+ *
+ * Note: detectSessionInUrl=true is required for OAuth and password reset flows
+ * to automatically parse tokens from URL fragments.
+ */
+
 // src/lib/supabaseClient.ts
 import { createClient } from "@supabase/supabase-js";
 
@@ -13,6 +24,6 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     autoRefreshToken: true,
     detectSessionInUrl: true,
     // Let supabase-js pick the right storage in the browser.
-    // (Do NOT try to “fake” storage on the server.)
+    // (Do NOT try to "fake" storage on the server.)
   },
 });

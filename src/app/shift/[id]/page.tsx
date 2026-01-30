@@ -1,3 +1,21 @@
+/**
+ * Shift Detail Page - Active Shift Management
+ *
+ * Main interface for employees during an active shift. Displays:
+ * - Store and employee info
+ * - Drawer counts (start, changeover for doubles, end)
+ * - Shift checklist with required/optional items
+ * - Manager assignments (tasks and messages)
+ *
+ * Clock-out is blocked until:
+ * - All required checklist items are completed
+ * - All messages are acknowledged
+ * - All tasks are marked complete
+ * - Changeover drawer count recorded (for double shifts)
+ *
+ * Automatically redirects to /shift/[id]/done when shift has ended.
+ */
+
 // src/app/shift/[id]/page.tsx
 "use client";
 
@@ -29,10 +47,10 @@ type ShiftState = {
   checklistItems: { id: string; label: string; sort_order: number; required: boolean }[];
   checkedItemIds: string[];
 
-  // NEW grouped UI payload
+  // NEW grouped UI payload - checklist items grouped by label
   checklistGroups: {
     label: string;
-    norm: string; // stable key
+    norm: string; // stable key for deduplication
     required: boolean;
     sort_order: number;
     itemIds: string[];
@@ -41,6 +59,7 @@ type ShiftState = {
   // IMPORTANT: backend currently returns labels, not norms
   checkedGroupLabels: string[];
 
+  // Tasks/messages assigned by manager for this shift
   assignments: {
     id: string;
     type: "task" | "message";
@@ -70,6 +89,7 @@ export default function ShiftPage() {
   const router = useRouter();
   const search = useSearchParams();
   const qrToken = search.get("t") || "";
+  // Indicates this shift was reused (employee already clocked in today)
   const reused = search.get("reused") === "1";
   const reusedStartedAt = search.get("startedAt");
 
@@ -103,6 +123,7 @@ export default function ShiftPage() {
     setState(json);
     seedDoneFromState(json);
 
+    // If shift already ended, redirect to completion page
     if (json.shift?.ended_at) {
       const doneQuery = qrToken ? `?t=${encodeURIComponent(qrToken)}` : "";
       router.replace(`/shift/${shiftId}/done${doneQuery}`);
@@ -132,28 +153,37 @@ export default function ShiftPage() {
 
   const shiftType = state?.shift.shift_type;
 
+  // Check if changeover count already exists (for double shifts)
   const hasChangeover = useMemo(() => {
     return (state?.counts || []).some(c => c.count_type === "changeover");
   }, [state]);
 
+  // Get all required checklist group keys
   const requiredGroupKeys = useMemo(() => {
     return (state?.checklistGroups || [])
       .filter(g => g.required)
       .map(g => g.norm);
   }, [state]);
 
+  // Count remaining required items not yet completed
   const remainingRequired = useMemo(() => {
     return requiredGroupKeys.filter(k => !done.has(k)).length;
   }, [requiredGroupKeys, done]);
 
+  // Messages that haven't been acknowledged yet
   const pendingMessages = useMemo(() => {
     return (state?.assignments || []).filter(a => a.type === "message" && !a.acknowledged_at);
   }, [state]);
 
+  // Tasks that haven't been completed yet
   const pendingTasks = useMemo(() => {
     return (state?.assignments || []).filter(a => a.type === "task" && !a.completed_at);
   }, [state]);
 
+  /**
+   * Mark an assignment as acknowledged (messages) or completed (tasks).
+   * Updates local state optimistically.
+   */
   async function updateAssignment(assignmentId: string, action: "ack" | "complete") {
     setErr(null);
     const res = await fetch(`/api/shift/${shiftId}/assignments/${assignmentId}`, {
@@ -166,6 +196,7 @@ export default function ShiftPage() {
       setErr(json?.error || "Failed to update assignment.");
       return;
     }
+    // Optimistic update
     setState(prev => {
       if (!prev) return prev;
       const nextAssignments = (prev.assignments || []).map(a => {
@@ -177,6 +208,10 @@ export default function ShiftPage() {
     });
   }
 
+  /**
+   * Mark a checklist group as complete.
+   * Uses optimistic UI, rolls back on failure.
+   */
   async function checkGroup(group: { norm: string; itemIds: string[] }) {
     if (done.has(group.norm)) return;
 
@@ -192,6 +227,7 @@ export default function ShiftPage() {
     const json = await res.json();
 
     if (!res.ok) {
+      // Rollback optimistic update
       setDone(prev => {
         const copy = new Set(prev);
         copy.delete(group.norm);
@@ -218,6 +254,7 @@ export default function ShiftPage() {
       <div className="max-w-md mx-auto space-y-4">
         <h1 className="text-2xl font-semibold">Shift</h1>
 
+        {/* Banner shown when redirected to existing open shift */}
         {showReuseBanner && (
           <div className="banner text-sm">
             Redirected to currently open shift started at {reuseLabel}.
@@ -235,6 +272,7 @@ export default function ShiftPage() {
           <b>{state.shift.shift_type}</b>
         </div>
 
+        {/* Double shifts require mid-shift drawer count */}
         {shiftType === "double" && (
           <ChangeoverPanel
             shiftId={shiftId}
@@ -245,6 +283,7 @@ export default function ShiftPage() {
           />
         )}
 
+        {/* Checklist section - not shown for "other" shift types */}
         {shiftType !== "other" && (
           <div className="space-y-2">
             <div className="text-sm font-medium">Checklist</div>
@@ -282,8 +321,10 @@ export default function ShiftPage() {
           </div>
         )}
 
+        {/* Manager assignments section */}
         {(pendingMessages.length > 0 || pendingTasks.length > 0) && (
           <div className="space-y-3">
+            {/* Messages require acknowledgment */}
             {pendingMessages.length > 0 && (
               <div className="border rounded p-3 space-y-2">
                 <div className="text-sm font-medium">Manager Messages</div>
@@ -302,6 +343,7 @@ export default function ShiftPage() {
               </div>
             )}
 
+            {/* Tasks require completion */}
             {pendingTasks.length > 0 && (
               <div className="border rounded p-3 space-y-2">
                 <div className="text-sm font-medium">Tasks</div>
@@ -329,6 +371,7 @@ export default function ShiftPage() {
           </div>
         )}
 
+        {/* Clock out button - disabled until all requirements met */}
         <button
           className="w-full rounded bg-black text-white py-2 disabled:opacity-50"
           disabled={
@@ -358,6 +401,12 @@ export default function ShiftPage() {
   );
 }
 
+/**
+ * Changeover Panel - Mid-shift drawer count for double shifts
+ *
+ * Double shifts require a drawer count at the midpoint when one employee
+ * hands off to another. This panel collects that count with variance detection.
+ */
 /* ------------------- ChangeoverPanel (REAL) ------------------- */
 function ChangeoverPanel({
   shiftId,
@@ -413,6 +462,7 @@ function ChangeoverPanel({
         </div>
       )}
 
+      {/* Variance confirmation - only shown when drawer is out of threshold */}
       {outOfThreshold && (
         <>
           <label className="flex items-center gap-2 text-sm">
@@ -473,6 +523,12 @@ function ChangeoverPanel({
   );
 }
 
+/**
+ * Clock Out Modal - End shift confirmation dialog
+ *
+ * Collects end time and drawer count, validates against thresholds,
+ * and requires explicit confirmation to prevent accidental clock-outs.
+ */
 /* ------------------- ClockOutModal (REAL) ------------------- */
 function ClockOutModal({
   shiftId,
@@ -503,6 +559,7 @@ function ClockOutModal({
   const msg = hasValidDrawer ? thresholdMessage(cents, expectedCents) : null;
   const outOfThreshold = hasValidDrawer ? shouldShowVarianceControls(cents, expectedCents) : false;
 
+  // Reset confirmations when drawer goes back in range
   useEffect(() => {
     if (!outOfThreshold) {
       setConfirm(false);
@@ -543,6 +600,7 @@ function ClockOutModal({
           </div>
         )}
 
+        {/* Variance confirmation - only shown when drawer is out of threshold */}
         {outOfThreshold && (
           <>
             <label className="flex items-center gap-2 text-sm">
@@ -560,9 +618,10 @@ function ClockOutModal({
         <label className="text-sm">Note (optional)</label>
         <input className="w-full border rounded p-2" value={note} onChange={e => setNote(e.target.value)} />
 
+        {/* Final confirmation to prevent accidental clock-outs */}
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={doubleCheck} onChange={e => setDoubleCheck(e.target.checked)} />
-          I understand I’m ending my shift.
+          I understand I'm ending my shift.
         </label>
 
         {err && <div className="text-sm text-red-600 border border-red-300 rounded p-2">{err}</div>}

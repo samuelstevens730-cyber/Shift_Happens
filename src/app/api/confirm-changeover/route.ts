@@ -1,4 +1,28 @@
-// src/app/api/confirm-changeover/route.ts
+/**
+ * POST /api/confirm-changeover - Double Shift Mid-Point Drawer Count
+ *
+ * Records a changeover drawer count for double shifts at the midpoint between
+ * open and close portions.
+ *
+ * Request body:
+ * - qrToken?: string - QR token to validate store ownership (optional)
+ * - shiftId: string - Shift ID to record changeover for (required)
+ * - drawerCents: number - Drawer count in cents (required)
+ * - confirmed?: boolean - Whether the drawer count was confirmed
+ * - notifiedManager?: boolean - Whether manager was notified of discrepancy
+ * - note?: string | null - Optional note about the drawer count
+ *
+ * Returns:
+ * - Success: { ok: true }
+ * - Error: { error: string, requiresConfirm?: boolean }
+ *
+ * Business logic:
+ * - Validates shift exists and is not already ended
+ * - Validates QR token matches shift's store if provided
+ * - If drawer count is outside expected threshold, requires confirmation
+ * - Uses upsert with "changeover" count_type to handle re-submissions gracefully
+ * - Typically used for double shifts to record drawer state at shift transition
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { isOutOfThreshold } from "@/lib/kioskRules";

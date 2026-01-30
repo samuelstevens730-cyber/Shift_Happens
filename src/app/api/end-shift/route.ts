@@ -1,4 +1,32 @@
-// src/app/api/end-shift/route.ts
+/**
+ * POST /api/end-shift - Clock Out
+ *
+ * Ends an active shift, records the ending drawer count, and validates all requirements are met.
+ *
+ * Request body:
+ * - qrToken?: string - QR token to validate store ownership (optional)
+ * - shiftId: string - Shift ID to end (required)
+ * - endAt: string - ISO timestamp of end time (required)
+ * - endDrawerCents?: number | null - Ending drawer count in cents (required for non-"other" shifts)
+ * - confirmed?: boolean - Whether the drawer count was confirmed
+ * - notifiedManager?: boolean - Whether manager was notified of discrepancy
+ * - note?: string | null - Optional note about the drawer count
+ *
+ * Returns:
+ * - Success: { ok: true }
+ * - Error: { error: string, requiresConfirm?: boolean, missingItemCount?: number, missing?: string[] }
+ *
+ * Business logic:
+ * - Validates shift exists and is not already ended
+ * - Validates QR token matches shift's store if provided
+ * - Blocks clock-out if there are pending messages (unacknowledged) or tasks (incomplete)
+ * - For open/close/double shifts, validates all required checklist items are checked
+ * - For non-"other" shifts, requires ending drawer count
+ * - If drawer count is outside expected threshold, requires confirmation
+ * - Rounds end time to nearest 30 minutes for payroll consistency
+ * - Flags shifts over 13 hours as requiring manager override
+ * - Uses upsert for drawer count to handle re-submissions gracefully
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { isOutOfThreshold, roundTo30Minutes, ShiftType } from "@/lib/kioskRules";

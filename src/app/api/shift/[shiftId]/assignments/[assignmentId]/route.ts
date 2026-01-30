@@ -1,3 +1,30 @@
+/**
+ * PATCH /api/shift/[shiftId]/assignments/[assignmentId] - Update Assignment Status
+ *
+ * Acknowledges a message or marks a task as complete for a given shift assignment.
+ *
+ * URL params:
+ * - shiftId: string - Shift ID the assignment belongs to (required)
+ * - assignmentId: string - Assignment ID to update (required)
+ *
+ * Request body:
+ * - action: "ack" | "complete" - Action to perform (required)
+ *   - "ack": Acknowledge a message (only valid for type="message")
+ *   - "complete": Mark a task as complete (only valid for type="task")
+ *
+ * Returns:
+ * - Success: { ok: true }
+ * - Error: { error: string }
+ *
+ * Business logic:
+ * - Validates assignment exists and is not soft-deleted
+ * - Validates assignment is delivered to the specified shift
+ * - "ack" action only works on message-type assignments
+ * - "complete" action only works on task-type assignments
+ * - Records timestamp and shift ID when action is performed
+ * - Idempotent: re-acknowledging or re-completing has no effect
+ * - Assignments must be ack'd/completed before shift can end (enforced by end-shift)
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 

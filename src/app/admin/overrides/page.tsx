@@ -1,3 +1,24 @@
+/**
+ * Long Shift Overrides Page - Approve shifts exceeding maximum duration threshold
+ *
+ * This administrative page displays shifts that have exceeded the maximum allowed duration
+ * (typically 13+ hours) and require manual override approval before being processed for
+ * payroll. This prevents payroll errors from forgotten clock-outs or system glitches.
+ *
+ * Features:
+ * - View all shifts requiring duration override approval
+ * - Display shift details including store, employee, start/end times, and calculated duration
+ * - Require approval note explaining why the long shift is valid
+ * - One-click approval with mandatory justification
+ * - Automatic list refresh after approval
+ *
+ * Business Logic:
+ * - Shifts over the threshold (e.g., 13 hours) are flagged for review
+ * - Approval note is required - empty notes are rejected
+ * - Approved shifts are removed from the pending list and become eligible for payroll
+ * - This acts as a safeguard against paying for incorrectly long shifts
+ * - Common valid reasons include double shifts, overnight coverage, or special events
+ */
 "use client";
 
 import { useEffect, useState } from "react";

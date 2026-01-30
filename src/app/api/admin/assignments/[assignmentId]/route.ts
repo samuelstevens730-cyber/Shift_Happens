@@ -1,3 +1,37 @@
+/**
+ * PATCH/DELETE /api/admin/assignments/[assignmentId] - Update or Delete an Assignment
+ *
+ * PATCH: Update the audit note on an assignment.
+ *   Allows managers to add/update notes for tracking or auditing purposes.
+ *
+ * DELETE: Soft-delete an assignment.
+ *   Sets deleted_at timestamp instead of hard-deleting. Idempotent.
+ *
+ * Auth: Bearer token required (manager access via store_managers table)
+ *
+ * URL params:
+ *   - assignmentId: UUID of the assignment to update/delete
+ *
+ * Request body (PATCH):
+ *   - auditNote: Note text to attach (optional, can be empty to clear)
+ *
+ * Returns: { ok: true } on success
+ *
+ * Error responses:
+ *   - 400: Missing assignmentId, or assignment already deleted (for PATCH)
+ *   - 401: Unauthorized (invalid/missing token)
+ *   - 403: User doesn't manage the assignment's target store/profile
+ *   - 404: Assignment not found
+ *   - 500: Database error
+ *
+ * Business logic:
+ *   - For store-targeted assignments: user must manage that store
+ *   - For profile-targeted assignments: user must manage at least one store
+ *     the employee belongs to
+ *   - PATCH updates audit_note, audit_note_updated_at, and audit_note_by
+ *   - DELETE sets deleted_at and deleted_by, returns success if already deleted
+ *   - Only updates assignments where deleted_at IS NULL
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 

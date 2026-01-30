@@ -1,20 +1,36 @@
+/**
+ * Kiosk Rules - Drawer Variance Thresholds & Time Rounding
+ *
+ * Core business logic for drawer count validation and payroll time calculations.
+ * Used by clock-in/out flows to detect when drawer amounts are outside acceptable range,
+ * and by payroll export to round shift times to 30-minute increments.
+ */
+
 // src/lib/kioskRules.ts
 
 export type ShiftType = "open" | "close" | "double" | "other";
 
-// You said the drawer should always be around $200
+// Default expected drawer amount - can be overridden per store in settings
 export const DEFAULT_EXPECTED_DRAWER_CENTS = 20000;
 
-// Your rules:
-// - Under by > $5  => < 19500
-// - Over by > $15  => > 21500
+// Variance thresholds - asymmetric because being over is less concerning than being under
+// Under by >$5 triggers alert (possible theft/error)
+// Over by >$15 triggers alert (possible unreported deposit)
 export const UNDER_THRESHOLD_CENTS = 500;   // $5
 export const OVER_THRESHOLD_CENTS = 1500;   // $15
 
+/**
+ * Checks if drawer count is outside acceptable variance range.
+ * Returns true if count requires manager review/notification.
+ */
 export function isOutOfThreshold(actualCents: number, expectedCents: number) {
   return actualCents < expectedCents - UNDER_THRESHOLD_CENTS || actualCents > expectedCents + OVER_THRESHOLD_CENTS;
 }
 
+/**
+ * Generates user-facing message when drawer is out of threshold.
+ * Returns null if count is within acceptable range.
+ */
 export function thresholdMessage(actualCents: number, expectedCents: number) {
   const under = expectedCents - UNDER_THRESHOLD_CENTS;
   const over = expectedCents + OVER_THRESHOLD_CENTS;
@@ -24,6 +40,10 @@ export function thresholdMessage(actualCents: number, expectedCents: number) {
   return null;
 }
 
+/**
+ * Rounds time to nearest 30-minute increment for payroll calculations.
+ * Standard rounding: <15 min → :00, 15-44 min → :30, ≥45 min → next hour :00
+ */
 // Rounds a Date to 00 or 30 minutes.
 // Rules:
 // - minutes < 15 => :00

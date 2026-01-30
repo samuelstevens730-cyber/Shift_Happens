@@ -1,3 +1,13 @@
+/**
+ * Shift Done Page - Completion Confirmation
+ *
+ * Displayed after a shift has been ended (clock-out completed).
+ * Shows shift summary including store, employee, times, and drawer counts.
+ * Provides link back to clock page for next shift.
+ *
+ * Redirects to shift detail page if shift isn't actually ended yet.
+ */
+
 // src/app/shift/[id]/page.tsx
 "use client";
 
@@ -59,7 +69,7 @@ export default function ShiftPage() {
   // Option A done state: group label set
   const [doneLabels, setDoneLabels] = useState<Set<string>>(new Set());
 
-  // Fallback done state (if API doesn’t provide groups yet)
+  // Fallback done state (if API doesn't provide groups yet)
   const [doneItemIds, setDoneItemIds] = useState<Set<string>>(new Set());
 
   const [loading, setLoading] = useState(true);
@@ -87,6 +97,7 @@ export default function ShiftPage() {
       setDoneItemIds(new Set());
     }
 
+    // If shift already ended, redirect to done page
     if (json.shift?.ended_at) {
       const doneQuery = qrToken ? `?t=${encodeURIComponent(qrToken)}` : "";
       router.replace(`/shift/${shiftId}/done${doneQuery}`);
@@ -118,6 +129,7 @@ export default function ShiftPage() {
 
   const shiftType = state?.shift.shift_type;
 
+  // Check if changeover count already recorded (for double shifts)
   const hasChangeover = useMemo(() => {
     return (state?.counts || []).some(c => c.count_type === "changeover");
   }, [state]);
@@ -130,7 +142,7 @@ export default function ShiftPage() {
       return [...state.checklistGroups].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
     }
 
-    // Legacy fallback: each item is its own “group”
+    // Legacy fallback: each item is its own "group"
     const items = state.checklistItems || [];
     return items
       .slice()
@@ -151,11 +163,16 @@ export default function ShiftPage() {
     return displayGroups.filter(g => g.required).map(g => g.label);
   }, [displayGroups]);
 
+  // Count remaining required checklist items that aren't completed
   const remainingRequired = useMemo(() => {
     const done = usingGroups ? doneLabels : doneItemIds; // fallback behaves similarly because itemIds mapped to label
     return requiredLabels.filter(lbl => !done.has(lbl)).length;
   }, [requiredLabels, doneLabels, doneItemIds, usingGroups]);
 
+  /**
+   * Mark a checklist group as complete.
+   * Uses optimistic UI update, rolls back on failure.
+   */
   async function checkGroup(group: ChecklistGroup) {
     if (usingGroups && doneLabels.has(group.label)) return;
     if (!usingGroups && doneItemIds.has(group.label)) return; // fallback mapping uses label as key
@@ -217,6 +234,7 @@ export default function ShiftPage() {
           <b>{state.shift.shift_type}</b>
         </div>
 
+        {/* Double shifts require mid-shift drawer count */}
         {shiftType === "double" && (
           <ChangeoverPanel
             shiftId={shiftId}
@@ -233,6 +251,7 @@ export default function ShiftPage() {
           />
         )}
 
+        {/* Checklist section - not shown for "other" shift types */}
         {shiftType !== "other" && (
           <div className="space-y-2">
             <div className="text-sm font-medium">Checklist</div>
@@ -270,6 +289,7 @@ export default function ShiftPage() {
           </div>
         )}
 
+        {/* Clock out button - disabled until all required tasks done */}
         <button
           className="w-full rounded bg-black text-white py-2 disabled:opacity-50"
           disabled={shiftType !== "other" && remainingRequired > 0}
@@ -295,6 +315,12 @@ export default function ShiftPage() {
   );
 }
 
+/**
+ * Changeover Panel - Mid-shift drawer count for double shifts
+ *
+ * Double shifts require a drawer count at the midpoint (changeover).
+ * This panel handles the changeover drawer input with threshold checking.
+ */
 function ChangeoverPanel({
   shiftId,
   qrToken,
@@ -381,6 +407,17 @@ function ChangeoverPanel({
   );
 }
 
+/**
+ * Clock Out Modal - End shift confirmation
+ *
+ * Modal dialog for ending a shift. Collects:
+ * - End time (defaults to now)
+ * - Ending drawer count (required except for "other" shifts)
+ * - Threshold confirmations if drawer is out of range
+ * - Optional note
+ *
+ * Requires explicit confirmation checkbox to prevent accidental clock-outs.
+ */
 function ClockOutModal({
   shiftId,
   qrToken,
@@ -434,9 +471,10 @@ function ClockOutModal({
         <label className="text-sm">Note (optional)</label>
         <input className="w-full border rounded p-2" value={note} onChange={e => setNote(e.target.value)} />
 
+        {/* Final confirmation to prevent accidental clock-outs */}
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={doubleCheck} onChange={e => setDoubleCheck(e.target.checked)} />
-          I understand I’m ending my shift.
+          I understand I'm ending my shift.
         </label>
 
         {err && <div className="text-sm text-red-600 border border-red-300 rounded p-2">{err}</div>}

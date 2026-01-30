@@ -1,3 +1,25 @@
+/**
+ * Payroll Admin Page - Generate payroll reports with hours calculation and CSV export
+ *
+ * This administrative page provides payroll reporting functionality, allowing managers
+ * to generate reports of employee worked hours for a specified date range. It supports
+ * filtering and exports data in CSV format for import into payroll systems.
+ *
+ * Features:
+ * - Select date range (defaults to current week starting Monday)
+ * - Filter by specific employee or store
+ * - View shift details including start/end times, raw minutes, and rounded hours
+ * - Display running totals for minutes and rounded hours
+ * - Export filtered results to CSV file for payroll system import
+ * - Paginated results with 25 shifts per page
+ *
+ * Business Logic:
+ * - Hours are calculated as raw minutes and rounded hours for payroll purposes
+ * - Rounding rules are applied server-side for consistency
+ * - Only completed shifts (with both start and end times) are included
+ * - CSV export includes shift ID, user ID, name, store, timestamps, and hour calculations
+ * - Date range uses start of day for "from" and end of day for "to" to capture full days
+ */
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";

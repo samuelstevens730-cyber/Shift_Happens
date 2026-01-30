@@ -1,3 +1,37 @@
+/**
+ * PATCH/DELETE /api/admin/users/[profileId] - Update or Deactivate an Employee
+ *
+ * PATCH: Update employee profile details and/or store assignments.
+ *   Can update name, active status, and reassign to different stores.
+ *
+ * DELETE: Soft-deactivate an employee.
+ *   Sets the profile's active flag to false rather than hard-deleting.
+ *
+ * Auth: Bearer token required (manager access via store_managers table)
+ *
+ * URL params:
+ *   - profileId: UUID of the employee profile to update/delete
+ *
+ * Request body (PATCH):
+ *   - name: New employee name (optional, non-empty if provided)
+ *   - active: New active status (optional, boolean)
+ *   - storeIds: New store assignments (optional, array of store UUIDs)
+ *
+ * Returns: { ok: true } on success
+ *
+ * Error responses:
+ *   - 400: Missing profileId, empty name, or empty storeIds array
+ *   - 401: Unauthorized (invalid/missing token)
+ *   - 403: User doesn't manage any of the employee's stores, or invalid storeIds
+ *   - 500: Database error
+ *
+ * Business logic:
+ *   - Manager must have access to at least one store the employee belongs to
+ *   - When updating storeIds, only replaces memberships within manager's stores
+ *   - Employee's memberships at stores the manager doesn't manage are preserved
+ *   - All new storeIds must be stores the manager manages
+ *   - DELETE only sets active = false, does not remove the profile
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 

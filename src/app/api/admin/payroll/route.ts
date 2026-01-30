@@ -1,3 +1,46 @@
+/**
+ * GET /api/admin/payroll - Get Payroll Data for Completed Shifts
+ *
+ * Returns shift data formatted for payroll processing, including calculated
+ * duration in both exact minutes and rounded hours. Only includes completed
+ * shifts (those with an end time).
+ *
+ * Auth: Bearer token required (manager access via store_managers table)
+ *
+ * Query params:
+ *   - page: Page number (default 1)
+ *   - pageSize: Items per page (default 25, max 100)
+ *   - from: Filter shifts starting at or after this ISO date
+ *   - to: Filter shifts ending at or before this ISO date
+ *   - storeId: Filter by specific store (must be a managed store)
+ *   - profileId: Filter by specific employee profile
+ *
+ * Returns: {
+ *   rows: Array of {
+ *     id: Shift UUID,
+ *     user_id: Employee profile UUID,
+ *     full_name: Employee name,
+ *     store_id: Store UUID,
+ *     store_name: Store name,
+ *     start_at: Shift start time ISO string,
+ *     end_at: Shift end time ISO string,
+ *     minutes: Exact duration in minutes,
+ *     rounded_hours: Duration rounded to nearest half-hour for payroll
+ *   },
+ *   page: Current page number,
+ *   pageSize: Items per page,
+ *   total: Total matching shifts
+ * }
+ *
+ * Business logic:
+ *   - Only returns completed shifts (ended_at IS NOT NULL)
+ *   - Excludes soft-deleted shifts (last_action != "removed")
+ *   - Only returns shifts for stores the user manages
+ *   - Hours are rounded using 20/40 rule:
+ *     - < 20 min remainder: round down
+ *     - > 40 min remainder: round up
+ *     - 20-40 min remainder: round to half hour
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 

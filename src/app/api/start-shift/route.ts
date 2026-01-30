@@ -1,4 +1,33 @@
-// src/app/api/start-shift/route.ts
+/**
+ * POST /api/start-shift - Clock In
+ *
+ * Creates a new shift record and records the starting drawer count for an employee.
+ *
+ * Request body:
+ * - qrToken?: string - QR token to identify the store (alternative to storeId)
+ * - storeId?: string - Store ID (alternative to qrToken; one of qrToken or storeId required)
+ * - profileId: string - Employee profile ID (required)
+ * - shiftType: "open" | "close" | "double" | "other" - Type of shift (required)
+ * - plannedStartAt: string - ISO timestamp of planned start time (required)
+ * - startDrawerCents?: number | null - Starting drawer count in cents (required for non-"other" shifts)
+ * - confirmed?: boolean - Whether the drawer count was confirmed (required if out of threshold)
+ * - notifiedManager?: boolean - Whether manager was notified of discrepancy
+ * - note?: string | null - Optional note about the drawer count
+ *
+ * Returns:
+ * - Success: { shiftId: string, reused: boolean, startedAt?: string }
+ * - Error: { error: string, requiresConfirm?: boolean, shiftId?: string }
+ *
+ * Business logic:
+ * - Resolves store by QR token or store ID
+ * - Validates employee exists, is active, and is assigned to the store
+ * - Rounds planned start time to nearest 30 minutes for payroll consistency
+ * - For non-"other" shifts, requires starting drawer count
+ * - If drawer count is outside expected threshold, requires manager notification
+ * - Prevents duplicate active shifts - returns existing shift if employee already clocked in at same store
+ * - Blocks clock-in if employee has active shift at different store
+ * - Creates shift record and drawer count atomically (cleans up shift if drawer count fails)
+ */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { isOutOfThreshold, roundTo30Minutes, ShiftType } from "@/lib/kioskRules";

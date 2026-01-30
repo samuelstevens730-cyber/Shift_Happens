@@ -1,3 +1,13 @@
+/**
+ * Date Utilities
+ *
+ * Helper functions for date formatting, primarily for HTML datetime-local inputs.
+ */
+
+/**
+ * Formats a Date for HTML datetime-local input value.
+ * Returns format: "YYYY-MM-DDTHH:MM" (no seconds/timezone, local time)
+ */
 export function toLocalInputValue(d: Date = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, "0");
   const y = d.getFullYear();
