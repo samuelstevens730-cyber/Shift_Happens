@@ -299,9 +299,6 @@ export default function ClockPageClient() {
           return;
         }
 
-        const effectiveStoreId = tokenStore?.id || storeId || "";
-        const sameStore = effectiveStoreId && json.storeId && json.storeId === effectiveStoreId;
-
         setOpenShiftInfo({
           id: json.shiftId,
           started_at: json.startedAt,
@@ -310,8 +307,8 @@ export default function ClockPageClient() {
           store_name: json.storeName ?? null,
           expected_drawer_cents: json.expectedDrawerCents ?? null,
         });
-        setOpenShiftPrompt(Boolean(sameStore));
-        setStaleShiftPrompt(!sameStore);
+        setOpenShiftPrompt(true);
+        setStaleShiftPrompt(false);
         setOpenShiftKey(key);
       } catch {
         if (!alive) return;
@@ -411,7 +408,7 @@ export default function ClockPageClient() {
                 store_name: openJson.storeName ?? null,
                 expected_drawer_cents: openJson.expectedDrawerCents ?? null,
               });
-              setOpenShiftPrompt(false);
+              setOpenShiftPrompt(true);
               setStaleShiftPrompt(true);
               return;
             }
@@ -615,6 +612,10 @@ export default function ClockPageClient() {
               className="btn-primary w-full py-3 text-sm disabled:opacity-50"
               disabled={!canStart || submitting}
               onClick={() => {
+                if (openShiftInfo) {
+                  setOpenShiftPrompt(true);
+                  return;
+                }
                 if (canStart) setConfirmOpen(true);
               }}
             >
@@ -625,51 +626,49 @@ export default function ClockPageClient() {
       </div>
 
       {openShiftPrompt && openShiftInfo && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-10">
-          <div className="card card-pad w-full max-w-md space-y-4">
-            <div className="text-lg font-semibold">Return to open shift?</div>
-            <div className="text-sm muted">
-              {selectedProfileName} already has an open shift started at{" "}
-              <b>{new Date(openShiftInfo.started_at).toLocaleString()}</b>.
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <button
-                className="btn-secondary px-4 py-2"
-                onClick={() => setOpenShiftPrompt(false)}
-              >
-                Continue new shift
-              </button>
-              <button
-                className="btn-primary px-4 py-2"
-                onClick={() => {
-                  const base =
-                    openShiftInfo.shift_type === "open" || openShiftInfo.shift_type === "double"
-                      ? `/run/${openShiftInfo.id}`
-                      : `/shift/${openShiftInfo.id}`;
-                  const params = new URLSearchParams();
-                  if (qrToken) params.set("t", qrToken);
-                  params.set("reused", "1");
-                  params.set("startedAt", openShiftInfo.started_at);
-                  const qs = params.toString();
-                  router.replace(qs ? `${base}?${qs}` : base);
-                }}
-              >
-                Return to open shift
-              </button>
-            </div>
+        <div className="card card-pad space-y-3">
+          <div className="text-lg font-semibold">Open shift detected</div>
+          <div className="text-sm muted">
+            {selectedProfileName} already has an open shift at{" "}
+            <b>{openShiftInfo.store_name ?? "another store"}</b> started at{" "}
+            <b>{new Date(openShiftInfo.started_at).toLocaleString()}</b>.
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <button
+              className="btn-secondary px-4 py-2"
+              onClick={() => {
+                const base =
+                  openShiftInfo.shift_type === "open" || openShiftInfo.shift_type === "double"
+                    ? `/run/${openShiftInfo.id}`
+                    : `/shift/${openShiftInfo.id}`;
+                const params = new URLSearchParams();
+                if (qrToken) params.set("t", qrToken);
+                params.set("reused", "1");
+                params.set("startedAt", openShiftInfo.started_at);
+                const qs = params.toString();
+                router.replace(qs ? `${base}?${qs}` : base);
+              }}
+            >
+              Return to open shift
+            </button>
+            <button
+              className="btn-primary px-4 py-2"
+              onClick={() => setStaleShiftPrompt(true)}
+            >
+              End previous shift
+            </button>
           </div>
         </div>
       )}
 
       {staleShiftPrompt && openShiftInfo && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-10">
-          <div className="card card-pad w-full max-w-md space-y-4">
-            <div className="text-lg font-semibold">Close stale shift?</div>
-            <div className="text-sm muted">
-              {selectedProfileName} already has an open shift at{" "}
-              <b>{openShiftInfo.store_name ?? "another store"}</b> started at{" "}
-              <b>{new Date(openShiftInfo.started_at).toLocaleString()}</b>.
-            </div>
+        <div className="card card-pad space-y-4">
+          <div className="text-lg font-semibold">Close stale shift?</div>
+          <div className="text-sm muted">
+            {selectedProfileName} already has an open shift at{" "}
+            <b>{openShiftInfo.store_name ?? "another store"}</b> started at{" "}
+            <b>{new Date(openShiftInfo.started_at).toLocaleString()}</b>.
+          </div>
 
             <div className="space-y-2">
               <label className="text-sm muted">End time</label>
@@ -828,7 +827,6 @@ export default function ClockPageClient() {
               </button>
             </div>
           </div>
-        </div>
       )}
 
       {/* Confirmation modal - prevents accidental clock-ins */}
