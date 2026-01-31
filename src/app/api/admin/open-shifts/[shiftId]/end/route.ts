@@ -95,6 +95,7 @@ export async function POST(
           shift_id: shiftId,
           count_type: "end",
           drawer_cents: expected,
+          change_count: null,
           confirmed: false,
           notified_manager: false,
           note: "Admin ended shift (no drawer count).",

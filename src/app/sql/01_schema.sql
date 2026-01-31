@@ -78,6 +78,7 @@ create table if not exists public.shift_drawer_counts (
 
   -- cents to avoid float issues
   drawer_cents integer not null,
+  change_count integer,
 
   -- threshold workflow
   confirmed boolean not null default false,

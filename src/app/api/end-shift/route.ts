@@ -8,6 +8,7 @@
  * - shiftId: string - Shift ID to end (required)
  * - endAt: string - ISO timestamp of end time (required)
  * - endDrawerCents?: number | null - Ending drawer count in cents (required for non-"other" shifts)
+ * - changeDrawerCents?: number | null - Change drawer count in cents (required for non-"other" shifts)
  * - confirmed?: boolean - Whether the drawer count was confirmed
  * - notifiedManager?: boolean - Whether manager was notified of discrepancy
  * - note?: string | null - Optional note about the drawer count
@@ -36,6 +37,7 @@ type Body = {
   shiftId: string;
   endAt: string; // ISO
   endDrawerCents?: number | null; // optional for "other" if you want
+  changeDrawerCents?: number | null; // change drawer count in cents
   confirmed?: boolean;
   notifiedManager?: boolean;
   note?: string | null;
@@ -170,14 +172,22 @@ export async function POST(req: Request) {
 
     // 2) Insert END drawer count if required
     const endCents = body.endDrawerCents ?? null;
+    const changeCents = body.changeDrawerCents ?? null;
 
     if (shiftType !== "other") {
       if (endCents === null || endCents === undefined) {
         return NextResponse.json({ error: "Missing end drawer count." }, { status: 400 });
       }
+      if (changeCents === null || changeCents === undefined || !Number.isFinite(changeCents)) {
+        return NextResponse.json({ error: "Missing change drawer count." }, { status: 400 });
+      }
       const out = isOutOfThreshold(endCents, store.expected_drawer_cents);
+      const changeNot200 = changeCents !== 20000;
       if (out && !body.confirmed) {
         return NextResponse.json({ error: "End drawer outside threshold. Must confirm.", requiresConfirm: true }, { status: 400 });
+      }
+      if (changeNot200 && !body.notifiedManager) {
+        return NextResponse.json({ error: "Change drawer not $200. Must notify manager." }, { status: 400 });
       }
 
       const { error: endCountErr } = await supabaseServer
@@ -187,6 +197,7 @@ export async function POST(req: Request) {
             shift_id: body.shiftId,
             count_type: "end",
             drawer_cents: endCents,
+            change_count: changeCents,
             confirmed: Boolean(body.confirmed),
             notified_manager: Boolean(body.notifiedManager),
             note: body.note ?? null,
@@ -204,6 +215,7 @@ export async function POST(req: Request) {
             shift_id: body.shiftId,
             count_type: "end",
             drawer_cents: endCents,
+            change_count: changeCents ?? null,
             confirmed: Boolean(body.confirmed),
             notified_manager: Boolean(body.notifiedManager),
             note: body.note ?? null,

@@ -13,7 +13,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { thresholdMessage } from "@/lib/kioskRules";
+import { isOutOfThreshold, thresholdMessage } from "@/lib/kioskRules";
 
 type ShiftType = "open" | "close" | "double" | "other";
 
@@ -437,6 +437,7 @@ function ClockOutModal({
 }) {
   const [endLocal, setEndLocal] = useState(toLocalInputValue());
   const [drawer, setDrawer] = useState("200");
+  const [changeDrawer, setChangeDrawer] = useState("200");
   const [confirm, setConfirm] = useState(false);
   const [notify, setNotify] = useState(false);
   const [note, setNote] = useState("");
@@ -445,7 +446,11 @@ function ClockOutModal({
   const [saving, setSaving] = useState(false);
 
   const cents = Math.round(Number(drawer) * 100);
+  const changeCents = Math.round(Number(changeDrawer) * 100);
+  const hasValidChange = Number.isFinite(changeCents);
   const msg = Number.isFinite(cents) ? thresholdMessage(cents, expectedCents) : null;
+  const outOfThreshold = Number.isFinite(cents) ? isOutOfThreshold(cents, expectedCents) : false;
+  const changeNot200 = hasValidChange ? changeCents !== 20000 : false;
 
   return (
     <div className="fixed inset-0 bg-black/40 grid place-items-center p-4">
@@ -460,15 +465,28 @@ function ClockOutModal({
 
         {msg && <div className="text-sm border rounded p-2 text-amber-700 border-amber-300">{msg}</div>}
 
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={confirm} onChange={e => setConfirm(e.target.checked)} />
-          I confirm this count is correct (if outside threshold)
-        </label>
+        <label className="text-sm">Change drawer count ($){isOther ? " (optional)" : ""}</label>
+        <input className="w-full border rounded p-2" inputMode="decimal" value={changeDrawer} onChange={e => setChangeDrawer(e.target.value)} />
 
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" checked={notify} onChange={e => setNotify(e.target.checked)} />
-          I notified manager (optional v1)
-        </label>
+        {hasValidChange && changeNot200 && (
+          <div className="text-sm border rounded p-2 text-amber-700 border-amber-300">
+            Change drawer should be exactly $200.00.
+          </div>
+        )}
+
+        {outOfThreshold && (
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={confirm} onChange={e => setConfirm(e.target.checked)} />
+            I confirm this count is correct (if outside threshold)
+          </label>
+        )}
+
+        {(outOfThreshold || changeNot200) && (
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={notify} onChange={e => setNotify(e.target.checked)} />
+            I notified manager (required if change drawer is not $200)
+          </label>
+        )}
 
         <label className="text-sm">Note (optional)</label>
         <input className="w-full border rounded p-2" value={note} onChange={e => setNote(e.target.value)} />
@@ -486,7 +504,7 @@ function ClockOutModal({
             Cancel
           </button>
           <button
-            disabled={saving || !doubleCheck || (!isOther && !Number.isFinite(cents))}
+            disabled={saving || !doubleCheck || (!isOther && (!Number.isFinite(cents) || !hasValidChange)) || (changeNot200 && !notify) || (outOfThreshold && !confirm)}
             className="px-3 py-1.5 rounded bg-black text-white disabled:opacity-50"
             onClick={async () => {
               setErr(null);
@@ -506,8 +524,9 @@ function ClockOutModal({
                     shiftId,
                     endAt: d.toISOString(),
                     endDrawerCents: isOther ? (Number.isFinite(cents) ? cents : null) : cents,
-                    confirmed: confirm,
-                    notifiedManager: notify,
+                    changeDrawerCents: isOther ? (hasValidChange ? changeCents : null) : changeCents,
+                    confirmed: outOfThreshold ? confirm : false,
+                    notifiedManager: (outOfThreshold || changeNot200) ? notify : false,
                     note: note || null,
                   }),
                 });

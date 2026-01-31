@@ -75,10 +75,14 @@ export default function ClockPageClient() {
 
   // Drawer count state - default $200 to speed up entry
   const [startDrawer, setStartDrawer] = useState<string>("200");
+  const [changeDrawer, setChangeDrawer] = useState<string>("200");
   const [startConfirmThreshold, setStartConfirmThreshold] = useState(false);
   const [startNotifiedManager, setStartNotifiedManager] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmChecked, setConfirmChecked] = useState(false);
+  const [openShiftPrompt, setOpenShiftPrompt] = useState(false);
+  const [openShiftInfo, setOpenShiftInfo] = useState<{ id: string; started_at: string; shift_type: ShiftKind } | null>(null);
+  const [openShiftKey, setOpenShiftKey] = useState<string>("");
 
   // "other" shifts don't require drawer counts (e.g., training, inventory)
   const requiresStartDrawer = shiftKind !== "other";
@@ -96,12 +100,28 @@ export default function ClockPageClient() {
     return Math.round(dollars * 100);
   }, [startDrawer]);
 
+  const parsedChange = useMemo(() => {
+    const dollars = Number(changeDrawer);
+    if (Number.isNaN(dollars) || dollars < 0) return null;
+    return Math.round(dollars * 100);
+  }, [changeDrawer]);
+
   // Check if drawer count is outside acceptable variance range
   const startOutOfThreshold = useMemo(() => {
     if (!requiresStartDrawer) return false;
     if (parsedStart == null) return false;
     return isOutOfThreshold(parsedStart, expectedDrawerCents);
   }, [requiresStartDrawer, parsedStart, expectedDrawerCents]);
+
+  const changeNot200 = useMemo(() => {
+    if (!requiresStartDrawer) return false;
+    if (parsedChange == null) return false;
+    return parsedChange !== 20000;
+  }, [requiresStartDrawer, parsedChange]);
+
+  const requiresManagerNotify = useMemo(() => {
+    return startOutOfThreshold || changeNot200;
+  }, [startOutOfThreshold, changeNot200]);
 
   // Generate threshold warning message for display
   const thresholdMsg = useMemo(() => {
@@ -135,9 +155,10 @@ export default function ClockPageClient() {
     if (!requiresStartDrawer) return true;
 
     if (parsedStart == null) return false;
+    if (parsedChange == null) return false;
 
     // If outside threshold, user must confirm they notified a manager.
-    if (startOutOfThreshold && !startNotifiedManager) return false;
+    if (requiresManagerNotify && !startNotifiedManager) return false;
 
     return true;
   }, [
@@ -146,7 +167,9 @@ export default function ClockPageClient() {
     plannedStartLocal,
     requiresStartDrawer,
     parsedStart,
+    parsedChange,
     startOutOfThreshold,
+    requiresManagerNotify,
     startNotifiedManager,
   ]);
 
@@ -235,11 +258,61 @@ export default function ClockPageClient() {
     if (profileId) localStorage.setItem("sh_profile", profileId);
   }, [profileId]);
 
+  // Check for an existing open shift when employee selection changes
+  useEffect(() => {
+    const key = `${profileId}:${qrToken || storeId}`;
+    if (!profileId || (!qrToken && !storeId) || key === openShiftKey) return;
+
+    let alive = true;
+    (async () => {
+      try {
+        const params = new URLSearchParams();
+        params.set("profileId", profileId);
+        if (qrToken) params.set("t", qrToken);
+        if (!qrToken && storeId) params.set("storeId", storeId);
+
+        const res = await fetch(`/api/shift/open?${params.toString()}`);
+        const json = await res.json();
+        if (!alive) return;
+
+        if (!res.ok || !json?.shiftId) {
+          setOpenShiftInfo(null);
+          setOpenShiftPrompt(false);
+          setOpenShiftKey(key);
+          return;
+        }
+
+        setOpenShiftInfo({
+          id: json.shiftId,
+          started_at: json.startedAt,
+          shift_type: json.shiftType as ShiftKind,
+        });
+        setOpenShiftPrompt(true);
+        setOpenShiftKey(key);
+      } catch {
+        if (!alive) return;
+        setOpenShiftInfo(null);
+        setOpenShiftPrompt(false);
+        setOpenShiftKey(key);
+      }
+    })();
+
+    return () => {
+      alive = false;
+    };
+  }, [profileId, storeId, qrToken, openShiftKey]);
+
   // Reset confirmation state when form fields change
   useEffect(() => {
     setConfirmChecked(false);
     setConfirmOpen(false);
   }, [storeId, profileId, plannedStartLocal, shiftKind]);
+
+  useEffect(() => {
+    if (!requiresManagerNotify) {
+      setStartNotifiedManager(false);
+    }
+  }, [requiresManagerNotify]);
 
   async function startShift() {
     setError(null);
@@ -253,6 +326,7 @@ export default function ClockPageClient() {
     const roundedPlanned = roundTo30Minutes(planned);
 
     let startDrawerCents: number | null = null;
+    let changeDrawerCents: number | null = null;
     let confirmed = false;
 
     if (requiresStartDrawer) {
@@ -260,14 +334,19 @@ export default function ClockPageClient() {
         setError("Enter a valid starting drawer amount.");
         return;
       }
+      if (parsedChange == null) {
+        setError("Enter a valid change drawer amount.");
+        return;
+      }
 
       startDrawerCents = parsedStart;
+      changeDrawerCents = parsedChange;
 
       const out = isOutOfThreshold(parsedStart, expectedDrawerCents);
       confirmed = out ? Boolean(startConfirmThreshold) : false;
 
-      if (out && !startNotifiedManager) {
-        setError("Drawer is outside threshold. Notify manager to proceed.");
+      if ((out || parsedChange !== 20000) && !startNotifiedManager) {
+        setError("Notify manager to proceed.");
         return;
       }
     }
@@ -284,6 +363,7 @@ export default function ClockPageClient() {
           shiftType: shiftKind,
           plannedStartAt: roundedPlanned.toISOString(),
           startDrawerCents, // null allowed for "other"
+          changeDrawerCents, // change drawer count in cents
           confirmed,
           notifiedManager: startDrawerCents == null ? false : startNotifiedManager,
           note: null,
@@ -438,6 +518,23 @@ export default function ClockPageClient() {
               </div>
             )}
 
+            <label className="text-sm muted">
+              Change drawer count ($){requiresStartDrawer ? "" : " (optional)"}
+            </label>
+            <input
+              className="input"
+              inputMode="decimal"
+              value={changeDrawer}
+              onChange={e => setChangeDrawer(e.target.value)}
+              disabled={submitting}
+            />
+
+            {requiresStartDrawer && parsedChange != null && changeNot200 && (
+              <div className="banner text-sm">
+                Change drawer should be exactly $200.00.
+              </div>
+            )}
+
             {/* Threshold confirmation checkboxes - shown only when drawer is out of range */}
             {requiresStartDrawer && startOutOfThreshold && (
               <label className="flex items-center gap-2 text-sm">
@@ -451,7 +548,7 @@ export default function ClockPageClient() {
               </label>
             )}
 
-            {requiresStartDrawer && startOutOfThreshold && (
+            {requiresStartDrawer && requiresManagerNotify && (
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -477,6 +574,43 @@ export default function ClockPageClient() {
           </div>
         </div>
       </div>
+
+      {openShiftPrompt && openShiftInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="card card-pad w-full max-w-md space-y-4">
+            <div className="text-lg font-semibold">Return to open shift?</div>
+            <div className="text-sm muted">
+              {selectedProfileName} already has an open shift started at{" "}
+              <b>{new Date(openShiftInfo.started_at).toLocaleString()}</b>.
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                className="btn-secondary px-4 py-2"
+                onClick={() => setOpenShiftPrompt(false)}
+              >
+                Continue new shift
+              </button>
+              <button
+                className="btn-primary px-4 py-2"
+                onClick={() => {
+                  const base =
+                    openShiftInfo.shift_type === "open" || openShiftInfo.shift_type === "double"
+                      ? `/run/${openShiftInfo.id}`
+                      : `/shift/${openShiftInfo.id}`;
+                  const params = new URLSearchParams();
+                  if (qrToken) params.set("t", qrToken);
+                  params.set("reused", "1");
+                  params.set("startedAt", openShiftInfo.started_at);
+                  const qs = params.toString();
+                  router.replace(qs ? `${base}?${qs}` : base);
+                }}
+              >
+                Return to open shift
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Confirmation modal - prevents accidental clock-ins */}
       {confirmOpen && (

@@ -549,6 +549,7 @@ function ClockOutModal({
 }) {
   const [endLocal, setEndLocal] = useState(toLocalInputValue());
   const [drawer, setDrawer] = useState("200");
+  const [changeDrawer, setChangeDrawer] = useState("200");
   const [confirm, setConfirm] = useState(false);
   const [notify, setNotify] = useState(false);
   const [note, setNote] = useState("");
@@ -557,23 +558,27 @@ function ClockOutModal({
   const [saving, setSaving] = useState(false);
 
   const cents = Math.round(Number(drawer) * 100);
+  const changeCents = Math.round(Number(changeDrawer) * 100);
   const hasValidDrawer = Number.isFinite(cents);
+  const hasValidChange = Number.isFinite(changeCents);
   const msg = hasValidDrawer ? thresholdMessage(cents, expectedCents) : null;
   const outOfThreshold = hasValidDrawer ? shouldShowVarianceControls(cents, expectedCents) : false;
+  const changeNot200 = hasValidChange ? changeCents !== 20000 : false;
 
   // Reset confirmations when drawer goes back in range
   useEffect(() => {
-    if (!outOfThreshold) {
+    if (!outOfThreshold && !changeNot200) {
       setConfirm(false);
       setNotify(false);
     }
-  }, [outOfThreshold]);
+  }, [outOfThreshold, changeNot200]);
 
   const canSubmit =
     !saving &&
     doubleCheck &&
-    (isOther ? true : hasValidDrawer) &&
-    (outOfThreshold ? confirm : true);
+    (isOther ? true : hasValidDrawer && hasValidChange) &&
+    (outOfThreshold ? confirm : true) &&
+    (changeNot200 ? notify : true);
 
   return (
     <div className="fixed inset-0 bg-black/40 grid place-items-center p-4">
@@ -602,6 +607,20 @@ function ClockOutModal({
           </div>
         )}
 
+        <label className="text-sm">Change drawer count ($){isOther ? " (optional)" : ""}</label>
+        <input
+          className="w-full border rounded p-2"
+          inputMode="decimal"
+          value={changeDrawer}
+          onChange={e => setChangeDrawer(e.target.value)}
+        />
+
+        {hasValidChange && changeNot200 && (
+          <div className="text-sm border rounded p-2 text-amber-700 border-amber-300">
+            Change drawer should be exactly $200.00.
+          </div>
+        )}
+
         {/* Variance confirmation - only shown when drawer is out of threshold */}
         {outOfThreshold && (
           <>
@@ -609,12 +628,14 @@ function ClockOutModal({
               <input type="checkbox" checked={confirm} onChange={e => setConfirm(e.target.checked)} />
               I confirm this count is correct (required when outside threshold)
             </label>
-
-            <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={notify} onChange={e => setNotify(e.target.checked)} />
-              I notified manager (optional)
-            </label>
           </>
+        )}
+
+        {(outOfThreshold || changeNot200) && (
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={notify} onChange={e => setNotify(e.target.checked)} />
+            I notified manager (required if change drawer is not $200)
+          </label>
         )}
 
         <label className="text-sm">Note (optional)</label>
@@ -654,8 +675,9 @@ function ClockOutModal({
                     shiftId,
                     endAt: d.toISOString(),
                     endDrawerCents: isOther ? (hasValidDrawer ? cents : null) : cents,
+                    changeDrawerCents: isOther ? (hasValidChange ? changeCents : null) : changeCents,
                     confirmed: outOfThreshold ? confirm : false,
-                    notifiedManager: outOfThreshold ? notify : false,
+                    notifiedManager: (outOfThreshold || changeNot200) ? notify : false,
                     note: note || null,
                   }),
                 });

@@ -10,6 +10,7 @@
  * - shiftType: "open" | "close" | "double" | "other" - Type of shift (required)
  * - plannedStartAt: string - ISO timestamp of planned start time (required)
  * - startDrawerCents?: number | null - Starting drawer count in cents (required for non-"other" shifts)
+ * - changeDrawerCents?: number | null - Change drawer count in cents (required for non-"other" shifts)
  * - confirmed?: boolean - Whether the drawer count was confirmed (required if out of threshold)
  * - notifiedManager?: boolean - Whether manager was notified of discrepancy
  * - note?: string | null - Optional note about the drawer count
@@ -39,6 +40,7 @@ type Body = {
   shiftType: ShiftType;
   plannedStartAt: string; // ISO string
   startDrawerCents?: number | null; // required for non-"other"
+  changeDrawerCents?: number | null; // change drawer count in cents
   confirmed?: boolean; // required if out of threshold
   notifiedManager?: boolean;
   note?: string | null;
@@ -103,6 +105,7 @@ export async function POST(req: Request) {
 
     // 5) Enforce start drawer rules BEFORE creating the shift
     const startCents = body.startDrawerCents ?? null;
+    const changeCents = body.changeDrawerCents ?? null;
 
     if (body.shiftType !== "other") {
       // Required for open/close/double
@@ -112,11 +115,18 @@ export async function POST(req: Request) {
           { status: 400 }
         );
       }
+      if (changeCents === null || changeCents === undefined || !Number.isFinite(changeCents)) {
+        return NextResponse.json(
+          { error: "Missing changeDrawerCents (required for this shift type)." },
+          { status: 400 }
+        );
+      }
 
       const out = isOutOfThreshold(startCents, store.expected_drawer_cents);
-      if (out && !body.notifiedManager) {
+      const changeNot200 = changeCents !== 20000;
+      if ((out || changeNot200) && !body.notifiedManager) {
         return NextResponse.json(
-          { error: "Start drawer outside threshold. Must notify manager.", requiresConfirm: true },
+          { error: "Start drawer or change drawer requires manager notification.", requiresConfirm: true },
           { status: 400 }
         );
       }
@@ -127,6 +137,18 @@ export async function POST(req: Request) {
         if (out && !body.notifiedManager) {
           return NextResponse.json(
             { error: "Start drawer outside threshold. Must notify manager.", requiresConfirm: true },
+            { status: 400 }
+          );
+        }
+      }
+      if (changeCents !== null && changeCents !== undefined) {
+        if (!Number.isFinite(changeCents)) {
+          return NextResponse.json({ error: "Invalid changeDrawerCents." }, { status: 400 });
+        }
+        const changeNot200 = changeCents !== 20000;
+        if (changeNot200 && !body.notifiedManager) {
+          return NextResponse.json(
+            { error: "Change drawer not $200. Must notify manager.", requiresConfirm: true },
             { status: 400 }
           );
         }
@@ -182,6 +204,7 @@ export async function POST(req: Request) {
         shift_id: shift.id,
         count_type: "start",
         drawer_cents: startCents,
+        change_count: changeCents,
         confirmed: Boolean(body.confirmed),
         notified_manager: Boolean(body.notifiedManager),
         note: body.note ?? null,
