@@ -151,6 +151,9 @@ export async function GET(req: Request) {
       : { data: [], error: null };
     if (profErr) return NextResponse.json({ error: profErr.message }, { status: 500 });
 
+    const isDateOnly = (value: string | null) =>
+      Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+
     let query = supabaseServer
       .from("shifts")
       .select(
@@ -160,8 +163,18 @@ export async function GET(req: Request) {
       .in("store_id", managerStoreIds)
       .neq("last_action", "removed");
 
-    if (from) query = query.gte("started_at", from);
-    if (to) query = query.lte("started_at", to);
+    if (from) {
+      query = query.gte("started_at", isDateOnly(from) ? `${from}T00:00:00.000Z` : from);
+    }
+    if (to) {
+      if (isDateOnly(to)) {
+        const d = new Date(`${to}T00:00:00.000Z`);
+        d.setUTCDate(d.getUTCDate() + 1);
+        query = query.lt("started_at", d.toISOString());
+      } else {
+        query = query.lte("started_at", to);
+      }
+    }
     if (storeId) query = query.eq("store_id", storeId);
     if (profileId) query = query.eq("profile_id", profileId);
     if (manualClosed === "1") query = query.eq("manual_closed", true);
