@@ -453,7 +453,7 @@ function ClockOutModal({
   const changeNot200 = hasValidChange ? changeCents !== 20000 : false;
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-start justify-center p-4 overflow-y-auto">
+    <div className="fixed inset-0 bg-black/40 flex items-start justify-center p-4 overflow-y-auto modal-under-header">
       <div className="w-full max-w-md bg-white text-black rounded-2xl p-4 space-y-3 max-h-[85vh] overflow-y-auto overscroll-contain">
         <h2 className="text-lg font-semibold">End Shift</h2>
 
