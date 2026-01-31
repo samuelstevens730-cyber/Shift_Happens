@@ -57,6 +57,16 @@ function toLocalInputValue(d = new Date()) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function toRangeStart(dateStr: string) {
+  const d = new Date(`${dateStr}T00:00:00`);
+  return d.toISOString();
+}
+
+function toRangeEnd(dateStr: string) {
+  const d = new Date(`${dateStr}T23:59:59.999`);
+  return d.toISOString();
+}
+
 export default function AdminShiftsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -123,8 +133,8 @@ export default function AdminShiftsPage() {
     const params = new URLSearchParams({
       page: String(nextPage),
       pageSize: String(pageSize),
-      from: new Date(filterFrom).toISOString(),
-      to: new Date(filterTo).toISOString(),
+      from: toRangeStart(filterFrom),
+      to: toRangeEnd(filterTo),
     });
     if (filterStore !== "all") params.set("storeId", filterStore);
     if (filterProfile !== "all") params.set("profileId", filterProfile);
@@ -160,8 +170,8 @@ export default function AdminShiftsPage() {
     const params = new URLSearchParams({
       page: String(nextPage),
       pageSize: String(pageSize),
-      from: new Date(filterFrom).toISOString(),
-      to: new Date(filterTo).toISOString(),
+      from: toRangeStart(filterFrom),
+      to: toRangeEnd(filterTo),
       manualClosed: "1",
       manualClosedReviewed: "0",
     });
