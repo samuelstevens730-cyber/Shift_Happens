@@ -78,6 +78,7 @@ export default function AdminShiftsPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [isAuthed, setIsAuthed] = useState(false);
   const [stores, setStores] = useState<Store[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -130,6 +131,7 @@ export default function AdminShiftsPage() {
 
   const loadShifts = async (nextPage = page) => {
     setError(null);
+    setSuccess(null);
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token || "";
     if (!token) {
@@ -167,6 +169,7 @@ export default function AdminShiftsPage() {
 
   const loadManualClosures = async (nextPage = manualPage) => {
     setError(null);
+    setSuccess(null);
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token || "";
     if (!token) {
@@ -213,6 +216,7 @@ export default function AdminShiftsPage() {
     if (!canCreate || saving) return;
     setSaving(true);
     setError(null);
+    setSuccess(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token || "";
@@ -264,8 +268,10 @@ export default function AdminShiftsPage() {
 
   async function updateShift(id: string, data: Partial<ShiftRow>) {
     if (saving) return;
+    if (!window.confirm("Confirm editing shift?")) return;
     setSaving(true);
     setError(null);
+    setSuccess(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token || "";
@@ -301,6 +307,7 @@ export default function AdminShiftsPage() {
         return;
       }
 
+      setSuccess("Shift edited successfully.");
       await loadShifts(page);
       await loadManualClosures(manualPage);
     } catch (e: unknown) {
@@ -315,6 +322,7 @@ export default function AdminShiftsPage() {
     if (!window.confirm("Remove this shift? It will disappear from reports.")) return;
     setSaving(true);
     setError(null);
+    setSuccess(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token || "";
@@ -346,6 +354,7 @@ export default function AdminShiftsPage() {
     if (saving) return;
     setSaving(true);
     setError(null);
+    setSuccess(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       const token = session?.access_token || "";
@@ -368,6 +377,7 @@ export default function AdminShiftsPage() {
         return;
       }
 
+      setSuccess("Manual close approved.");
       await loadManualClosures(manualPage);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to approve manual close.");
@@ -385,6 +395,7 @@ export default function AdminShiftsPage() {
         <h1 className="text-2xl font-semibold">Shifts</h1>
 
         {error && <div className="banner banner-error text-sm">{error}</div>}
+        {success && <div className="banner text-sm">{success}</div>}
 
         <div className="card card-pad space-y-4">
           <div className="flex items-center justify-between gap-2">
