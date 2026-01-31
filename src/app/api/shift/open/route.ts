@@ -34,20 +34,6 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Missing profileId." }, { status: 400 });
     }
 
-    let storeId: string | null = storeIdParam || null;
-    if (!storeId && qrToken) {
-      const { data: storeRow, error: storeErr } = await supabaseServer
-        .from("stores")
-        .select("id, name, expected_drawer_cents")
-        .eq("qr_token", qrToken)
-        .maybeSingle()
-        .returns<StoreRow>();
-
-      if (storeErr) return NextResponse.json({ error: storeErr.message }, { status: 500 });
-      if (!storeRow) return NextResponse.json({}, { status: 200 });
-      storeId = storeRow.id;
-    }
-
     let shiftQuery = supabaseServer
       .from("shifts")
       .select("id, started_at, shift_type, store:store_id(id, name, expected_drawer_cents)")
@@ -56,8 +42,6 @@ export async function GET(req: Request) {
       .neq("last_action", "removed")
       .order("started_at", { ascending: false })
       .limit(1);
-
-    if (storeId) shiftQuery = shiftQuery.eq("store_id", storeId);
 
     const { data: shift, error: shiftErr } = await shiftQuery.maybeSingle().returns<ShiftRow>();
 

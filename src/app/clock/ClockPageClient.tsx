@@ -276,16 +276,15 @@ export default function ClockPageClient() {
 
   // Check for an existing open shift when employee selection changes
   useEffect(() => {
-    const key = `${profileId}:${qrToken || storeId}`;
-    if (!profileId || (!qrToken && !storeId) || key === openShiftKey) return;
+    const key = profileId;
+    if (!profileId || key === openShiftKey) return;
 
     let alive = true;
     (async () => {
       try {
         const params = new URLSearchParams();
         params.set("profileId", profileId);
-        if (qrToken) params.set("t", qrToken);
-        if (!qrToken && storeId) params.set("storeId", storeId);
+        // Always check by employee only (global rule: one open shift per person)
 
         const res = await fetch(`/api/shift/open?${params.toString()}`);
         const json = await res.json();
@@ -322,7 +321,7 @@ export default function ClockPageClient() {
     return () => {
       alive = false;
     };
-  }, [profileId, storeId, qrToken, openShiftKey, tokenStore]);
+  }, [profileId, openShiftKey]);
 
   // Reset confirmation state when form fields change
   useEffect(() => {
