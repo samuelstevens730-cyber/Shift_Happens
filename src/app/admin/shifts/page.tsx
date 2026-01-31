@@ -564,7 +564,7 @@ function ShiftCard({
       </div>
       {row.manualClosed && !row.manualClosedReviewedAt && (
         <div className="text-xs text-amber-700">
-          Manual closure pending review.
+          Manual closure pending review. Required checklist items were auto-completed.
         </div>
       )}
 
