@@ -123,6 +123,9 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Invalid store selection." }, { status: 403 });
   }
 
+  const isDateOnly = (value: string | null) =>
+    Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+
   let query = supabaseServer
     .from("shift_drawer_counts")
     .select(
@@ -133,8 +136,18 @@ export async function GET(req: Request) {
     .eq("count_missing", false)
     .is("reviewed_at", null);
 
-  if (from) query = query.gte("counted_at", from);
-  if (to) query = query.lte("counted_at", to);
+  if (from) {
+    query = query.gte("counted_at", isDateOnly(from) ? `${from}T00:00:00.000Z` : from);
+  }
+  if (to) {
+    if (isDateOnly(to)) {
+      const d = new Date(`${to}T00:00:00.000Z`);
+      d.setUTCDate(d.getUTCDate() + 1);
+      query = query.lt("counted_at", d.toISOString());
+    } else {
+      query = query.lte("counted_at", to);
+    }
+  }
   query = query.in("shift.store_id", managerStoreIds);
   if (storeId) query = query.eq("shift.store_id", storeId);
   if (profileId) query = query.eq("shift.profile_id", profileId);
