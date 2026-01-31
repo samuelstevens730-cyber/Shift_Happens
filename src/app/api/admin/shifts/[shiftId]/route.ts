@@ -43,6 +43,7 @@ type ShiftRow = {
   id: string;
   store_id: string;
   profile_id: string;
+  shift_type: ShiftType;
   last_action: string | null;
   manual_closed: boolean | null;
   manual_closed_reviewed_at: string | null;
@@ -83,7 +84,7 @@ export async function PATCH(
 
     const { data: shift, error: shiftErr } = await supabaseServer
       .from("shifts")
-      .select("id, store_id, profile_id, last_action, manual_closed, manual_closed_reviewed_at")
+      .select("id, store_id, profile_id, shift_type, last_action, manual_closed, manual_closed_reviewed_at")
       .eq("id", shiftId)
       .maybeSingle()
       .returns<ShiftRow>();
@@ -105,6 +106,53 @@ export async function PATCH(
     if (body.plannedStartAt) update.planned_start_at = body.plannedStartAt;
     if (body.startedAt) update.started_at = body.startedAt;
     if (body.endedAt !== undefined) update.ended_at = body.endedAt;
+
+    // If admin is ending a shift, auto-create any missing required drawer counts
+    if (body.endedAt) {
+      const effectiveType = body.shiftType ?? shift.shift_type;
+      if (effectiveType !== "other") {
+        const { data: storeRow, error: storeErr } = await supabaseServer
+          .from("stores")
+          .select("expected_drawer_cents")
+          .eq("id", shift.store_id)
+          .maybeSingle()
+          .returns<{ expected_drawer_cents: number }>();
+        if (storeErr) return NextResponse.json({ error: storeErr.message }, { status: 500 });
+        const expected = storeRow?.expected_drawer_cents ?? 20000;
+
+        const requiredTypes: Array<"start" | "end" | "changeover"> = ["start", "end"];
+        if (effectiveType === "double") requiredTypes.push("changeover");
+
+        const { data: existingCounts, error: countErr } = await supabaseServer
+          .from("shift_drawer_counts")
+          .select("count_type")
+          .eq("shift_id", shiftId)
+          .in("count_type", requiredTypes);
+        if (countErr) return NextResponse.json({ error: countErr.message }, { status: 500 });
+
+        const existingSet = new Set((existingCounts ?? []).map(r => r.count_type));
+        const missing = requiredTypes.filter(t => !existingSet.has(t));
+        if (missing.length) {
+          const nowIso = new Date().toISOString();
+          const rows = missing.map(t => ({
+            shift_id: shiftId,
+            count_type: t,
+            drawer_cents: expected,
+            change_count: null,
+            confirmed: false,
+            notified_manager: false,
+            note: "Admin edit (missing count).",
+            counted_at: nowIso,
+            out_of_threshold: false,
+            count_missing: true,
+          }));
+          const { error: insertErr } = await supabaseServer
+            .from("shift_drawer_counts")
+            .insert(rows);
+          if (insertErr) return NextResponse.json({ error: insertErr.message }, { status: 500 });
+        }
+      }
+    }
 
     if (Object.keys(update).length === 0 && !body.manualCloseReview) {
       return NextResponse.json({ error: "No fields to update." }, { status: 400 });
