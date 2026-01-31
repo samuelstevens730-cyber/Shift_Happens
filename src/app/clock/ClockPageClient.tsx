@@ -81,8 +81,24 @@ export default function ClockPageClient() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmChecked, setConfirmChecked] = useState(false);
   const [openShiftPrompt, setOpenShiftPrompt] = useState(false);
-  const [openShiftInfo, setOpenShiftInfo] = useState<{ id: string; started_at: string; shift_type: ShiftKind } | null>(null);
+  const [openShiftInfo, setOpenShiftInfo] = useState<{
+    id: string;
+    started_at: string;
+    shift_type: ShiftKind;
+    store_id: string | null;
+    store_name: string | null;
+    expected_drawer_cents: number | null;
+  } | null>(null);
   const [openShiftKey, setOpenShiftKey] = useState<string>("");
+  const [staleShiftPrompt, setStaleShiftPrompt] = useState(false);
+  const [staleEndLocal, setStaleEndLocal] = useState(() => toLocalInputValue());
+  const [staleDrawer, setStaleDrawer] = useState("200");
+  const [staleChangeDrawer, setStaleChangeDrawer] = useState("200");
+  const [staleConfirm, setStaleConfirm] = useState(false);
+  const [staleNotify, setStaleNotify] = useState(false);
+  const [staleNote, setStaleNote] = useState("");
+  const [staleDoubleCheck, setStaleDoubleCheck] = useState(false);
+  const [staleSaving, setStaleSaving] = useState(false);
 
   // "other" shifts don't require drawer counts (e.g., training, inventory)
   const requiresStartDrawer = shiftKind !== "other";
@@ -278,21 +294,30 @@ export default function ClockPageClient() {
         if (!res.ok || !json?.shiftId) {
           setOpenShiftInfo(null);
           setOpenShiftPrompt(false);
+          setStaleShiftPrompt(false);
           setOpenShiftKey(key);
           return;
         }
+
+        const effectiveStoreId = tokenStore?.id || storeId || "";
+        const sameStore = effectiveStoreId && json.storeId && json.storeId === effectiveStoreId;
 
         setOpenShiftInfo({
           id: json.shiftId,
           started_at: json.startedAt,
           shift_type: json.shiftType as ShiftKind,
+          store_id: json.storeId ?? null,
+          store_name: json.storeName ?? null,
+          expected_drawer_cents: json.expectedDrawerCents ?? null,
         });
-        setOpenShiftPrompt(true);
+        setOpenShiftPrompt(Boolean(sameStore));
+        setStaleShiftPrompt(!sameStore);
         setOpenShiftKey(key);
       } catch {
         if (!alive) return;
         setOpenShiftInfo(null);
         setOpenShiftPrompt(false);
+        setStaleShiftPrompt(false);
         setOpenShiftKey(key);
       }
     })();
@@ -300,7 +325,7 @@ export default function ClockPageClient() {
     return () => {
       alive = false;
     };
-  }, [profileId, storeId, qrToken, openShiftKey]);
+  }, [profileId, storeId, qrToken, openShiftKey, tokenStore]);
 
   // Reset confirmation state when form fields change
   useEffect(() => {
@@ -371,7 +396,31 @@ export default function ClockPageClient() {
       });
 
       const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || "Failed to start shift.");
+      if (!res.ok) {
+        if (res.status === 409 && json?.shiftId) {
+          try {
+            const params = new URLSearchParams({ profileId });
+            const openRes = await fetch(`/api/shift/open?${params.toString()}`);
+            const openJson = await openRes.json();
+            if (openRes.ok && openJson?.shiftId) {
+              setOpenShiftInfo({
+                id: openJson.shiftId,
+                started_at: openJson.startedAt,
+                shift_type: openJson.shiftType as ShiftKind,
+                store_id: openJson.storeId ?? null,
+                store_name: openJson.storeName ?? null,
+                expected_drawer_cents: openJson.expectedDrawerCents ?? null,
+              });
+              setOpenShiftPrompt(false);
+              setStaleShiftPrompt(true);
+              return;
+            }
+          } catch {
+            // fall through to error display
+          }
+        }
+        throw new Error(json?.error || "Failed to start shift.");
+      }
 
       const shiftId = json.shiftId as string;
       if (!shiftId) throw new Error("API did not return shiftId.");
@@ -576,7 +625,7 @@ export default function ClockPageClient() {
       </div>
 
       {openShiftPrompt && openShiftInfo && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-10">
           <div className="card card-pad w-full max-w-md space-y-4">
             <div className="text-lg font-semibold">Return to open shift?</div>
             <div className="text-sm muted">
@@ -606,6 +655,176 @@ export default function ClockPageClient() {
                 }}
               >
                 Return to open shift
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {staleShiftPrompt && openShiftInfo && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/70 p-4 pt-10">
+          <div className="card card-pad w-full max-w-md space-y-4">
+            <div className="text-lg font-semibold">Close stale shift?</div>
+            <div className="text-sm muted">
+              {selectedProfileName} already has an open shift at{" "}
+              <b>{openShiftInfo.store_name ?? "another store"}</b> started at{" "}
+              <b>{new Date(openShiftInfo.started_at).toLocaleString()}</b>.
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm muted">End time</label>
+              <input
+                type="datetime-local"
+                className="input"
+                value={staleEndLocal}
+                onChange={e => setStaleEndLocal(e.target.value)}
+                disabled={staleSaving}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm muted">Ending drawer count ($)</label>
+              <input
+                className="input"
+                inputMode="decimal"
+                value={staleDrawer}
+                onChange={e => setStaleDrawer(e.target.value)}
+                disabled={staleSaving}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm muted">Change drawer count ($)</label>
+              <input
+                className="input"
+                inputMode="decimal"
+                value={staleChangeDrawer}
+                onChange={e => setStaleChangeDrawer(e.target.value)}
+                disabled={staleSaving}
+              />
+            </div>
+
+            <StaleShiftConfirmations
+              isOther={openShiftInfo.shift_type === "other"}
+              expectedCents={openShiftInfo.expected_drawer_cents ?? 20000}
+              drawerValue={staleDrawer}
+              changeDrawerValue={staleChangeDrawer}
+              confirm={staleConfirm}
+              notify={staleNotify}
+              setConfirm={setStaleConfirm}
+              setNotify={setStaleNotify}
+            />
+
+            <div className="space-y-2">
+              <label className="text-sm muted">Note (optional)</label>
+              <input
+                className="input"
+                value={staleNote}
+                onChange={e => setStaleNote(e.target.value)}
+                disabled={staleSaving}
+              />
+            </div>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={staleDoubleCheck}
+                onChange={e => setStaleDoubleCheck(e.target.checked)}
+                disabled={staleSaving}
+              />
+              I understand I'm ending a previous shift.
+            </label>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                className="btn-secondary px-4 py-2"
+                onClick={() => setStaleShiftPrompt(false)}
+                disabled={staleSaving}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn-secondary px-4 py-2"
+                onClick={() => {
+                  const base =
+                    openShiftInfo.shift_type === "open" || openShiftInfo.shift_type === "double"
+                      ? `/run/${openShiftInfo.id}`
+                      : `/shift/${openShiftInfo.id}`;
+                  router.replace(base);
+                }}
+                disabled={staleSaving}
+              >
+                Return to open shift
+              </button>
+              <button
+                className="btn-primary px-4 py-2 disabled:opacity-50"
+                disabled={staleSaving}
+                onClick={async () => {
+                  const endDate = new Date(staleEndLocal);
+                  if (Number.isNaN(endDate.getTime())) {
+                    setError("Invalid end time.");
+                    return;
+                  }
+                  const drawerCents = Math.round(Number(staleDrawer) * 100);
+                  const changeCents = Math.round(Number(staleChangeDrawer) * 100);
+                  const hasValidDrawer = Number.isFinite(drawerCents);
+                  const hasValidChange = Number.isFinite(changeCents);
+                  const expected = openShiftInfo.expected_drawer_cents ?? 20000;
+                  const isOtherShift = openShiftInfo.shift_type === "other";
+                  const outOfThreshold = !isOtherShift && hasValidDrawer
+                    ? isOutOfThreshold(drawerCents, expected)
+                    : false;
+                  const changeNot200 = !isOtherShift && hasValidChange ? changeCents !== 20000 : false;
+
+                  if (!isOtherShift && (!hasValidDrawer || !hasValidChange)) {
+                    setError("Enter valid drawer and change drawer amounts.");
+                    return;
+                  }
+                  if (outOfThreshold && !staleConfirm) {
+                    setError("Confirm the drawer count to proceed.");
+                    return;
+                  }
+                  if ((outOfThreshold || changeNot200) && !staleNotify) {
+                    setError("Notify manager to proceed.");
+                    return;
+                  }
+                  if (!staleDoubleCheck) {
+                    setError("Confirm you're ending the previous shift.");
+                    return;
+                  }
+
+                  setStaleSaving(true);
+                  setError(null);
+                  try {
+                    const res = await fetch("/api/end-shift", {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        shiftId: openShiftInfo.id,
+                        endAt: endDate.toISOString(),
+                        endDrawerCents: isOtherShift ? (hasValidDrawer ? drawerCents : null) : drawerCents,
+                        changeDrawerCents: isOtherShift ? (hasValidChange ? changeCents : null) : changeCents,
+                        confirmed: outOfThreshold ? staleConfirm : false,
+                        notifiedManager: (outOfThreshold || changeNot200) ? staleNotify : false,
+                        note: staleNote || null,
+                        manualClose: true,
+                      }),
+                    });
+                    const json = await res.json();
+                    if (!res.ok) throw new Error(json?.error || "Failed to end shift.");
+                    setStaleShiftPrompt(false);
+                    setOpenShiftPrompt(false);
+                    setOpenShiftInfo(null);
+                    setOpenShiftKey("");
+                    await startShift();
+                  } catch (e: unknown) {
+                    setError(e instanceof Error ? e.message : "Failed to end shift.");
+                  } finally {
+                    setStaleSaving(false);
+                  }
+                }}
+              >
+                End & Start New Shift
               </button>
             </div>
           </div>
@@ -653,6 +872,76 @@ export default function ClockPageClient() {
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+function StaleShiftConfirmations({
+  isOther,
+  expectedCents,
+  drawerValue,
+  changeDrawerValue,
+  confirm,
+  notify,
+  setConfirm,
+  setNotify,
+}: {
+  isOther: boolean;
+  expectedCents: number;
+  drawerValue: string;
+  changeDrawerValue: string;
+  confirm: boolean;
+  notify: boolean;
+  setConfirm: (next: boolean) => void;
+  setNotify: (next: boolean) => void;
+}) {
+  const drawerCents = Math.round(Number(drawerValue) * 100);
+  const changeCents = Math.round(Number(changeDrawerValue) * 100);
+  const hasDrawer = Number.isFinite(drawerCents);
+  const hasChange = Number.isFinite(changeCents);
+  const outOfThreshold = !isOther && hasDrawer ? isOutOfThreshold(drawerCents, expectedCents) : false;
+  const changeNot200 = !isOther && hasChange ? changeCents !== 20000 : false;
+  const msg = hasDrawer ? thresholdMessage(drawerCents, expectedCents) : null;
+
+  useEffect(() => {
+    if (!outOfThreshold) setConfirm(false);
+    if (!outOfThreshold && !changeNot200) setNotify(false);
+  }, [outOfThreshold, changeNot200, setConfirm, setNotify]);
+
+  if (isOther) return null;
+
+  return (
+    <div className="space-y-2">
+      {msg && (
+        <div className="banner text-sm">
+          {msg}
+        </div>
+      )}
+      {hasChange && changeNot200 && (
+        <div className="banner text-sm">
+          Change drawer should be exactly $200.00.
+        </div>
+      )}
+      {outOfThreshold && (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={confirm}
+            onChange={e => setConfirm(e.target.checked)}
+          />
+          I confirm this count is correct (required if outside threshold)
+        </label>
+      )}
+      {(outOfThreshold || changeNot200) && (
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={notify}
+            onChange={e => setNotify(e.target.checked)}
+          />
+          I notified manager (required if change drawer is not $200)
+        </label>
       )}
     </div>
   );

@@ -57,6 +57,12 @@ create table if not exists public.shifts (
   override_at timestamptz,
   override_by uuid,
   override_note text,
+  manual_closed boolean not null default false,
+  manual_closed_at timestamptz,
+  manual_closed_by_profile uuid references public.profiles(id) on delete set null,
+  manual_closed_review_status text check (manual_closed_review_status in ('approved','edited','removed')),
+  manual_closed_reviewed_at timestamptz,
+  manual_closed_reviewed_by uuid references auth.users(id) on delete set null,
   last_action text not null default 'added' check (last_action in ('added','edited','removed')),
   last_action_by uuid,
 

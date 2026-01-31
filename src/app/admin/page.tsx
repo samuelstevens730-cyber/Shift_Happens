@@ -144,6 +144,17 @@ export default function AdminIndex() {
             </p>
           </Link>
 
+          {/* Manual Shift Closures - review employee-ended shifts */}
+          <Link href="/admin/shifts?review=manual" className="tile">
+            <div className="flex items-center gap-2">
+              <span className="tile-dot" />
+              <div className="text-lg font-medium">Manual Closures</div>
+            </div>
+            <p className="mt-2 text-sm muted">
+              Review shifts closed manually by employees.
+            </p>
+          </Link>
+
           {/* Long Shift Overrides - approve shifts >13 hours */}
           <Link href="/admin/overrides" className="tile">
             <div className="flex items-center gap-2">

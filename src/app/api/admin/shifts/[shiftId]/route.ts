@@ -44,6 +44,8 @@ type ShiftRow = {
   store_id: string;
   profile_id: string;
   last_action: string | null;
+  manual_closed: boolean | null;
+  manual_closed_reviewed_at: string | null;
 };
 
 function getBearerToken(req: Request) {
@@ -81,7 +83,7 @@ export async function PATCH(
 
     const { data: shift, error: shiftErr } = await supabaseServer
       .from("shifts")
-      .select("id, store_id, profile_id, last_action")
+      .select("id, store_id, profile_id, last_action, manual_closed, manual_closed_reviewed_at")
       .eq("id", shiftId)
       .maybeSingle()
       .returns<ShiftRow>();
@@ -95,6 +97,7 @@ export async function PATCH(
       plannedStartAt?: string;
       startedAt?: string;
       endedAt?: string | null;
+      manualCloseReview?: "approved" | "edited";
     };
 
     const update: Record<string, string | null> = {};
@@ -103,12 +106,22 @@ export async function PATCH(
     if (body.startedAt) update.started_at = body.startedAt;
     if (body.endedAt !== undefined) update.ended_at = body.endedAt;
 
-    if (Object.keys(update).length === 0) {
+    if (Object.keys(update).length === 0 && !body.manualCloseReview) {
       return NextResponse.json({ error: "No fields to update." }, { status: 400 });
     }
 
     update.last_action = "edited";
     update.last_action_by = user.id;
+
+    if (body.manualCloseReview) {
+      update.manual_closed_review_status = body.manualCloseReview;
+      update.manual_closed_reviewed_at = new Date().toISOString();
+      update.manual_closed_reviewed_by = user.id;
+    } else if (shift.manual_closed && !shift.manual_closed_reviewed_at) {
+      update.manual_closed_review_status = "edited";
+      update.manual_closed_reviewed_at = new Date().toISOString();
+      update.manual_closed_reviewed_by = user.id;
+    }
 
     const { error: updateErr } = await supabaseServer
       .from("shifts")
@@ -141,10 +154,10 @@ export async function DELETE(
 
     const { data: shift, error: shiftErr } = await supabaseServer
       .from("shifts")
-      .select("id, store_id, last_action")
+      .select("id, store_id, last_action, manual_closed")
       .eq("id", shiftId)
       .maybeSingle()
-      .returns<{ id: string; store_id: string; last_action: string | null }>();
+      .returns<{ id: string; store_id: string; last_action: string | null; manual_closed: boolean | null }>();
     if (shiftErr) return NextResponse.json({ error: shiftErr.message }, { status: 500 });
     if (!shift) return NextResponse.json({ error: "Shift not found." }, { status: 404 });
     if (shift.last_action === "removed") return NextResponse.json({ ok: true });
@@ -155,6 +168,9 @@ export async function DELETE(
       .update({
         last_action: "removed",
         last_action_by: user.id,
+        manual_closed_review_status: shift.manual_closed ? "removed" : null,
+        manual_closed_reviewed_at: shift.manual_closed ? new Date().toISOString() : null,
+        manual_closed_reviewed_by: shift.manual_closed ? user.id : null,
       })
       .eq("id", shiftId);
     if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });

@@ -37,6 +37,11 @@ type ShiftRow = {
   plannedStartAt: string;
   startedAt: string;
   endedAt: string | null;
+  manualClosed: boolean;
+  manualClosedAt: string | null;
+  manualClosedReviewStatus: string | null;
+  manualClosedReviewedAt: string | null;
+  manualClosedReviewedBy: string | null;
   lastAction: string | null;
   lastActionBy: string | null;
 };
@@ -60,8 +65,11 @@ export default function AdminShiftsPage() {
   const [stores, setStores] = useState<Store[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [rows, setRows] = useState<ShiftRow[]>([]);
+  const [manualRows, setManualRows] = useState<ShiftRow[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [manualPage, setManualPage] = useState(1);
+  const [manualTotal, setManualTotal] = useState(0);
   const pageSize = 25;
 
   const [filterFrom, setFilterFrom] = useState(() => {
@@ -140,9 +148,44 @@ export default function AdminShiftsPage() {
     if (!formProfileId && json.profiles.length) setFormProfileId(json.profiles[0].id);
   };
 
+  const loadManualClosures = async (nextPage = manualPage) => {
+    setError(null);
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || "";
+    if (!token) {
+      router.replace("/login?next=/admin/shifts");
+      return;
+    }
+
+    const params = new URLSearchParams({
+      page: String(nextPage),
+      pageSize: String(pageSize),
+      from: new Date(filterFrom).toISOString(),
+      to: new Date(filterTo).toISOString(),
+      manualClosed: "1",
+      manualClosedReviewed: "0",
+    });
+    if (filterStore !== "all") params.set("storeId", filterStore);
+    if (filterProfile !== "all") params.set("profileId", filterProfile);
+
+    const res = await fetch(`/api/admin/shifts?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = (await res.json()) as ShiftsResponse;
+    if (!res.ok || "error" in json) {
+      setError("error" in json ? json.error : "Failed to load manual closures.");
+      return;
+    }
+
+    setManualRows(json.rows);
+    setManualPage(json.page);
+    setManualTotal(json.total);
+  };
+
   useEffect(() => {
     if (!isAuthed) return;
     void loadShifts(1);
+    void loadManualClosures(1);
   }, [isAuthed]);
 
   const canCreate = useMemo(() => {
@@ -242,6 +285,7 @@ export default function AdminShiftsPage() {
       }
 
       await loadShifts(page);
+      await loadManualClosures(manualPage);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to update shift.");
     } finally {
@@ -273,8 +317,43 @@ export default function AdminShiftsPage() {
       }
 
       await loadShifts(page);
+      await loadManualClosures(manualPage);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to remove shift.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function approveManualClose(id: string) {
+    if (saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || "";
+      if (!token) {
+        router.replace("/login?next=/admin/shifts");
+        return;
+      }
+
+      const res = await fetch(`/api/admin/shifts/${id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ manualCloseReview: "approved" }),
+      });
+      const json = (await res.json()) as SimpleResponse;
+      if (!res.ok || "error" in json) {
+        setError("error" in json ? json.error : "Failed to approve manual close.");
+        return;
+      }
+
+      await loadManualClosures(manualPage);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to approve manual close.");
     } finally {
       setSaving(false);
     }
@@ -289,6 +368,44 @@ export default function AdminShiftsPage() {
         <h1 className="text-2xl font-semibold">Shifts</h1>
 
         {error && <div className="banner banner-error text-sm">{error}</div>}
+
+        <div className="card card-pad space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-lg font-medium">Review Shifts Closed Manually</div>
+            <button className="btn-secondary px-3 py-1.5" onClick={() => loadManualClosures(1)} disabled={saving}>
+              Refresh
+            </button>
+          </div>
+          <div className="text-sm muted">
+            These shifts were closed by employees outside the normal flow and require review.
+          </div>
+          <div className="space-y-3">
+            {manualRows.map(r => (
+              <ShiftCard
+                key={r.id}
+                row={r}
+                onSave={updateShift}
+                onRemove={removeShift}
+                onApprove={approveManualClose}
+                saving={saving}
+                showApprove
+              />
+            ))}
+            {!manualRows.length && (
+              <div className="card card-pad text-center text-sm muted">
+                No manual closures pending review.
+              </div>
+            )}
+          </div>
+          {manualTotal > pageSize && (
+            <Pagination
+              page={manualPage}
+              pageSize={pageSize}
+              total={manualTotal}
+              onPageChange={p => loadManualClosures(p)}
+            />
+          )}
+        </div>
 
         <div className="card card-pad space-y-4">
           <div className="text-lg font-medium">Add shift</div>
@@ -366,7 +483,14 @@ export default function AdminShiftsPage() {
               </select>
             </div>
           </div>
-          <button className="btn-primary px-4 py-2" onClick={() => loadShifts(1)} disabled={saving}>
+          <button
+            className="btn-primary px-4 py-2"
+            onClick={() => {
+              void loadShifts(1);
+              void loadManualClosures(1);
+            }}
+            disabled={saving}
+          >
             Apply Filters
           </button>
         </div>
@@ -405,12 +529,16 @@ function ShiftCard({
   row,
   onSave,
   onRemove,
+  onApprove,
   saving,
+  showApprove,
 }: {
   row: ShiftRow;
   onSave: (id: string, data: Partial<ShiftRow>) => void;
   onRemove: (id: string) => void;
+  onApprove?: (id: string) => void;
   saving: boolean;
+  showApprove?: boolean;
 }) {
   const [shiftType, setShiftType] = useState(row.shiftType);
   const [plannedStartAt, setPlannedStartAt] = useState(row.plannedStartAt);
@@ -434,6 +562,11 @@ function ShiftCard({
           Last action: {row.lastAction ?? "—"}
         </div>
       </div>
+      {row.manualClosed && !row.manualClosedReviewedAt && (
+        <div className="text-xs text-amber-700">
+          Manual closure pending review.
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1">
@@ -475,6 +608,15 @@ function ShiftCard({
       </div>
 
       <div className="flex flex-wrap gap-2">
+        {showApprove && onApprove && (
+          <button
+            className="btn-primary px-4 py-2"
+            onClick={() => onApprove(row.id)}
+            disabled={saving}
+          >
+            Approve Manual Close
+          </button>
+        )}
         <button
           className="btn-primary px-4 py-2"
           onClick={() => onSave(row.id, { shiftType, plannedStartAt, startedAt, endedAt: endedAt || null })}

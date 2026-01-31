@@ -57,6 +57,11 @@ type ShiftRow = {
   planned_start_at: string;
   started_at: string;
   ended_at: string | null;
+  manual_closed: boolean | null;
+  manual_closed_at: string | null;
+  manual_closed_review_status: string | null;
+  manual_closed_reviewed_at: string | null;
+  manual_closed_reviewed_by: string | null;
   last_action: string | null;
   last_action_by: string | null;
   store: { id: string; name: string } | null;
@@ -100,6 +105,8 @@ export async function GET(req: Request) {
     const to = url.searchParams.get("to");
     const storeId = url.searchParams.get("storeId") || "";
     const profileId = url.searchParams.get("profileId") || "";
+    const manualClosed = url.searchParams.get("manualClosed") || "";
+    const manualClosedReviewed = url.searchParams.get("manualClosedReviewed") || "";
 
     if (storeId && !managerStoreIds.includes(storeId)) {
       return NextResponse.json({ error: "Invalid store selection." }, { status: 403 });
@@ -147,7 +154,7 @@ export async function GET(req: Request) {
     let query = supabaseServer
       .from("shifts")
       .select(
-        "id, store_id, profile_id, shift_type, planned_start_at, started_at, ended_at, last_action, last_action_by, store:store_id(id,name), profile:profile_id(id,name)",
+        "id, store_id, profile_id, shift_type, planned_start_at, started_at, ended_at, manual_closed, manual_closed_at, manual_closed_review_status, manual_closed_reviewed_at, manual_closed_reviewed_by, last_action, last_action_by, store:store_id(id,name), profile:profile_id(id,name)",
         { count: "exact" }
       )
       .in("store_id", managerStoreIds)
@@ -157,6 +164,10 @@ export async function GET(req: Request) {
     if (to) query = query.lte("started_at", to);
     if (storeId) query = query.eq("store_id", storeId);
     if (profileId) query = query.eq("profile_id", profileId);
+    if (manualClosed === "1") query = query.eq("manual_closed", true);
+    if (manualClosed === "0") query = query.eq("manual_closed", false);
+    if (manualClosedReviewed === "1") query = query.not("manual_closed_reviewed_at", "is", null);
+    if (manualClosedReviewed === "0") query = query.is("manual_closed_reviewed_at", null);
 
     const { data, error, count } = await query
       .order("started_at", { ascending: false })
@@ -174,6 +185,11 @@ export async function GET(req: Request) {
       plannedStartAt: r.planned_start_at,
       startedAt: r.started_at,
       endedAt: r.ended_at,
+      manualClosed: Boolean(r.manual_closed),
+      manualClosedAt: r.manual_closed_at,
+      manualClosedReviewStatus: r.manual_closed_review_status,
+      manualClosedReviewedAt: r.manual_closed_reviewed_at,
+      manualClosedReviewedBy: r.manual_closed_reviewed_by,
       lastAction: r.last_action,
       lastActionBy: r.last_action_by,
     }));

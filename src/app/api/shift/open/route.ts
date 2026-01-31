@@ -15,8 +15,13 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 
-type StoreRow = { id: string };
-type ShiftRow = { id: string; started_at: string | null; shift_type: string | null };
+type StoreRow = { id: string; name: string; expected_drawer_cents: number };
+type ShiftRow = {
+  id: string;
+  started_at: string | null;
+  shift_type: string | null;
+  store: { id: string; name: string; expected_drawer_cents: number } | null;
+};
 
 export async function GET(req: Request) {
   try {
@@ -33,7 +38,7 @@ export async function GET(req: Request) {
     if (!storeId && qrToken) {
       const { data: storeRow, error: storeErr } = await supabaseServer
         .from("stores")
-        .select("id")
+        .select("id, name, expected_drawer_cents")
         .eq("qr_token", qrToken)
         .maybeSingle()
         .returns<StoreRow>();
@@ -45,7 +50,7 @@ export async function GET(req: Request) {
 
     let shiftQuery = supabaseServer
       .from("shifts")
-      .select("id, started_at, shift_type")
+      .select("id, started_at, shift_type, store:store_id(id, name, expected_drawer_cents)")
       .eq("profile_id", profileId)
       .is("ended_at", null)
       .neq("last_action", "removed")
@@ -63,6 +68,9 @@ export async function GET(req: Request) {
       shiftId: shift.id,
       startedAt: shift.started_at,
       shiftType: shift.shift_type,
+      storeId: shift.store?.id ?? null,
+      storeName: shift.store?.name ?? null,
+      expectedDrawerCents: shift.store?.expected_drawer_cents ?? null,
     });
   } catch (e: unknown) {
     return NextResponse.json(

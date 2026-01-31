@@ -41,6 +41,7 @@ type Body = {
   confirmed?: boolean;
   notifiedManager?: boolean;
   note?: string | null;
+  manualClose?: boolean;
 };
 
 type TemplateRow = { id: string; store_id: string | null; shift_type: string };
@@ -81,7 +82,7 @@ export async function POST(req: Request) {
 
     const { data: shift, error: shiftErr } = await supabaseServer
       .from("shifts")
-      .select("id, store_id, shift_type, ended_at, started_at")
+      .select("id, store_id, profile_id, shift_type, ended_at, started_at")
       .eq("id", body.shiftId)
       .maybeSingle();
 
@@ -236,12 +237,23 @@ export async function POST(req: Request) {
       : (endRounded.getTime() - startedAt.getTime()) / (1000 * 60 * 60);
     const requiresOverride = durationHours != null && durationHours > 13;
 
+    const updatePayload: Record<string, string | boolean | null> = {
+      ended_at: endRounded.toISOString(),
+      requires_override: requiresOverride,
+    };
+
+    if (body.manualClose) {
+      updatePayload.manual_closed = true;
+      updatePayload.manual_closed_at = endRounded.toISOString();
+      updatePayload.manual_closed_by_profile = shift.profile_id;
+      updatePayload.manual_closed_review_status = null;
+      updatePayload.manual_closed_reviewed_at = null;
+      updatePayload.manual_closed_reviewed_by = null;
+    }
+
     const { error: endShiftErr } = await supabaseServer
       .from("shifts")
-      .update({
-        ended_at: endRounded.toISOString(),
-        requires_override: requiresOverride,
-      })
+      .update(updatePayload)
       .eq("id", body.shiftId);
 
     // NOTE: DB trigger enforces drawer counts for open/close/double at this point.
