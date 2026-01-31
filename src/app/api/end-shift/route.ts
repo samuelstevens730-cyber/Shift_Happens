@@ -163,10 +163,25 @@ export async function POST(req: Request) {
         const missing = Array.from(requiredIds).filter(id => !doneSet.has(id));
 
         if (missing.length) {
-          return NextResponse.json(
-            { error: "Missing required checklist items.", missingItemCount: missing.length, missing },
-            { status: 400 }
-          );
+          if (body.manualClose) {
+            const nowIso = new Date().toISOString();
+            const rows = missing.map(itemId => ({
+              shift_id: body.shiftId,
+              item_id: itemId,
+              checked_at: nowIso,
+            }));
+            const { error: insertErr } = await supabaseServer
+              .from("shift_checklist_checks")
+              .upsert(rows, { onConflict: "shift_id,item_id" });
+            if (insertErr) {
+              return NextResponse.json({ error: insertErr.message }, { status: 500 });
+            }
+          } else {
+            return NextResponse.json(
+              { error: "Missing required checklist items.", missingItemCount: missing.length, missing },
+              { status: 400 }
+            );
+          }
         }
       }
     }
