@@ -58,6 +58,21 @@ type AssignmentsResponse =
 
 type SimpleResponse = { ok: true } | { error: string };
 
+function formatWhen(value: string | null) {
+  if (!value) return "--";
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return value;
+  return dt.toLocaleString("en-US", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 export default function AssignmentsAdminPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -489,7 +504,7 @@ function AssignmentCard({
           {assignment.type.toUpperCase()} - {status}
         </div>
         <div className="text-xs muted">
-          Sent {new Date(assignment.created_at).toLocaleString()}
+          Sent {formatWhen(assignment.created_at)}
         </div>
       </div>
 
@@ -512,8 +527,8 @@ function AssignmentCard({
 
       <div className="text-xs muted">
         {assignment.type === "message"
-          ? `Acknowledged at: ${assignment.acknowledged_at ? new Date(assignment.acknowledged_at).toLocaleString() : "Pending"}`
-          : `Completed at: ${assignment.completed_at ? new Date(assignment.completed_at).toLocaleString() : "Pending"}`
+          ? `Acknowledged at: ${assignment.acknowledged_at ? formatWhen(assignment.acknowledged_at) : "Pending"}`
+          : `Completed at: ${assignment.completed_at ? formatWhen(assignment.completed_at) : "Pending"}`
         }
       </div>
 
@@ -541,7 +556,7 @@ function AssignmentCard({
         </button>
         {assignment.audit_note_updated_at && (
           <div className="text-xs muted">
-            Note updated {new Date(assignment.audit_note_updated_at).toLocaleString()}
+            Note updated {formatWhen(assignment.audit_note_updated_at)}
             {assignment.audit_note_by_name ? ` by ${assignment.audit_note_by_name}` : ""}
           </div>
         )}

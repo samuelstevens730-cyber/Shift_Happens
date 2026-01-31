@@ -82,6 +82,19 @@ function shouldShowVarianceControls(drawerCents: number, expectedCents: number) 
   return isOutOfThreshold(drawerCents, expectedCents);
 }
 
+function formatDateTime(value: string) {
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return value;
+  return dt.toLocaleString("en-US", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 export default function ShiftPage() {
   const { id } = useParams<{ id: string }>();
   const shiftId = id;
@@ -246,7 +259,7 @@ export default function ShiftPage() {
   if (!state) return <div className="p-6">No data.</div>;
 
   const reuseLabel = reusedStartedAt
-    ? new Date(reusedStartedAt).toLocaleString()
+    ? formatDateTime(reusedStartedAt)
     : "an earlier time";
 
   return (

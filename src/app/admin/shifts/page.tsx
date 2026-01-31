@@ -57,6 +57,13 @@ function toLocalInputValue(d = new Date()) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
+function toLocalInputValueFromISO(value: string | null) {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  return toLocalInputValue(d);
+}
+
 function toRangeStart(dateStr: string) {
   const d = new Date(`${dateStr}T00:00:00`);
   return d.toISOString();
@@ -551,15 +558,15 @@ function ShiftCard({
   showApprove?: boolean;
 }) {
   const [shiftType, setShiftType] = useState(row.shiftType);
-  const [plannedStartAt, setPlannedStartAt] = useState(row.plannedStartAt);
-  const [startedAt, setStartedAt] = useState(row.startedAt);
-  const [endedAt, setEndedAt] = useState(row.endedAt ?? "");
+  const [plannedStartAt, setPlannedStartAt] = useState(toLocalInputValueFromISO(row.plannedStartAt));
+  const [startedAt, setStartedAt] = useState(toLocalInputValueFromISO(row.startedAt));
+  const [endedAt, setEndedAt] = useState(toLocalInputValueFromISO(row.endedAt));
 
   useEffect(() => {
     setShiftType(row.shiftType);
-    setPlannedStartAt(row.plannedStartAt);
-    setStartedAt(row.startedAt);
-    setEndedAt(row.endedAt ?? "");
+    setPlannedStartAt(toLocalInputValueFromISO(row.plannedStartAt));
+    setStartedAt(toLocalInputValueFromISO(row.startedAt));
+    setEndedAt(toLocalInputValueFromISO(row.endedAt));
   }, [row]);
 
   return (
@@ -593,8 +600,8 @@ function ShiftCard({
           <input
             type="datetime-local"
             className="input"
-            value={plannedStartAt.slice(0, 16)}
-            onChange={e => setPlannedStartAt(new Date(e.target.value).toISOString())}
+            value={plannedStartAt}
+            onChange={e => setPlannedStartAt(e.target.value)}
           />
         </div>
         <div className="space-y-1">
@@ -602,8 +609,8 @@ function ShiftCard({
           <input
             type="datetime-local"
             className="input"
-            value={startedAt.slice(0, 16)}
-            onChange={e => setStartedAt(new Date(e.target.value).toISOString())}
+            value={startedAt}
+            onChange={e => setStartedAt(e.target.value)}
           />
         </div>
         <div className="space-y-1">
@@ -611,8 +618,8 @@ function ShiftCard({
           <input
             type="datetime-local"
             className="input"
-            value={endedAt ? endedAt.slice(0, 16) : ""}
-            onChange={e => setEndedAt(e.target.value ? new Date(e.target.value).toISOString() : "")}
+            value={endedAt}
+            onChange={e => setEndedAt(e.target.value)}
           />
         </div>
       </div>
@@ -629,7 +636,12 @@ function ShiftCard({
         )}
         <button
           className="btn-primary px-4 py-2"
-          onClick={() => onSave(row.id, { shiftType, plannedStartAt, startedAt, endedAt: endedAt || null })}
+          onClick={() => onSave(row.id, {
+            shiftType,
+            plannedStartAt: plannedStartAt ? new Date(plannedStartAt).toISOString() : row.plannedStartAt,
+            startedAt: startedAt ? new Date(startedAt).toISOString() : row.startedAt,
+            endedAt: endedAt ? new Date(endedAt).toISOString() : null,
+          })}
           disabled={saving}
         >
           Save Changes

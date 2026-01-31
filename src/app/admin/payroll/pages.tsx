@@ -44,6 +44,21 @@ type PayrollResponse =
   | { rows: ShiftRow[]; page: number; pageSize: number; total: number }
   | { error: string };
 
+function formatWhen(value: string | null) {
+  if (!value) return "--";
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return value;
+  return dt.toLocaleString("en-US", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 function toISODate(d: Date) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -218,8 +233,8 @@ export default function PayrollAdminPage() {
                 <tr key={r.id} className="border-t border-white/10">
                   <td className="px-3 py-2">{r.full_name || "Unknown"}</td>
                   <td className="px-3 py-2">{r.store_name || r.store_id}</td>
-                  <td className="px-3 py-2">{new Date(r.start_at).toLocaleString()}</td>
-                  <td className="px-3 py-2">{new Date(r.end_at).toLocaleString()}</td>
+                  <td className="px-3 py-2">{formatWhen(r.start_at)}</td>
+                  <td className="px-3 py-2">{formatWhen(r.end_at)}</td>
                   <td className="px-3 py-2 text-right">{r.minutes}</td>
                   <td className="px-3 py-2 text-right">{r.rounded_hours}</td>
                 </tr>

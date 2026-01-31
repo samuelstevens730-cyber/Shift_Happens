@@ -49,6 +49,18 @@ function roundTo30Minutes(d: Date) {
   return nd;
 }
 
+function formatDateTime(dt: Date) {
+  if (Number.isNaN(dt.getTime())) return "";
+  return dt.toLocaleString("en-US", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 export default function ClockPageClient() {
   const router = useRouter();
   const search = useSearchParams();
@@ -158,7 +170,7 @@ export default function ClockPageClient() {
     if (!plannedStartLocal) return "Unknown time";
     const dt = new Date(plannedStartLocal);
     if (Number.isNaN(dt.getTime())) return plannedStartLocal;
-    return dt.toLocaleString();
+    return formatDateTime(dt);
   }, [plannedStartLocal]);
 
   // Validation: all required fields filled and threshold rules satisfied
@@ -448,10 +460,10 @@ export default function ClockPageClient() {
           <div className="card card-pad space-y-3">
             <div className="text-lg font-semibold">Open shift detected</div>
             <div className="text-sm muted">
-              {selectedProfileName} already has an open shift at{" "}
-              <b>{openShiftInfo.store_name ?? "another store"}</b> started at{" "}
-              <b>{new Date(openShiftInfo.started_at).toLocaleString()}</b>.
-            </div>
+            {selectedProfileName} already has an open shift at{" "}
+            <b>{openShiftInfo.store_name ?? "another store"}</b> started at{" "}
+            <b>{formatDateTime(new Date(openShiftInfo.started_at))}</b>.
+          </div>
             <div className="flex flex-col sm:flex-row gap-2">
               <button
                 className="btn-secondary px-4 py-2"
@@ -484,10 +496,10 @@ export default function ClockPageClient() {
           <div className="card card-pad space-y-4">
             <div className="text-lg font-semibold">Close stale shift?</div>
             <div className="text-sm muted">
-              {selectedProfileName} already has an open shift at{" "}
-              <b>{openShiftInfo.store_name ?? "another store"}</b> started at{" "}
-              <b>{new Date(openShiftInfo.started_at).toLocaleString()}</b>.
-            </div>
+            {selectedProfileName} already has an open shift at{" "}
+            <b>{openShiftInfo.store_name ?? "another store"}</b> started at{" "}
+            <b>{formatDateTime(new Date(openShiftInfo.started_at))}</b>.
+          </div>
 
             <div className="space-y-2">
               <label className="text-sm muted">End time</label>

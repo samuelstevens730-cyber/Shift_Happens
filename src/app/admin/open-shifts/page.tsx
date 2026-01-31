@@ -48,7 +48,15 @@ function formatDate(value: string | null) {
   if (!value) return "--";
   const d = new Date(value);
   if (Number.isNaN(d.getTime())) return "--";
-  return d.toLocaleString();
+  return d.toLocaleString("en-US", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
 export default function OpenShiftsPage() {
