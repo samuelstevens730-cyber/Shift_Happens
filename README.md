@@ -21,7 +21,7 @@ Shift Happens is a comprehensive time clock and shift management system that han
 | **React 19** | UI components |
 | **TypeScript** | Type safety |
 | **Tailwind CSS** | Utility-first styling |
-| **Supabase** | PostgreSQL database + authentication + Row-Level Security |
+| **Supabase** | PostgreSQL database + authentication + Row-Level Security | *RLS is enforced for admin and reporting data. Employee clock-in flows are intentionally API-gated during MVP to minimize friction.* 
 | **Vercel** | Hosting and deployment |
 
 ## Setup Instructions
@@ -152,7 +152,7 @@ src/
 ### Employee Clock In/Out Workflow
 
 1. Employee scans store QR code or selects store manually
-2. Selects their name from the employee list
+2. Selects their name from the employee list (temporary for MVP only)
 3. Chooses shift type (open, close, double, other)
 4. Enters planned start time (rounded to 30-minute increments)
 5. Enters starting drawer count (except for "other" shifts)
@@ -229,10 +229,10 @@ src/
 - [ ] Update Supabase Site URL to production domain
 - [ ] Add production domain to Supabase Redirect URLs
 - [ ] Verify Row-Level Security policies are enabled
-- [ ] Test password reset flow with production URLs
+- [ ] Test password reset flow with production URLs (⚠️ Password resets are handled by the application. Supabase-generated reset emails must include /auth/reset as an allowed redirect URL or users will be redirected to the home page without a token.)
 - [ ] Generate QR codes for each store's clock-in URL
 
-## Future Roadmap
+## Future Roadmap  
 
 - [ ] **PIN Authentication**: Employee PIN codes for faster clock-in
 - [ ] **Employee Portal**: Self-service schedule viewing and time-off requests

@@ -225,7 +225,7 @@ export default function ShiftPage() {
   if (!state) return <div className="p-6">No data.</div>;
 
   return (
-    <div className="min-h-screen p-6">
+    <div className="min-h-screen p-6 pb-24">
       <div className="max-w-md mx-auto space-y-4">
         <h1 className="text-2xl font-semibold">Shift</h1>
 
@@ -290,13 +290,15 @@ export default function ShiftPage() {
         )}
 
         {/* Clock out button - disabled until all required tasks done */}
-        <button
-          className="w-full rounded bg-black text-white py-2 disabled:opacity-50"
-          disabled={shiftType !== "other" && remainingRequired > 0}
-          onClick={() => setShowClockOut(true)}
-        >
-          Clock Out
-        </button>
+        <div className="sticky-cta">
+          <button
+            className="w-full rounded bg-black text-white py-2 disabled:opacity-50"
+            disabled={shiftType !== "other" && remainingRequired > 0}
+            onClick={() => setShowClockOut(true)}
+          >
+            Clock Out
+          </button>
+        </div>
 
         {showClockOut && (
           <ClockOutModal

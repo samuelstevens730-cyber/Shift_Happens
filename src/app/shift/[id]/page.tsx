@@ -250,7 +250,7 @@ export default function ShiftPage() {
     : "an earlier time";
 
   return (
-    <div className="min-h-screen p-6">
+    <div className="min-h-screen p-6 pb-24">
       <div className="max-w-md mx-auto space-y-4">
         <h1 className="text-2xl font-semibold">Shift</h1>
 
@@ -372,17 +372,19 @@ export default function ShiftPage() {
         )}
 
         {/* Clock out button - disabled until all requirements met */}
-        <button
-          className="w-full rounded bg-black text-white py-2 disabled:opacity-50"
-          disabled={
-            (shiftType !== "other" && remainingRequired > 0) ||
-            pendingMessages.length > 0 ||
-            pendingTasks.length > 0
-          }
-          onClick={() => setShowClockOut(true)}
-        >
-          Clock Out
-        </button>
+        <div className="sticky-cta">
+          <button
+            className="w-full rounded bg-black text-white py-2 disabled:opacity-50"
+            disabled={
+              (shiftType !== "other" && remainingRequired > 0) ||
+              pendingMessages.length > 0 ||
+              pendingTasks.length > 0
+            }
+            onClick={() => setShowClockOut(true)}
+          >
+            Clock Out
+          </button>
+        </div>
 
         {showClockOut && (
           <ClockOutModal
