@@ -39,6 +39,7 @@ type ShiftRow = {
   endedAt: string | null;
   startDrawerCents: number | null;
   endDrawerCents: number | null;
+  endNote: string | null;
   manualClosed: boolean;
   manualClosedAt: string | null;
   manualClosedReviewStatus: string | null;
@@ -607,6 +608,11 @@ function ShiftCard({
         <div>Start drawer: <b>{formatMoney(row.startDrawerCents)}</b></div>
         <div>End drawer: <b>{formatMoney(row.endDrawerCents)}</b></div>
       </div>
+      {row.endNote && (
+        <div className="text-sm">
+          End note: <b>{row.endNote}</b>
+        </div>
+      )}
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1">

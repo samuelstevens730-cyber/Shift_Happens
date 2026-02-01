@@ -61,6 +61,50 @@ function formatDateTime(dt: Date) {
   });
 }
 
+function getCstOffsetMinutes(isoLike: string) {
+  const dt = new Date(isoLike);
+  if (Number.isNaN(dt.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    timeZoneName: "shortOffset",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(dt);
+  const tz = parts.find(p => p.type === "timeZoneName")?.value || "";
+  const match = tz.match(/GMT([+-]\d{1,2})(?::(\d{2}))?/i);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const mins = Number(match[2] || "0");
+  return hours * 60 + (hours < 0 ? -mins : mins);
+}
+
+function toCstDateFromLocalInput(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!match) return null;
+  const [, y, m, d, hh, mm] = match;
+  const isoLike = `${y}-${m}-${d}T${hh}:${mm}:00Z`;
+  const offset = getCstOffsetMinutes(isoLike);
+  if (offset == null) return null;
+  const utcMillis = Date.UTC(Number(y), Number(m) - 1, Number(d), Number(hh), Number(mm)) - offset * 60000;
+  return new Date(utcMillis);
+}
+
+function formatCst(dt: Date) {
+  if (Number.isNaN(dt.getTime())) return "";
+  return dt.toLocaleString("en-US", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 export default function ClockPageClient() {
   const router = useRouter();
   const search = useSearchParams();
@@ -168,9 +212,16 @@ export default function ClockPageClient() {
 
   const plannedStartLabel = useMemo(() => {
     if (!plannedStartLocal) return "Unknown time";
-    const dt = new Date(plannedStartLocal);
-    if (Number.isNaN(dt.getTime())) return plannedStartLocal;
-    return formatDateTime(dt);
+    const dt = toCstDateFromLocalInput(plannedStartLocal);
+    if (!dt) return plannedStartLocal;
+    return formatCst(dt);
+  }, [plannedStartLocal]);
+
+  const plannedStartRoundedLabel = useMemo(() => {
+    if (!plannedStartLocal) return "";
+    const dt = toCstDateFromLocalInput(plannedStartLocal);
+    if (!dt) return "";
+    return formatCst(roundTo30Minutes(dt));
   }, [plannedStartLocal]);
 
   // Validation: all required fields filled and threshold rules satisfied
@@ -350,8 +401,8 @@ export default function ClockPageClient() {
   async function startShift() {
     setError(null);
 
-    const planned = new Date(plannedStartLocal);
-    if (Number.isNaN(planned.getTime())) {
+    const planned = toCstDateFromLocalInput(plannedStartLocal);
+    if (!planned) {
       setError("Invalid planned start date/time.");
       return;
     }
@@ -748,17 +799,19 @@ export default function ClockPageClient() {
             </select>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm muted">Planned start time</label>
-            <input
-              type="datetime-local"
-              className="input"
-              value={plannedStartLocal}
-              onChange={e => setPlannedStartLocal(e.target.value)}
-              disabled={submitting}
-            />
-            <div className="text-xs muted">Rounded to 30 minutes on submit.</div>
+        <div className="space-y-2">
+          <label className="text-sm muted">Planned start time</label>
+          <input
+            type="datetime-local"
+            className="input"
+            value={plannedStartLocal}
+            onChange={e => setPlannedStartLocal(e.target.value)}
+            disabled={submitting}
+          />
+          <div className="text-xs muted">
+            Times are recorded in CST. Rounded to {plannedStartRoundedLabel || "the nearest 30 minutes"} on submit.
           </div>
+        </div>
 
           <div className="space-y-2">
             <label className="text-sm muted">
@@ -849,6 +902,11 @@ export default function ClockPageClient() {
               I am clocking in as <b>{selectedProfileName}</b> at <b>{selectedStoreName}</b> at{" "}
               <b>{plannedStartLabel}</b>.
             </div>
+            {plannedStartRoundedLabel && (
+              <div className="text-xs muted">
+                Rounded to <b>{plannedStartRoundedLabel}</b> for payroll.
+              </div>
+            )}
 
             <label className="flex items-center gap-2 text-sm">
               <input

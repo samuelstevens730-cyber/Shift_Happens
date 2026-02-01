@@ -45,6 +45,7 @@ type CountRow = {
   shift_id: string;
   count_type: "start" | "end";
   drawer_cents: number;
+  note: string | null;
 };
 
 type OpenShiftRow = {
@@ -58,6 +59,7 @@ type OpenShiftRow = {
   createdAt: string | null;
   startDrawerCents: number | null;
   endDrawerCents: number | null;
+  endNote: string | null;
 };
 
 function getBearerToken(req: Request) {
@@ -90,17 +92,20 @@ export async function GET(req: Request) {
   if (shiftIds.length) {
     const { data: countRows, error: countErr } = await supabaseServer
       .from("shift_drawer_counts")
-      .select("shift_id, count_type, drawer_cents")
+      .select("shift_id, count_type, drawer_cents, note")
       .in("shift_id", shiftIds)
       .in("count_type", ["start", "end"])
       .returns<CountRow[]>();
     if (countErr) return NextResponse.json({ error: countErr.message }, { status: 500 });
 
-    countsByShift = new Map(shiftIds.map(id => [id, { start: null, end: null }]));
+    countsByShift = new Map(shiftIds.map(id => [id, { start: null, end: null, endNote: null }]));
     (countRows ?? []).forEach(r => {
-      const entry = countsByShift.get(r.shift_id) ?? { start: null, end: null };
+      const entry = countsByShift.get(r.shift_id) ?? { start: null, end: null, endNote: null };
       if (r.count_type === "start") entry.start = r.drawer_cents;
-      if (r.count_type === "end") entry.end = r.drawer_cents;
+      if (r.count_type === "end") {
+        entry.end = r.drawer_cents;
+        entry.endNote = r.note ?? null;
+      }
       countsByShift.set(r.shift_id, entry);
     });
   }
@@ -116,6 +121,7 @@ export async function GET(req: Request) {
     createdAt: r.created_at ?? null,
     startDrawerCents: countsByShift.get(r.id)?.start ?? null,
     endDrawerCents: countsByShift.get(r.id)?.end ?? null,
+    endNote: countsByShift.get(r.id)?.endNote ?? null,
   }));
 
   return NextResponse.json({ rows });

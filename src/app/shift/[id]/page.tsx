@@ -193,6 +193,10 @@ export default function ShiftPage() {
     return (state?.assignments || []).filter(a => a.type === "task" && !a.completed_at);
   }, [state]);
 
+  const endNote = useMemo(() => {
+    return (state?.counts || []).find(c => c.count_type === "end")?.note ?? null;
+  }, [state]);
+
   /**
    * Mark an assignment as acknowledged (messages) or completed (tasks).
    * Updates local state optimistically.
@@ -284,6 +288,12 @@ export default function ShiftPage() {
           Store: <b>{state.store.name}</b> · Employee: <b>{state.employee || "Unknown"}</b> · Type:{" "}
           <b>{state.shift.shift_type}</b>
         </div>
+
+        {endNote && (
+          <div className="text-sm border rounded p-3">
+            End note: <b>{endNote}</b>
+          </div>
+        )}
 
         {/* Double shifts require mid-shift drawer count */}
         {shiftType === "double" && (

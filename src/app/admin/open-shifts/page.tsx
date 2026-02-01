@@ -36,6 +36,7 @@ type OpenShiftRow = {
   createdAt: string | null;
   startDrawerCents: number | null;
   endDrawerCents: number | null;
+  endNote: string | null;
 };
 
 type OpenShiftResponse = { rows: OpenShiftRow[] } | { error: string };
@@ -240,6 +241,12 @@ export default function OpenShiftsPage() {
                 <div>Start drawer: <b>{formatMoney(r.startDrawerCents)}</b></div>
                 <div>End drawer: <b>{formatMoney(r.endDrawerCents)}</b></div>
               </div>
+
+              {r.endNote && (
+                <div className="text-sm">
+                  End note: <b>{r.endNote}</b>
+                </div>
+              )}
 
               <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
                 <label className="text-sm muted">End time</label>

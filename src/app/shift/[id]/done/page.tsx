@@ -134,6 +134,10 @@ export default function ShiftPage() {
     return (state?.counts || []).some(c => c.count_type === "changeover");
   }, [state]);
 
+  const endNote = useMemo(() => {
+    return (state?.counts || []).find(c => c.count_type === "end")?.note ?? null;
+  }, [state]);
+
   // Prefer groups; fallback to raw items converted to groups 1:1
   const displayGroups: ChecklistGroup[] = useMemo(() => {
     if (!state) return [];
@@ -233,6 +237,12 @@ export default function ShiftPage() {
           Store: <b>{state.store.name}</b> · Employee: <b>{state.employee || "Unknown"}</b> · Type:{" "}
           <b>{state.shift.shift_type}</b>
         </div>
+
+        {endNote && (
+          <div className="text-sm border rounded p-3">
+            End note: <b>{endNote}</b>
+          </div>
+        )}
 
         {/* Double shifts require mid-shift drawer count */}
         {shiftType === "double" && (
