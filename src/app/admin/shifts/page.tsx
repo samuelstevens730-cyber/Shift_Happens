@@ -37,6 +37,8 @@ type ShiftRow = {
   plannedStartAt: string;
   startedAt: string;
   endedAt: string | null;
+  startDrawerCents: number | null;
+  endDrawerCents: number | null;
   manualClosed: boolean;
   manualClosedAt: string | null;
   manualClosedReviewStatus: string | null;
@@ -72,6 +74,11 @@ function toRangeStart(dateStr: string) {
 function toRangeEnd(dateStr: string) {
   const d = new Date(`${dateStr}T23:59:59.999`);
   return d.toISOString();
+}
+
+function formatMoney(cents: number | null) {
+  if (cents == null) return "--";
+  return `$${(cents / 100).toFixed(2)}`;
 }
 
 export default function AdminShiftsPage() {
@@ -595,6 +602,11 @@ function ShiftCard({
           Manual closure pending review. Required checklist items were auto-completed.
         </div>
       )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+        <div>Start drawer: <b>{formatMoney(row.startDrawerCents)}</b></div>
+        <div>End drawer: <b>{formatMoney(row.endDrawerCents)}</b></div>
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="space-y-1">

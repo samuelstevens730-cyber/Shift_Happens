@@ -57,6 +57,8 @@ type ShiftRow = {
   planned_start_at: string;
   started_at: string;
   ended_at: string | null;
+  start_drawer_cents: number | null;
+  end_drawer_cents: number | null;
   manual_closed: boolean | null;
   manual_closed_at: string | null;
   manual_closed_review_status: string | null;
@@ -66,6 +68,12 @@ type ShiftRow = {
   last_action_by: string | null;
   store: { id: string; name: string } | null;
   profile: { id: string; name: string | null } | null;
+};
+
+type CountRow = {
+  shift_id: string;
+  count_type: "start" | "end";
+  drawer_cents: number;
 };
 
 function getBearerToken(req: Request) {
@@ -188,6 +196,26 @@ export async function GET(req: Request) {
       .returns<ShiftRow[]>();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+    const shiftIds = (data ?? []).map(r => r.id);
+    let countsByShift = new Map<string, { start: number | null; end: number | null }>();
+    if (shiftIds.length) {
+      const { data: countRows, error: countErr } = await supabaseServer
+        .from("shift_drawer_counts")
+        .select("shift_id, count_type, drawer_cents")
+        .in("shift_id", shiftIds)
+        .in("count_type", ["start", "end"])
+        .returns<CountRow[]>();
+      if (countErr) return NextResponse.json({ error: countErr.message }, { status: 500 });
+
+      countsByShift = new Map(shiftIds.map(id => [id, { start: null, end: null }]));
+      (countRows ?? []).forEach(r => {
+        const entry = countsByShift.get(r.shift_id) ?? { start: null, end: null };
+        if (r.count_type === "start") entry.start = r.drawer_cents;
+        if (r.count_type === "end") entry.end = r.drawer_cents;
+        countsByShift.set(r.shift_id, entry);
+      });
+    }
+
     const rows = (data ?? []).map(r => ({
       id: r.id,
       storeId: r.store_id,
@@ -198,6 +226,8 @@ export async function GET(req: Request) {
       plannedStartAt: r.planned_start_at,
       startedAt: r.started_at,
       endedAt: r.ended_at,
+      startDrawerCents: countsByShift.get(r.id)?.start ?? null,
+      endDrawerCents: countsByShift.get(r.id)?.end ?? null,
       manualClosed: Boolean(r.manual_closed),
       manualClosedAt: r.manual_closed_at,
       manualClosedReviewStatus: r.manual_closed_review_status,

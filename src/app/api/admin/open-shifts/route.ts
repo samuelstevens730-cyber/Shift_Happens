@@ -41,6 +41,12 @@ type ShiftJoinRow = {
   profile: { id: string; name: string | null } | null;
 };
 
+type CountRow = {
+  shift_id: string;
+  count_type: "start" | "end";
+  drawer_cents: number;
+};
+
 type OpenShiftRow = {
   id: string;
   storeName: string | null;
@@ -50,6 +56,8 @@ type OpenShiftRow = {
   plannedStartAt: string | null;
   startedAt: string | null;
   createdAt: string | null;
+  startDrawerCents: number | null;
+  endDrawerCents: number | null;
 };
 
 function getBearerToken(req: Request) {
@@ -77,6 +85,26 @@ export async function GET(req: Request) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+  const shiftIds = (data ?? []).map(r => r.id);
+  let countsByShift = new Map<string, { start: number | null; end: number | null }>();
+  if (shiftIds.length) {
+    const { data: countRows, error: countErr } = await supabaseServer
+      .from("shift_drawer_counts")
+      .select("shift_id, count_type, drawer_cents")
+      .in("shift_id", shiftIds)
+      .in("count_type", ["start", "end"])
+      .returns<CountRow[]>();
+    if (countErr) return NextResponse.json({ error: countErr.message }, { status: 500 });
+
+    countsByShift = new Map(shiftIds.map(id => [id, { start: null, end: null }]));
+    (countRows ?? []).forEach(r => {
+      const entry = countsByShift.get(r.shift_id) ?? { start: null, end: null };
+      if (r.count_type === "start") entry.start = r.drawer_cents;
+      if (r.count_type === "end") entry.end = r.drawer_cents;
+      countsByShift.set(r.shift_id, entry);
+    });
+  }
+
   const rows: OpenShiftRow[] = (data ?? []).map(r => ({
     id: r.id,
     storeName: r.store?.name ?? null,
@@ -86,6 +114,8 @@ export async function GET(req: Request) {
     plannedStartAt: r.planned_start_at ?? null,
     startedAt: r.started_at ?? null,
     createdAt: r.created_at ?? null,
+    startDrawerCents: countsByShift.get(r.id)?.start ?? null,
+    endDrawerCents: countsByShift.get(r.id)?.end ?? null,
   }));
 
   return NextResponse.json({ rows });

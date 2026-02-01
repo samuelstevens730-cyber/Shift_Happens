@@ -48,6 +48,7 @@ type ShiftRow = {
   id: string;
   store_id: string;
   profile_id: string;
+  planned_start_at: string;
   started_at: string;
   ended_at: string;
   store: { id: string; name: string } | null;
@@ -114,13 +115,13 @@ export async function GET(req: Request) {
 
     let query = supabaseServer
       .from("shifts")
-      .select("id, store_id, profile_id, started_at, ended_at, store:store_id(id,name), profile:profile_id(id,name)", { count: "exact" })
+      .select("id, store_id, profile_id, planned_start_at, started_at, ended_at, store:store_id(id,name), profile:profile_id(id,name)", { count: "exact" })
       .in("store_id", managerStoreIds)
       .not("ended_at", "is", null)
       .neq("last_action", "removed");
 
     if (from) {
-      query = query.gte("started_at", isDateOnly(from) ? `${from}T00:00:00.000Z` : from);
+      query = query.gte("planned_start_at", isDateOnly(from) ? `${from}T00:00:00.000Z` : from);
     }
     if (to) {
       if (isDateOnly(to)) {
@@ -135,20 +136,20 @@ export async function GET(req: Request) {
     if (profileId) query = query.eq("profile_id", profileId);
 
     const { data, error, count } = await query
-      .order("started_at", { ascending: false })
+      .order("planned_start_at", { ascending: false })
       .range(offset, offset + pageSize - 1)
       .returns<ShiftRow[]>();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
     const rows = (data ?? []).map(r => {
-      const mins = calcMinutes(r.started_at, r.ended_at);
+      const mins = calcMinutes(r.planned_start_at, r.ended_at);
       return {
         id: r.id,
         user_id: r.profile_id,
         full_name: r.profile?.name ?? null,
         store_id: r.store_id,
         store_name: r.store?.name ?? null,
-        start_at: r.started_at,
+        start_at: r.planned_start_at,
         end_at: r.ended_at,
         minutes: mins,
         rounded_hours: roundMinutes(mins),

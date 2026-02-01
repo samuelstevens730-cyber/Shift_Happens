@@ -34,6 +34,8 @@ type OpenShiftRow = {
   plannedStartAt: string | null;
   startedAt: string | null;
   createdAt: string | null;
+  startDrawerCents: number | null;
+  endDrawerCents: number | null;
 };
 
 type OpenShiftResponse = { rows: OpenShiftRow[] } | { error: string };
@@ -57,6 +59,11 @@ function formatDate(value: string | null) {
     minute: "2-digit",
     hour12: true,
   });
+}
+
+function formatMoney(cents: number | null) {
+  if (cents == null) return "--";
+  return `$${(cents / 100).toFixed(2)}`;
 }
 
 export default function OpenShiftsPage() {
@@ -227,6 +234,11 @@ export default function OpenShiftsPage() {
                 <div>Planned: <b>{formatDate(r.plannedStartAt)}</b></div>
                 <div>Created: <b>{formatDate(r.createdAt)}</b></div>
                 <div>Shift ID: <span className="muted">{r.id.slice(0, 8)}</span></div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+                <div>Start drawer: <b>{formatMoney(r.startDrawerCents)}</b></div>
+                <div>End drawer: <b>{formatMoney(r.endDrawerCents)}</b></div>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2 sm:items-center">

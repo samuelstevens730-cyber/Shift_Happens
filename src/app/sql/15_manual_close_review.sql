@@ -9,4 +9,3 @@ alter table public.shifts
 
 create index if not exists idx_shifts_manual_closed
   on public.shifts (manual_closed, manual_closed_reviewed_at);
-x
