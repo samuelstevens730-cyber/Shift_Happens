@@ -48,6 +48,8 @@ type CountRow = {
   note: string | null;
 };
 
+type CountSummary = { start: number | null; end: number | null; endNote: string | null };
+
 type OpenShiftRow = {
   id: string;
   storeName: string | null;
@@ -88,7 +90,7 @@ export async function GET(req: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const shiftIds = (data ?? []).map(r => r.id);
-  let countsByShift = new Map<string, { start: number | null; end: number | null }>();
+  let countsByShift = new Map<string, CountSummary>();
   if (shiftIds.length) {
     const { data: countRows, error: countErr } = await supabaseServer
       .from("shift_drawer_counts")
@@ -100,7 +102,7 @@ export async function GET(req: Request) {
 
     countsByShift = new Map(shiftIds.map(id => [id, { start: null, end: null, endNote: null }]));
     (countRows ?? []).forEach(r => {
-      const entry = countsByShift.get(r.shift_id) ?? { start: null, end: null, endNote: null };
+      const entry: CountSummary = countsByShift.get(r.shift_id) ?? { start: null, end: null, endNote: null };
       if (r.count_type === "start") entry.start = r.drawer_cents;
       if (r.count_type === "end") {
         entry.end = r.drawer_cents;
