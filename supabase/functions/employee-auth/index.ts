@@ -88,15 +88,21 @@ async function verifyPin(pin: string, stored: string) {
   return timingSafeEqual(hash, derived);
 }
 
-async function signJwt(payload: Record<string, unknown>, secret: string): Promise<string> {
+async function signJwt(payload: Record<string, unknown>, jwkJson: string): Promise<string> {
+  const jwk = JSON.parse(jwkJson);
+  if (!jwk?.d || !jwk?.x || !jwk?.y || !jwk?.crv) {
+    throw new Error("JWT signing key must be a full private JWK (with d, x, y, crv).");
+  }
   const key = await crypto.subtle.importKey(
-    "raw",
-    new TextEncoder().encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
+    "jwk",
+    jwk,
+    { name: "ECDSA", namedCurve: "P-256" },
     false,
     ["sign"]
   );
-  return await create({ alg: "HS256", typ: "JWT" }, payload, key);
+  const header: Record<string, string> = { alg: "ES256", typ: "JWT" };
+  if (jwk.kid) header.kid = jwk.kid;
+  return await create(header, payload, key);
 }
 
 serve(async (req) => {
