@@ -19,6 +19,7 @@ export default function ClientHeader() {
   const router = useRouter();
   const pathname = usePathname();
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [hasPinSession, setHasPinSession] = useState(false);
 
   // Subscribe to auth state changes to update Login/Logout button
   useEffect(() => {
@@ -32,6 +33,19 @@ export default function ClientHeader() {
     }
 
     return () => sub?.subscription?.unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const readPin = () => {
+      if (typeof window === "undefined") return;
+      const token = sessionStorage.getItem("sh_pin_token");
+      const storeId = sessionStorage.getItem("sh_pin_store_id");
+      const profileId = sessionStorage.getItem("sh_pin_profile_id");
+      setHasPinSession(Boolean(token && storeId && profileId));
+    };
+    readPin();
+    window.addEventListener("storage", readPin);
+    return () => window.removeEventListener("storage", readPin);
   }, []);
 
   async function handleLogout() {
@@ -65,6 +79,12 @@ export default function ClientHeader() {
           <Link href="/" className="btn-secondary px-4 py-2">
             Home
           </Link>
+
+          {(isLoggedIn || hasPinSession) && (
+            <Link href="/dashboard" className="btn-secondary px-4 py-2">
+              Dashboard
+            </Link>
+          )}
 
           {isLoggedIn ? (
             <button

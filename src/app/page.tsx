@@ -20,14 +20,18 @@ export default function Home() {
         </div>
 
         <div className="card card-pad space-y-4">
-          <div className="segmented">
-            <Link href="/clock" className="segment segment-active">
-              Employee
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Link href="/clock" className="btn-primary px-4 py-3 text-center">
+              Time Clock
             </Link>
-            <Link href="/login?next=/admin" className="segment">
-              Admin
+            <Link href="/dashboard" className="btn-secondary px-4 py-3 text-center">
+              Dashboard
             </Link>
           </div>
+
+          <Link href="/login?next=/admin" className="segment text-center">
+            Admin
+          </Link>
 
           <div className="text-xs muted">
             Employees can clock in manually if they missed the QR scan. Admins review variances, payroll, and open shifts.
