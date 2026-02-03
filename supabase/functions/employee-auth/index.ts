@@ -172,7 +172,7 @@ serve(async (req) => {
       const maxAttempts = settings.pin_max_attempts || 3;
 
       if (attempts >= maxAttempts) {
-        const lockoutMinutes = settings.pin_lockout_minutes || 5;
+        const lockoutMinutes = settings.pin_lockout_minutes ?? 5;
         const lockedUntil = new Date(Date.now() + lockoutMinutes * 60000).toISOString();
 
         await supabase

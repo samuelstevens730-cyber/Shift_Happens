@@ -1152,8 +1152,10 @@ export default function ClockPageClient() {
                         if (res.status === 403 && json?.error) {
                           setPinError("PIN auth not enabled for this store.");
                         } else if (res.status === 429) {
-                          const mins = json?.retry_after_minutes || json?.locked_for_minutes;
-                          setPinError(`Account locked. Try in ${mins ?? 5} minutes.`);
+                          const mins = json?.retry_after_minutes || json?.locked_for_minutes || 5;
+                          setPinError(`Account locked. Try in ${mins} minutes.`);
+                        } else if (res.status === 401 && json?.attempts_remaining === 1) {
+                          setPinError("Invalid PIN. You have 1 more try before lockout.");
                         } else {
                           setPinError("Invalid PIN.");
                         }
