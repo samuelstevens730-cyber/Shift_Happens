@@ -108,10 +108,10 @@ serve(async (req) => {
   }
 
   try {
-    const { store_id, pin }: { store_id: string; pin: string } = await req.json();
+    const { store_id, profile_id, pin }: { store_id: string; profile_id: string; pin: string } = await req.json();
 
-    if (!store_id || !pin || !/^\d{4}$/.test(pin)) {
-      return Response.json({ error: "Invalid store_id or PIN format" }, { status: 400, headers: corsHeaders });
+    if (!store_id || !profile_id || !pin || !/^\d{4}$/.test(pin)) {
+      return Response.json({ error: "Invalid store_id, profile_id or PIN format" }, { status: 400, headers: corsHeaders });
     }
 
     const { data: settings, error: settingsError } = await supabase
@@ -124,11 +124,10 @@ serve(async (req) => {
       return Response.json({ error: "PIN auth not enabled for this store" }, { status: 403, headers: corsHeaders });
     }
 
-    const pinFingerprint = await getPinFingerprint(pin);
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("id, pin_hash, pin_locked_until, pin_failed_attempts")
-      .eq("pin_fingerprint", pinFingerprint)
+      .eq("id", profile_id)
       .eq("active", true)
       .single();
 
@@ -173,7 +172,7 @@ serve(async (req) => {
       const maxAttempts = settings.pin_max_attempts || 3;
 
       if (attempts >= maxAttempts) {
-        const lockoutMinutes = settings.pin_lockout_minutes || 30;
+        const lockoutMinutes = settings.pin_lockout_minutes || 5;
         const lockedUntil = new Date(Date.now() + lockoutMinutes * 60000).toISOString();
 
         await supabase

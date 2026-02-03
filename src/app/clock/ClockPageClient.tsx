@@ -35,6 +35,7 @@ type ShiftKind = "open" | "close" | "double" | "other";
 
 const PIN_TOKEN_KEY = "sh_pin_token";
 const PIN_STORE_KEY = "sh_pin_store_id";
+const PIN_PROFILE_KEY = "sh_pin_profile_id";
 
 function toLocalInputValue(d = new Date()) {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -170,6 +171,8 @@ export default function ClockPageClient() {
   const [pinStoreId, setPinStoreId] = useState<string | null>(null);
   const [pinModalOpen, setPinModalOpen] = useState(true);
   const [managerSession, setManagerSession] = useState(false);
+  const [pinProfileId, setPinProfileId] = useState<string | null>(null);
+  const [pinLockedSelection, setPinLockedSelection] = useState(false);
   const [pinValue, setPinValue] = useState("");
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinLoading, setPinLoading] = useState(false);
@@ -382,9 +385,14 @@ export default function ClockPageClient() {
     if (typeof window === "undefined") return;
     const storedToken = sessionStorage.getItem(PIN_TOKEN_KEY);
     const storedStore = sessionStorage.getItem(PIN_STORE_KEY);
-    if (storedToken && storedStore) {
+    const storedProfile = sessionStorage.getItem(PIN_PROFILE_KEY);
+    if (storedToken && storedStore && storedProfile) {
       setPinToken(storedToken);
       setPinStoreId(storedStore);
+      setPinProfileId(storedProfile);
+      setPinLockedSelection(true);
+      setStoreId(storedStore);
+      setProfileId(storedProfile);
       setPinModalOpen(false);
     }
   }, []);
@@ -413,12 +421,12 @@ export default function ClockPageClient() {
       setPinModalOpen(false);
       return;
     }
-    if (!pinToken || !pinStoreId || pinStoreId !== activeStoreId) {
+    if (!pinToken || !pinStoreId || !pinProfileId || pinStoreId !== activeStoreId) {
       setPinModalOpen(true);
     } else {
       setPinModalOpen(false);
     }
-  }, [activeStoreId, pinToken, pinStoreId, managerSession]);
+  }, [activeStoreId, pinToken, pinStoreId, pinProfileId, managerSession]);
 
   useEffect(() => {
     if (!pinModalOpen) return;
@@ -874,7 +882,7 @@ export default function ClockPageClient() {
                 className="select"
                 value={storeId}
                 onChange={e => setStoreId(e.target.value)}
-                disabled={submitting}
+                disabled={submitting || pinLockedSelection}
               >
                 {stores.map(s => (
                   <option key={s.id} value={s.id}>
@@ -891,7 +899,7 @@ export default function ClockPageClient() {
               className="select"
               value={profileId}
               onChange={e => setProfileId(e.target.value)}
-              disabled={submitting}
+              disabled={submitting || pinLockedSelection}
             >
               {profiles.map(p => (
                 <option key={p.id} value={p.id}>
@@ -1041,7 +1049,7 @@ export default function ClockPageClient() {
                       className="select"
                       value={storeId}
                       onChange={e => setStoreId(e.target.value)}
-                      disabled={pinLoading}
+                      disabled={pinLoading || pinLockedSelection}
                     >
                       {stores.map(s => (
                         <option key={s.id} value={s.id}>
@@ -1057,6 +1065,22 @@ export default function ClockPageClient() {
                     Token store: <b>{tokenStore.name}</b>
                   </div>
                 )}
+
+                <div className="space-y-2">
+                  <label className="text-sm muted">Employee</label>
+                  <select
+                    className="select"
+                    value={profileId}
+                    onChange={e => setProfileId(e.target.value)}
+                    disabled={pinLoading || pinLockedSelection}
+                  >
+                    {profiles.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
                 <div className="space-y-3">
                   <button
@@ -1099,10 +1123,14 @@ export default function ClockPageClient() {
 
                 <button
                   className="btn-primary w-full py-2 text-sm disabled:opacity-50"
-                  disabled={pinLoading || pinValue.length !== 4 || !activeStoreId}
+                  disabled={pinLoading || pinValue.length !== 4 || !activeStoreId || !profileId}
                   onClick={async () => {
                     if (!activeStoreId) {
                       setPinError("Select a store to continue.");
+                      return;
+                    }
+                    if (!profileId) {
+                      setPinError("Select your name to continue.");
                       return;
                     }
                     setPinLoading(true);
@@ -1114,9 +1142,9 @@ export default function ClockPageClient() {
                           method: "POST",
                           headers: {
                             "Content-Type": "application/json",
-                            apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
-                          },
-                          body: JSON.stringify({ store_id: activeStoreId, pin: pinValue }),
+                          apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
+                        },
+                          body: JSON.stringify({ store_id: activeStoreId, profile_id: profileId, pin: pinValue }),
                         }
                       );
                       const json = await res.json();
@@ -1144,10 +1172,15 @@ export default function ClockPageClient() {
                       }
                       setPinToken(token);
                       setPinStoreId(activeStoreId);
+                      setPinProfileId(profileId);
+                      setPinLockedSelection(true);
                       if (typeof window !== "undefined") {
                         sessionStorage.setItem(PIN_TOKEN_KEY, token);
                         sessionStorage.setItem(PIN_STORE_KEY, activeStoreId);
+                        sessionStorage.setItem(PIN_PROFILE_KEY, profileId);
                       }
+                      setStoreId(activeStoreId);
+                      setProfileId(profileId);
                       setPinModalOpen(false);
                     } catch {
                       setPinError("Authentication failed.");

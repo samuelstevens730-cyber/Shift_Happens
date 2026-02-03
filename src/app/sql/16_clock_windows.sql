@@ -73,7 +73,7 @@ $$;
 -- Validate a timestamp against window rules
 create or replace function public.clock_window_check(
   p_store_id uuid,
-  p_shift_type text,
+  p_shift_type public.shift_type,
   p_time timestamptz
 )
 returns void
@@ -110,7 +110,7 @@ begin
   into lbl, ok
   from public.clock_windows cw
   where cw.store_key = store_key
-    and cw.shift_type = p_shift_type
+    and cw.shift_type = p_shift_type::text
     and (
       cw.dow = local_dow
       or (cw.crosses_midnight and ((cw.dow + 1) % 7) = local_dow)
