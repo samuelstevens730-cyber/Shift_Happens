@@ -1005,7 +1005,7 @@ export default function ClockPageClient() {
       )}
 
       {clockWindowModal.open && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4">
           <div className="card card-pad w-full max-w-md space-y-3 text-center">
             <div className="text-lg font-semibold">CONTACT MANAGER IMMEDIATELY.</div>
             <div className="text-xs muted">{clockWindowModal.label}</div>
