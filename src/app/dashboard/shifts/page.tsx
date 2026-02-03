@@ -36,6 +36,16 @@ function formatCst(dt: Date) {
   });
 }
 
+function formatCstTime(dt: Date) {
+  if (Number.isNaN(dt.getTime())) return "";
+  return dt.toLocaleTimeString("en-US", {
+    timeZone: "America/Chicago",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
 function formatCstShortDate(dt: Date) {
   if (Number.isNaN(dt.getTime())) return "";
   return dt.toLocaleDateString("en-US", {
@@ -241,8 +251,8 @@ export default function EmployeeShiftsPage() {
                 <div key={s.id} className="grid grid-cols-6 gap-2 text-sm">
                   <div>{formatCstShortDate(new Date(s.planned_start_at ?? s.started_at))}</div>
                   <div>{s.stores?.name ?? s.store_id}</div>
-                  <div>{formatCst(start)}</div>
-                  <div>{end ? formatCst(end) : "--"}</div>
+                  <div>{formatCstTime(start)}</div>
+                  <div>{end ? formatCstTime(end) : "--"}</div>
                   <div>{hours != null ? hours.toFixed(2) : "--"}</div>
                   <div>{s.ended_at ? "Closed" : "Open"}</div>
                   {filterPeriod === "all" && (
