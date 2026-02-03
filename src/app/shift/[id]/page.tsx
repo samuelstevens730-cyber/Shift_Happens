@@ -23,6 +23,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { isOutOfThreshold, roundTo30Minutes, thresholdMessage } from "@/lib/kioskRules";
 import { getCstDowMinutes, isTimeWithinWindow, toStoreKey, WindowShiftType } from "@/lib/clockWindows";
+import { playAlarm } from "@/lib/alarm";
 
 type ShiftType = "open" | "close" | "double" | "other";
 
@@ -624,6 +625,11 @@ function ClockOutModal({
 
   const storeKey = toStoreKey(storeName);
 
+  function triggerClockWindowModal(label: string) {
+    playAlarm();
+    setClockWindowModal({ open: true, label });
+  }
+
   const cents = Math.round(Number(drawer) * 100);
   const changeCents = Math.round(Number(changeDrawer) * 100);
   const hasValidDrawer = Number.isFinite(cents);
@@ -735,7 +741,7 @@ function ClockOutModal({
                 const rounded = roundTo30Minutes(d);
                 const cst = getCstDowMinutes(rounded);
                 if (!storeKey || !cst) {
-                  setClockWindowModal({ open: true, label: "Outside allowed clock window" });
+                  triggerClockWindowModal("Outside allowed clock window");
                   return;
                 }
                 const windowCheck = isTimeWithinWindow({
@@ -745,7 +751,7 @@ function ClockOutModal({
                   minutes: cst.minutes,
                 });
                 if (!windowCheck.ok) {
-                  setClockWindowModal({ open: true, label: windowCheck.windowLabel });
+                  triggerClockWindowModal(windowCheck.windowLabel);
                   return;
                 }
               }
@@ -770,7 +776,7 @@ function ClockOutModal({
                 const json = await res.json();
                 if (!res.ok) {
                   if (json?.code === "CLOCK_WINDOW_VIOLATION") {
-                    setClockWindowModal({ open: true, label: json?.windowLabel ?? "Outside allowed clock window" });
+                    triggerClockWindowModal(json?.windowLabel ?? "Outside allowed clock window");
                     return;
                   }
                   throw new Error(json?.error || "Failed to end shift.");

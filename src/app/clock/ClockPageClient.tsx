@@ -26,6 +26,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { isOutOfThreshold, thresholdMessage } from "@/lib/kioskRules";
 import { getCstDowMinutes, isTimeWithinWindow, toStoreKey, WindowShiftType } from "@/lib/clockWindows";
+import { playAlarm } from "@/lib/alarm";
 
 type Store = { id: string; name: string; expected_drawer_cents: number };
 type Profile = { id: string; name: string; active: boolean | null };
@@ -234,6 +235,11 @@ export default function ClockPageClient() {
     return toStoreKey(storeName);
   }, [tokenStore, stores, storeId]);
 
+  function triggerClockWindowModal(label: string) {
+    playAlarm();
+    setClockWindowModal({ open: true, label });
+  }
+
   function checkClockWindow(shiftType: ShiftKind, dt: Date) {
     if (shiftType !== "open" && shiftType !== "close") return { ok: true, label: "" };
     const storeKey = storeKeyForWindow;
@@ -436,7 +442,7 @@ export default function ClockPageClient() {
     const roundedPlanned = roundTo30Minutes(planned);
     const windowCheck = checkClockWindow(shiftKind, roundedPlanned);
     if (!windowCheck.ok) {
-      setClockWindowModal({ open: true, label: windowCheck.label });
+      triggerClockWindowModal(windowCheck.label);
       return;
     }
 
@@ -488,7 +494,7 @@ export default function ClockPageClient() {
       const json = await res.json();
       if (!res.ok) {
         if (json?.code === "CLOCK_WINDOW_VIOLATION") {
-          setClockWindowModal({ open: true, label: json?.windowLabel ?? "Outside allowed clock window" });
+          triggerClockWindowModal(json?.windowLabel ?? "Outside allowed clock window");
           return;
         }
         if (res.status === 409 && json?.shiftId) {
@@ -684,7 +690,7 @@ export default function ClockPageClient() {
                   if (openShiftInfo.shift_type === "close") {
                     const windowCheck = checkClockWindow("close", roundTo30Minutes(endDate));
                     if (!windowCheck.ok) {
-                      setClockWindowModal({ open: true, label: windowCheck.label });
+                      triggerClockWindowModal(windowCheck.label);
                       return;
                     }
                   }
@@ -736,7 +742,7 @@ export default function ClockPageClient() {
                     const json = await res.json();
                     if (!res.ok) {
                       if (json?.code === "CLOCK_WINDOW_VIOLATION") {
-                        setClockWindowModal({ open: true, label: json?.windowLabel ?? "Outside allowed clock window" });
+                        triggerClockWindowModal(json?.windowLabel ?? "Outside allowed clock window");
                         return;
                       }
                       throw new Error(json?.error || "Failed to end shift.");
@@ -937,7 +943,7 @@ export default function ClockPageClient() {
                   const roundedPlanned = roundTo30Minutes(planned);
                   const windowCheck = checkClockWindow(shiftKind, roundedPlanned);
                   if (!windowCheck.ok) {
-                    setClockWindowModal({ open: true, label: windowCheck.label });
+                    triggerClockWindowModal(windowCheck.label);
                     return;
                   }
                 }
@@ -1085,3 +1091,4 @@ function StaleShiftConfirmations({
     </div>
   );
 }
+
