@@ -27,7 +27,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { isOutOfThreshold, thresholdMessage } from "@/lib/kioskRules";
 import { getCstDowMinutes, isTimeWithinWindow, toStoreKey, WindowShiftType } from "@/lib/clockWindows";
-import { playAlarm } from "@/lib/alarm";
+import { playAlarm, stopAlarm } from "@/lib/alarm";
 
 type Store = { id: string; name: string; expected_drawer_cents: number };
 type Profile = { id: string; name: string; active: boolean | null };
@@ -525,6 +525,7 @@ export default function ClockPageClient() {
 
       const shiftId = json.shiftId as string;
       if (!shiftId) throw new Error("API did not return shiftId.");
+      stopAlarm();
 
       // Redirect based on shift type - open/double go through run page first
       const base = shiftKind === "open" || shiftKind === "double" ? `/run/${shiftId}` : `/shift/${shiftId}`;
@@ -752,6 +753,7 @@ export default function ClockPageClient() {
                     setOpenShiftPrompt(false);
                     setOpenShiftInfo(null);
                     setOpenShiftKey("");
+                    stopAlarm();
                     await startShift();
                   } catch (e: unknown) {
                     setError(e instanceof Error ? e.message : "Failed to end shift.");

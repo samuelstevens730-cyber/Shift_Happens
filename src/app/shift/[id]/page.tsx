@@ -23,7 +23,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { isOutOfThreshold, roundTo30Minutes, thresholdMessage } from "@/lib/kioskRules";
 import { getCstDowMinutes, isTimeWithinWindow, toStoreKey, WindowShiftType } from "@/lib/clockWindows";
-import { playAlarm } from "@/lib/alarm";
+import { playAlarm, stopAlarm } from "@/lib/alarm";
 
 type ShiftType = "open" | "close" | "double" | "other";
 
@@ -784,6 +784,7 @@ function ClockOutModal({
 
                 onClose();
                 onSuccess();
+                stopAlarm();
               } catch (e: unknown) {
                 setErr(e instanceof Error ? e.message : "Failed to end shift.");
               } finally {
