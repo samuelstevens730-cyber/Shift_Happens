@@ -421,12 +421,16 @@ export default function ClockPageClient() {
       setPinModalOpen(false);
       return;
     }
+    if (loading) {
+      setPinModalOpen(true);
+      return;
+    }
     if (!pinToken || !pinStoreId || !pinProfileId || pinStoreId !== activeStoreId) {
       setPinModalOpen(true);
     } else {
       setPinModalOpen(false);
     }
-  }, [activeStoreId, pinToken, pinStoreId, pinProfileId, managerSession]);
+  }, [activeStoreId, pinToken, pinStoreId, pinProfileId, managerSession, loading]);
 
   useEffect(() => {
     if (!pinModalOpen) return;
@@ -1049,7 +1053,7 @@ export default function ClockPageClient() {
                       className="select"
                       value={storeId}
                       onChange={e => setStoreId(e.target.value)}
-                      disabled={pinLoading || pinLockedSelection}
+                      disabled={pinLoading || pinLockedSelection || loading}
                     >
                       {stores.map(s => (
                         <option key={s.id} value={s.id}>
@@ -1072,7 +1076,7 @@ export default function ClockPageClient() {
                     className="select"
                     value={profileId}
                     onChange={e => setProfileId(e.target.value)}
-                    disabled={pinLoading || pinLockedSelection}
+                    disabled={pinLoading || pinLockedSelection || loading}
                   >
                     {profiles.map(p => (
                       <option key={p.id} value={p.id}>
@@ -1081,6 +1085,10 @@ export default function ClockPageClient() {
                     ))}
                   </select>
                 </div>
+
+                {loading && (
+                  <div className="text-xs muted text-center">Loading stores and employees…</div>
+                )}
 
                 <div className="space-y-3">
                   <button
@@ -1123,7 +1131,7 @@ export default function ClockPageClient() {
 
                 <button
                   className="btn-primary w-full py-2 text-sm disabled:opacity-50"
-                  disabled={pinLoading || pinValue.length !== 4 || !activeStoreId || !profileId}
+                  disabled={pinLoading || pinValue.length !== 4 || !activeStoreId || !profileId || loading}
                   onClick={async () => {
                     if (!activeStoreId) {
                       setPinError("Select a store to continue.");
