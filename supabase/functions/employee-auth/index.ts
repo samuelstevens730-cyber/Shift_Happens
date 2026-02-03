@@ -89,7 +89,12 @@ async function verifyPin(pin: string, stored: string) {
 }
 
 async function signJwt(payload: Record<string, unknown>, jwkJson: string): Promise<string> {
-  const jwk = JSON.parse(jwkJson);
+  let jwk: Record<string, string>;
+  try {
+    jwk = JSON.parse(jwkJson);
+  } catch {
+    throw new Error("JWT_SECRET must be a JSON-encoded private JWK string.");
+  }
   if (!jwk?.d || !jwk?.x || !jwk?.y || !jwk?.crv) {
     throw new Error("JWT signing key must be a full private JWK (with d, x, y, crv).");
   }
@@ -114,6 +119,9 @@ serve(async (req) => {
   }
 
   try {
+    if (!JWT_SECRET || !PIN_HMAC_SECRET) {
+      throw new Error("Missing JWT_SECRET or PIN_HMAC_SECRET in edge function secrets.");
+    }
     const { store_id, profile_id, pin }: { store_id: string; profile_id: string; pin: string } = await req.json();
 
     if (!store_id || !profile_id || !pin || !/^\d{4}$/.test(pin)) {
