@@ -53,7 +53,6 @@ function formatDate(value: string | null) {
   if (Number.isNaN(d.getTime())) return "--";
   return d.toLocaleString("en-US", {
     timeZone: "America/Chicago",
-    year: "numeric",
     month: "2-digit",
     day: "2-digit",
     hour: "numeric",

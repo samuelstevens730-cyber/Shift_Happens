@@ -98,9 +98,11 @@ async function signJwt(payload: Record<string, unknown>, jwkJson: string): Promi
   if (!jwk?.d || !jwk?.x || !jwk?.y || !jwk?.crv) {
     throw new Error("JWT signing key must be a full private JWK (with d, x, y, crv).");
   }
+  // Deno's crypto importKey rejects key_ops in some JWKs.
+  const { key_ops: _keyOps, use: _use, alg: _alg, ...jwkForImport } = jwk;
   const key = await crypto.subtle.importKey(
     "jwk",
-    jwk,
+    jwkForImport,
     { name: "ECDSA", namedCurve: "P-256" },
     false,
     ["sign"]
@@ -244,7 +246,8 @@ serve(async (req) => {
       }
     }, { headers: corsHeaders });
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     console.error("Auth error:", err);
-    return Response.json({ error: "Authentication failed" }, { status: 500, headers: corsHeaders });
+    return Response.json({ error: "Authentication failed", detail: message }, { status: 500, headers: corsHeaders });
   }
 });

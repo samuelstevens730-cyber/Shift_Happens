@@ -36,6 +36,15 @@ function formatCst(dt: Date) {
   });
 }
 
+function formatCstShortDate(dt: Date) {
+  if (Number.isNaN(dt.getTime())) return "";
+  return dt.toLocaleDateString("en-US", {
+    timeZone: "America/Chicago",
+    month: "2-digit",
+    day: "2-digit",
+  });
+}
+
 function getCstDateParts(dt: Date) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/Chicago",
@@ -136,7 +145,7 @@ export default function EmployeeShiftsPage() {
   const periods = useMemo(() => {
     const set = new Set<string>();
     shifts.forEach(s => {
-      const dt = new Date(s.planned_start_at || s.started_at);
+      const dt = new Date(s.planned_start_at ?? s.started_at);
       if (!Number.isNaN(dt.getTime())) set.add(getPayPeriodKey(dt));
     });
     return Array.from(set);
@@ -146,7 +155,7 @@ export default function EmployeeShiftsPage() {
     return shifts.filter(s => {
       if (filterStore !== "all" && s.store_id !== filterStore) return false;
       if (filterPeriod !== "all") {
-        const dt = new Date(s.planned_start_at || s.started_at);
+        const dt = new Date(s.planned_start_at ?? s.started_at);
         const key = getPayPeriodKey(dt);
         if (key !== filterPeriod) return false;
       }
@@ -158,11 +167,11 @@ export default function EmployeeShiftsPage() {
     const totals = new Map<string, number>();
     filteredShifts.forEach(s => {
       if (!s.ended_at) return;
-      const start = new Date(s.started_at);
+      const start = new Date(s.planned_start_at ?? s.started_at);
       const end = new Date(s.ended_at);
       if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
       const hours = (end.getTime() - start.getTime()) / 3600000;
-      const key = getPayPeriodKey(new Date(s.planned_start_at || s.started_at));
+      const key = getPayPeriodKey(new Date(s.planned_start_at ?? s.started_at));
       totals.set(key, (totals.get(key) ?? 0) + hours);
     });
     return totals;
@@ -224,17 +233,17 @@ export default function EmployeeShiftsPage() {
           </div>
           <div className="space-y-2">
             {filteredShifts.map(s => {
-              const start = new Date(s.started_at);
+              const start = new Date(s.planned_start_at ?? s.started_at);
               const end = s.ended_at ? new Date(s.ended_at) : null;
               const hours = end ? (end.getTime() - start.getTime()) / 3600000 : null;
-              const periodKey = getPayPeriodKey(new Date(s.planned_start_at || s.started_at));
+              const periodKey = getPayPeriodKey(new Date(s.planned_start_at ?? s.started_at));
               return (
                 <div key={s.id} className="grid grid-cols-6 gap-2 text-sm">
-                  <div>{formatCst(new Date(s.planned_start_at || s.started_at)).split(",")[0]}</div>
+                  <div>{formatCstShortDate(new Date(s.planned_start_at ?? s.started_at))}</div>
                   <div>{s.stores?.name ?? s.store_id}</div>
                   <div>{formatCst(start)}</div>
-                  <div>{end ? formatCst(end) : "—"}</div>
-                  <div>{hours != null ? hours.toFixed(2) : "—"}</div>
+                  <div>{end ? formatCst(end) : "--"}</div>
+                  <div>{hours != null ? hours.toFixed(2) : "--"}</div>
                   <div>{s.ended_at ? "Closed" : "Open"}</div>
                   {filterPeriod === "all" && (
                     <div className="col-span-6 text-xs muted">
