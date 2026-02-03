@@ -236,6 +236,23 @@ body {
   background: linear-gradient(180deg, rgba(12, 15, 20, 0), rgba(12, 15, 20, 0.9));
 }
 
+.shake {
+  animation: shake 220ms ease-in-out 0s 2;
+}
+
+@keyframes shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-6px);
+  }
+  75% {
+    transform: translateX(6px);
+  }
+}
+
 /* Hide the small built-in "Forgot your password?" link inside Supabase Auth form */
 .supabase-auth-ui_ui-anchor.c-dumjqv {
   display: none !important;

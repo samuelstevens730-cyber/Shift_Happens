@@ -21,7 +21,7 @@
 // src/app/clock/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
@@ -32,6 +32,9 @@ import { playAlarm, stopAlarm } from "@/lib/alarm";
 type Store = { id: string; name: string; expected_drawer_cents: number };
 type Profile = { id: string; name: string; active: boolean | null };
 type ShiftKind = "open" | "close" | "double" | "other";
+
+const PIN_TOKEN_KEY = "sh_pin_token";
+const PIN_STORE_KEY = "sh_pin_store_id";
 
 function toLocalInputValue(d = new Date()) {
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -163,6 +166,15 @@ export default function ClockPageClient() {
   const [staleDoubleCheck, setStaleDoubleCheck] = useState(false);
   const [staleSaving, setStaleSaving] = useState(false);
 
+  const [pinToken, setPinToken] = useState<string | null>(null);
+  const [pinStoreId, setPinStoreId] = useState<string | null>(null);
+  const [pinModalOpen, setPinModalOpen] = useState(true);
+  const [pinValue, setPinValue] = useState("");
+  const [pinError, setPinError] = useState<string | null>(null);
+  const [pinLoading, setPinLoading] = useState(false);
+  const [pinShake, setPinShake] = useState(false);
+  const pinInputRef = useRef<HTMLInputElement | null>(null);
+
   // "other" shifts don't require drawer counts (e.g., training, inventory)
   const requiresStartDrawer = shiftKind !== "other";
 
@@ -235,6 +247,10 @@ export default function ClockPageClient() {
     const storeName = tokenStore?.name ?? stores.find(s => s.id === storeId)?.name ?? null;
     return toStoreKey(storeName);
   }, [tokenStore, stores, storeId]);
+
+  const activeStoreId = useMemo(() => {
+    return tokenStore?.id ?? storeId ?? "";
+  }, [tokenStore, storeId]);
 
   function triggerClockWindowModal(label: string) {
     playAlarm();
@@ -360,6 +376,33 @@ export default function ClockPageClient() {
       alive = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const storedToken = sessionStorage.getItem(PIN_TOKEN_KEY);
+    const storedStore = sessionStorage.getItem(PIN_STORE_KEY);
+    if (storedToken && storedStore) {
+      setPinToken(storedToken);
+      setPinStoreId(storedStore);
+      setPinModalOpen(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!activeStoreId) return;
+    if (!pinToken || !pinStoreId || pinStoreId !== activeStoreId) {
+      setPinModalOpen(true);
+    } else {
+      setPinModalOpen(false);
+    }
+  }, [activeStoreId, pinToken, pinStoreId]);
+
+  useEffect(() => {
+    if (!pinModalOpen) return;
+    setPinValue("");
+    setPinError(null);
+    setTimeout(() => pinInputRef.current?.focus(), 0);
+  }, [pinModalOpen]);
 
   // Persist selections to localStorage for faster repeat clock-ins
   useEffect(() => {
@@ -958,6 +1001,155 @@ export default function ClockPageClient() {
           </div>
         </div>
       </div>
+
+      {pinModalOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/70 p-4">
+              <div className={`card card-pad w-full max-w-md space-y-4 ${pinShake ? "shake" : ""}`}>
+                <div className="text-lg font-semibold text-center">Employee PIN</div>
+                <div className="text-xs muted text-center">
+                  Enter your 4-digit PIN to continue.
+                </div>
+
+                {!qrToken && (
+                  <div className="space-y-2">
+                    <label className="text-sm muted">Store</label>
+                    <select
+                      className="select"
+                      value={storeId}
+                      onChange={e => setStoreId(e.target.value)}
+                      disabled={pinLoading}
+                    >
+                      {stores.map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {qrToken && tokenStore && (
+                  <div className="text-xs muted text-center">
+                    Token store: <b>{tokenStore.name}</b>
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  <button
+                    type="button"
+                    className="flex w-full items-center justify-center gap-3"
+                    onClick={() => pinInputRef.current?.focus()}
+                  >
+                    {Array.from({ length: 4 }).map((_, idx) => {
+                      const filled = pinValue[idx] ?? "";
+                      return (
+                        <div
+                          key={idx}
+                          className={`h-12 w-12 rounded-xl border text-center text-xl font-semibold ${
+                            filled ? "border-[rgba(32,240,138,0.6)] bg-[rgba(32,240,138,0.15)]" : "border-white/20"
+                          }`}
+                        >
+                          {filled ? "•" : ""}
+                        </div>
+                      );
+                    })}
+                  </button>
+                  <input
+                    ref={pinInputRef}
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={4}
+                    autoFocus
+                    className="sr-only"
+                    value={pinValue}
+                    onChange={e => {
+                      const next = e.target.value.replace(/\D/g, "").slice(0, 4);
+                      setPinValue(next);
+                    }}
+                  />
+                </div>
+
+                {pinError && (
+                  <div className="banner banner-error text-sm text-center">{pinError}</div>
+                )}
+
+                <button
+                  className="btn-primary w-full py-2 text-sm disabled:opacity-50"
+                  disabled={pinLoading || pinValue.length !== 4 || !activeStoreId}
+                  onClick={async () => {
+                    if (!activeStoreId) {
+                      setPinError("Select a store to continue.");
+                      return;
+                    }
+                    setPinLoading(true);
+                    setPinError(null);
+                    try {
+                      const res = await fetch(
+                        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/employee-auth`,
+                        {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                            apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
+                          },
+                          body: JSON.stringify({ store_id: activeStoreId, pin: pinValue }),
+                        }
+                      );
+                      const json = await res.json();
+                      if (!res.ok) {
+                        if (res.status === 403 && json?.error) {
+                          setPinError("PIN auth not enabled for this store.");
+                        } else if (res.status === 429) {
+                          const mins = json?.retry_after_minutes || json?.locked_for_minutes;
+                          setPinError(`Account locked. Try in ${mins ?? 5} minutes.`);
+                        } else {
+                          setPinError("Invalid PIN.");
+                        }
+                        setPinValue("");
+                        setPinShake(true);
+                        setTimeout(() => setPinShake(false), 400);
+                        return;
+                      }
+                      const token = json?.token as string | undefined;
+                      if (!token) {
+                        setPinError("Authentication failed.");
+                        setPinValue("");
+                        setPinShake(true);
+                        setTimeout(() => setPinShake(false), 400);
+                        return;
+                      }
+                      setPinToken(token);
+                      setPinStoreId(activeStoreId);
+                      if (typeof window !== "undefined") {
+                        sessionStorage.setItem(PIN_TOKEN_KEY, token);
+                        sessionStorage.setItem(PIN_STORE_KEY, activeStoreId);
+                      }
+                      setPinModalOpen(false);
+                    } catch {
+                      setPinError("Authentication failed.");
+                      setPinValue("");
+                      setPinShake(true);
+                      setTimeout(() => setPinShake(false), 400);
+                    } finally {
+                      setPinLoading(false);
+                    }
+                  }}
+                >
+                  {pinLoading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-black/40 border-t-black" />
+                      Verifying...
+                    </span>
+                  ) : (
+                    "Enter"
+                  )}
+                </button>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
 
       {/* Confirmation modal - prevents accidental clock-ins */}
       {confirmOpen && (
