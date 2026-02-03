@@ -16,6 +16,9 @@ Run order (top to bottom):
 11) 11_rls.sql
 12) 12_assignments_soft_delete.sql
 13) 13_shift_audit.sql
+14) 14_change_drawer.sql
+15) 15_manual_close_review.sql
+16) 16_clock_windows.sql
 
 Notes:
 - These are safe to re-run (uses IF NOT EXISTS / CREATE OR REPLACE where possible).

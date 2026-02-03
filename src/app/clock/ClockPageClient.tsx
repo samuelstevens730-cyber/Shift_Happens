@@ -25,6 +25,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { isOutOfThreshold, thresholdMessage } from "@/lib/kioskRules";
+import { getCstDowMinutes, isTimeWithinWindow, toStoreKey, WindowShiftType } from "@/lib/clockWindows";
 
 type Store = { id: string; name: string; expected_drawer_cents: number };
 type Profile = { id: string; name: string; active: boolean | null };
@@ -136,6 +137,10 @@ export default function ClockPageClient() {
   const [startNotifiedManager, setStartNotifiedManager] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmChecked, setConfirmChecked] = useState(false);
+  const [clockWindowModal, setClockWindowModal] = useState<{ open: boolean; label: string }>({
+    open: false,
+    label: "",
+  });
   const [openShiftPrompt, setOpenShiftPrompt] = useState(false);
   const [openShiftInfo, setOpenShiftInfo] = useState<{
     id: string;
@@ -223,6 +228,27 @@ export default function ClockPageClient() {
     if (!dt) return "";
     return formatCst(roundTo30Minutes(dt));
   }, [plannedStartLocal]);
+
+  const storeKeyForWindow = useMemo(() => {
+    const storeName = tokenStore?.name ?? stores.find(s => s.id === storeId)?.name ?? null;
+    return toStoreKey(storeName);
+  }, [tokenStore, stores, storeId]);
+
+  function checkClockWindow(shiftType: ShiftKind, dt: Date) {
+    if (shiftType !== "open" && shiftType !== "close") return { ok: true, label: "" };
+    const storeKey = storeKeyForWindow;
+    const cst = getCstDowMinutes(dt);
+    if (!storeKey || !cst) {
+      return { ok: false, label: "Outside allowed clock window" };
+    }
+    const res = isTimeWithinWindow({
+      storeKey,
+      shiftType: shiftType as WindowShiftType,
+      localDow: cst.dow,
+      minutes: cst.minutes,
+    });
+    return { ok: res.ok, label: res.windowLabel };
+  }
 
   // Validation: all required fields filled and threshold rules satisfied
   const canStart = useMemo(() => {
@@ -408,6 +434,11 @@ export default function ClockPageClient() {
     }
 
     const roundedPlanned = roundTo30Minutes(planned);
+    const windowCheck = checkClockWindow(shiftKind, roundedPlanned);
+    if (!windowCheck.ok) {
+      setClockWindowModal({ open: true, label: windowCheck.label });
+      return;
+    }
 
     let startDrawerCents: number | null = null;
     let changeDrawerCents: number | null = null;
@@ -456,6 +487,10 @@ export default function ClockPageClient() {
 
       const json = await res.json();
       if (!res.ok) {
+        if (json?.code === "CLOCK_WINDOW_VIOLATION") {
+          setClockWindowModal({ open: true, label: json?.windowLabel ?? "Outside allowed clock window" });
+          return;
+        }
         if (res.status === 409 && json?.shiftId) {
           try {
             const params = new URLSearchParams({ profileId });
@@ -641,10 +676,17 @@ export default function ClockPageClient() {
                 className="btn-primary px-4 py-2 disabled:opacity-50"
                 disabled={staleSaving}
                 onClick={async () => {
-                  const endDate = new Date(staleEndLocal);
-                  if (Number.isNaN(endDate.getTime())) {
+                  const endDate = toCstDateFromLocalInput(staleEndLocal);
+                  if (!endDate || Number.isNaN(endDate.getTime())) {
                     setError("Invalid end time.");
                     return;
+                  }
+                  if (openShiftInfo.shift_type === "close") {
+                    const windowCheck = checkClockWindow("close", roundTo30Minutes(endDate));
+                    if (!windowCheck.ok) {
+                      setClockWindowModal({ open: true, label: windowCheck.label });
+                      return;
+                    }
                   }
                   const drawerCents = Math.round(Number(staleDrawer) * 100);
                   const changeCents = Math.round(Number(staleChangeDrawer) * 100);
@@ -692,7 +734,13 @@ export default function ClockPageClient() {
                       }),
                     });
                     const json = await res.json();
-                    if (!res.ok) throw new Error(json?.error || "Failed to end shift.");
+                    if (!res.ok) {
+                      if (json?.code === "CLOCK_WINDOW_VIOLATION") {
+                        setClockWindowModal({ open: true, label: json?.windowLabel ?? "Outside allowed clock window" });
+                        return;
+                      }
+                      throw new Error(json?.error || "Failed to end shift.");
+                    }
                     setStaleShiftPrompt(false);
                     setOpenShiftPrompt(false);
                     setOpenShiftInfo(null);
@@ -884,6 +932,15 @@ export default function ClockPageClient() {
                   setOpenShiftPrompt(true);
                   return;
                 }
+                const planned = toCstDateFromLocalInput(plannedStartLocal);
+                if (planned) {
+                  const roundedPlanned = roundTo30Minutes(planned);
+                  const windowCheck = checkClockWindow(shiftKind, roundedPlanned);
+                  if (!windowCheck.ok) {
+                    setClockWindowModal({ open: true, label: windowCheck.label });
+                    return;
+                  }
+                }
                 if (canStart) setConfirmOpen(true);
               }}
             >
@@ -937,6 +994,21 @@ export default function ClockPageClient() {
                 {submitting ? "Starting..." : "Confirm & Start"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {clockWindowModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="card card-pad w-full max-w-md space-y-3 text-center">
+            <div className="text-lg font-semibold">CONTACT MANAGER IMMEDIATELY.</div>
+            <div className="text-xs muted">{clockWindowModal.label}</div>
+            <button
+              className="btn-secondary px-4 py-2"
+              onClick={() => setClockWindowModal({ open: false, label: "" })}
+            >
+              Close
+            </button>
           </div>
         </div>
       )}

@@ -32,6 +32,7 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { isOutOfThreshold, roundTo30Minutes, ShiftType } from "@/lib/kioskRules";
+import { getCstDowMinutes, isTimeWithinWindow, toStoreKey } from "@/lib/clockWindows";
 
 type Body = {
   qrToken?: string;
@@ -47,6 +48,13 @@ type Body = {
 };
 
 const ALLOWED_SHIFT_TYPES: ShiftType[] = ["open", "close", "double", "other"];
+
+function parseClockWindowError(message: string) {
+  const token = "CLOCK_WINDOW_VIOLATION:";
+  if (!message.includes(token)) return null;
+  const label = message.split(token)[1]?.trim() || "Outside allowed clock window";
+  return { code: "CLOCK_WINDOW_VIOLATION", windowLabel: label };
+}
 
 export async function POST(req: Request) {
   try {
@@ -66,7 +74,7 @@ export async function POST(req: Request) {
     // 1) Resolve store by QR token or storeId
     const storeQuery = supabaseServer
       .from("stores")
-      .select("id, expected_drawer_cents");
+      .select("id, name, expected_drawer_cents");
 
     const { data: store, error: storeErr } = body.qrToken
       ? await storeQuery.eq("qr_token", body.qrToken).maybeSingle()
@@ -102,6 +110,30 @@ export async function POST(req: Request) {
     if (Number.isNaN(planned.getTime()))
       return NextResponse.json({ error: "Invalid plannedStartAt." }, { status: 400 });
     const plannedRounded = roundTo30Minutes(planned);
+
+    // 4b) Enforce clock window for open/close shifts (use entered + rounded time)
+    if (body.shiftType === "open" || body.shiftType === "close") {
+      const storeKey = toStoreKey(store.name);
+      const cst = getCstDowMinutes(plannedRounded);
+      if (!storeKey || !cst) {
+        return NextResponse.json(
+          { error: "CLOCK_WINDOW_VIOLATION", code: "CLOCK_WINDOW_VIOLATION", windowLabel: "Outside allowed clock window" },
+          { status: 400 }
+        );
+      }
+      const windowCheck = isTimeWithinWindow({
+        storeKey,
+        shiftType: body.shiftType,
+        localDow: cst.dow,
+        minutes: cst.minutes,
+      });
+      if (!windowCheck.ok) {
+        return NextResponse.json(
+          { error: "CLOCK_WINDOW_VIOLATION", code: "CLOCK_WINDOW_VIOLATION", windowLabel: windowCheck.windowLabel },
+          { status: 400 }
+        );
+      }
+    }
 
     // 5) Enforce start drawer rules BEFORE creating the shift
     const startCents = body.startDrawerCents ?? null;
@@ -195,7 +227,16 @@ export async function POST(req: Request) {
       .select("id")
       .maybeSingle();
 
-    if (shiftErr) return NextResponse.json({ error: shiftErr.message }, { status: 500 });
+    if (shiftErr) {
+      const parsed = parseClockWindowError(shiftErr.message);
+      if (parsed) {
+        return NextResponse.json(
+          { error: "CLOCK_WINDOW_VIOLATION", code: parsed.code, windowLabel: parsed.windowLabel },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json({ error: shiftErr.message }, { status: 500 });
+    }
     if (!shift) return NextResponse.json({ error: "Failed to create shift." }, { status: 500 });
 
     // 8) Insert start drawer count for non-other; optional for other if provided

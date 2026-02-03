@@ -31,6 +31,7 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { isOutOfThreshold, roundTo30Minutes, ShiftType } from "@/lib/kioskRules";
+import { getCstDowMinutes, isTimeWithinWindow, toStoreKey } from "@/lib/clockWindows";
 
 type Body = {
   qrToken?: string;
@@ -45,6 +46,13 @@ type Body = {
 };
 
 type TemplateRow = { id: string; store_id: string | null; shift_type: string };
+
+function parseClockWindowError(message: string) {
+  const token = "CLOCK_WINDOW_VIOLATION:";
+  if (!message.includes(token)) return null;
+  const label = message.split(token)[1]?.trim() || "Outside allowed clock window";
+  return { code: "CLOCK_WINDOW_VIOLATION", windowLabel: label };
+}
 
 function templatesForShiftType(st: ShiftType) {
   if (st === "open") return ["open"];
@@ -90,12 +98,12 @@ export async function POST(req: Request) {
     if (!shift) return NextResponse.json({ error: "Shift not found." }, { status: 404 });
     if (shift.ended_at) return NextResponse.json({ error: "Shift already ended." }, { status: 400 });
 
-    let store: { id: string; expected_drawer_cents: number } | null = null;
+    let store: { id: string; name: string; expected_drawer_cents: number } | null = null;
 
     if (body.qrToken) {
       const { data: storeByToken } = await supabaseServer
         .from("stores")
-        .select("id, expected_drawer_cents")
+        .select("id, name, expected_drawer_cents")
         .eq("qr_token", body.qrToken)
         .maybeSingle();
       if (!storeByToken) return NextResponse.json({ error: "Invalid QR token." }, { status: 401 });
@@ -104,7 +112,7 @@ export async function POST(req: Request) {
     } else {
       const { data: storeById } = await supabaseServer
         .from("stores")
-        .select("id, expected_drawer_cents")
+        .select("id, name, expected_drawer_cents")
         .eq("id", shift.store_id)
         .maybeSingle();
       if (!storeById) return NextResponse.json({ error: "Store not found." }, { status: 404 });
@@ -246,6 +254,29 @@ export async function POST(req: Request) {
     if (Number.isNaN(endAt.getTime())) return NextResponse.json({ error: "Invalid endAt." }, { status: 400 });
     const endRounded = roundTo30Minutes(endAt);
 
+    if (shiftType === "close") {
+      const storeKey = toStoreKey(store.name);
+      const cst = getCstDowMinutes(endRounded);
+      if (!storeKey || !cst) {
+        return NextResponse.json(
+          { error: "CLOCK_WINDOW_VIOLATION", code: "CLOCK_WINDOW_VIOLATION", windowLabel: "Outside allowed clock window" },
+          { status: 400 }
+        );
+      }
+      const windowCheck = isTimeWithinWindow({
+        storeKey,
+        shiftType: "close",
+        localDow: cst.dow,
+        minutes: cst.minutes,
+      });
+      if (!windowCheck.ok) {
+        return NextResponse.json(
+          { error: "CLOCK_WINDOW_VIOLATION", code: "CLOCK_WINDOW_VIOLATION", windowLabel: windowCheck.windowLabel },
+          { status: 400 }
+        );
+      }
+    }
+
     const startedAt = new Date(shift.started_at);
     const durationHours = Number.isNaN(startedAt.getTime())
       ? null
@@ -272,7 +303,16 @@ export async function POST(req: Request) {
       .eq("id", body.shiftId);
 
     // NOTE: DB trigger enforces drawer counts for open/close/double at this point.
-    if (endShiftErr) return NextResponse.json({ error: endShiftErr.message }, { status: 500 });
+    if (endShiftErr) {
+      const parsed = parseClockWindowError(endShiftErr.message);
+      if (parsed) {
+        return NextResponse.json(
+          { error: "CLOCK_WINDOW_VIOLATION", code: parsed.code, windowLabel: parsed.windowLabel },
+          { status: 400 }
+        );
+      }
+      return NextResponse.json({ error: endShiftErr.message }, { status: 500 });
+    }
 
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {

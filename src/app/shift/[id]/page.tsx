@@ -21,7 +21,8 @@
 
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { isOutOfThreshold, thresholdMessage } from "@/lib/kioskRules";
+import { isOutOfThreshold, roundTo30Minutes, thresholdMessage } from "@/lib/kioskRules";
+import { getCstDowMinutes, isTimeWithinWindow, toStoreKey, WindowShiftType } from "@/lib/clockWindows";
 
 type ShiftType = "open" | "close" | "double" | "other";
 
@@ -75,6 +76,37 @@ type ShiftState = {
 function toLocalInputValue(d = new Date()) {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function getCstOffsetMinutes(isoLike: string) {
+  const dt = new Date(isoLike);
+  if (Number.isNaN(dt.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    timeZoneName: "shortOffset",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(dt);
+  const tz = parts.find(p => p.type === "timeZoneName")?.value || "";
+  const match = tz.match(/GMT([+-]\d{1,2})(?::(\d{2}))?/i);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const mins = Number(match[2] || "0");
+  return hours * 60 + (hours < 0 ? -mins : mins);
+}
+
+function toCstDateFromLocalInput(value: string) {
+  const match = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!match) return null;
+  const [, y, m, d, hh, mm] = match;
+  const isoLike = `${y}-${m}-${d}T${hh}:${mm}:00Z`;
+  const offset = getCstOffsetMinutes(isoLike);
+  if (offset == null) return null;
+  const utcMillis = Date.UTC(Number(y), Number(m) - 1, Number(d), Number(hh), Number(mm)) - offset * 60000;
+  return new Date(utcMillis);
 }
 
 function shouldShowVarianceControls(drawerCents: number, expectedCents: number) {
@@ -414,6 +446,8 @@ export default function ShiftPage() {
             shiftId={shiftId}
             qrToken={qrToken}
             expectedCents={state.store.expected_drawer_cents}
+            storeName={state.store.name}
+            shiftType={state.shift.shift_type}
             isOther={shiftType === "other"}
             onClose={() => setShowClockOut(false)}
             onSuccess={() => {
@@ -559,6 +593,8 @@ function ClockOutModal({
   shiftId,
   qrToken,
   expectedCents,
+  storeName,
+  shiftType,
   isOther,
   onClose,
   onSuccess,
@@ -566,6 +602,8 @@ function ClockOutModal({
   shiftId: string;
   qrToken: string;
   expectedCents: number;
+  storeName: string;
+  shiftType: ShiftType;
   isOther: boolean;
   onClose: () => void;
   onSuccess: () => void;
@@ -579,6 +617,12 @@ function ClockOutModal({
   const [doubleCheck, setDoubleCheck] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [clockWindowModal, setClockWindowModal] = useState<{ open: boolean; label: string }>({
+    open: false,
+    label: "",
+  });
+
+  const storeKey = toStoreKey(storeName);
 
   const cents = Math.round(Number(drawer) * 100);
   const changeCents = Math.round(Number(changeDrawer) * 100);
@@ -682,10 +726,28 @@ function ClockOutModal({
             onClick={async () => {
               setErr(null);
 
-              const d = new Date(endLocal);
-              if (Number.isNaN(d.getTime())) {
+              const d = toCstDateFromLocalInput(endLocal);
+              if (!d || Number.isNaN(d.getTime())) {
                 setErr("Invalid date/time.");
                 return;
+              }
+              if (shiftType === "close") {
+                const rounded = roundTo30Minutes(d);
+                const cst = getCstDowMinutes(rounded);
+                if (!storeKey || !cst) {
+                  setClockWindowModal({ open: true, label: "Outside allowed clock window" });
+                  return;
+                }
+                const windowCheck = isTimeWithinWindow({
+                  storeKey,
+                  shiftType: "close" as WindowShiftType,
+                  localDow: cst.dow,
+                  minutes: cst.minutes,
+                });
+                if (!windowCheck.ok) {
+                  setClockWindowModal({ open: true, label: windowCheck.windowLabel });
+                  return;
+                }
               }
 
               setSaving(true);
@@ -706,7 +768,13 @@ function ClockOutModal({
                 });
 
                 const json = await res.json();
-                if (!res.ok) throw new Error(json?.error || "Failed to end shift.");
+                if (!res.ok) {
+                  if (json?.code === "CLOCK_WINDOW_VIOLATION") {
+                    setClockWindowModal({ open: true, label: json?.windowLabel ?? "Outside allowed clock window" });
+                    return;
+                  }
+                  throw new Error(json?.error || "Failed to end shift.");
+                }
 
                 onClose();
                 onSuccess();
@@ -727,6 +795,21 @@ function ClockOutModal({
           </div>
         )}
       </div>
+
+      {clockWindowModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="card card-pad w-full max-w-md space-y-3 text-center">
+            <div className="text-lg font-semibold">CONTACT MANAGER IMMEDIATELY.</div>
+            <div className="text-xs muted">{clockWindowModal.label}</div>
+            <button
+              className="btn-secondary px-4 py-2"
+              onClick={() => setClockWindowModal({ open: false, label: "" })}
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
