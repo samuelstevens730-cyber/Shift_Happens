@@ -9,6 +9,12 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 const PBKDF2_ITERATIONS = 150_000;
 const PBKDF2_HASH = "SHA-256";
 const DERIVED_KEY_BYTES = 32;
@@ -94,15 +100,18 @@ async function signJwt(payload: Record<string, unknown>, secret: string): Promis
 }
 
 serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
   if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+    return new Response("Method not allowed", { status: 405, headers: corsHeaders });
   }
 
   try {
     const { store_id, pin }: { store_id: string; pin: string } = await req.json();
 
     if (!store_id || !pin || !/^\d{4}$/.test(pin)) {
-      return Response.json({ error: "Invalid store_id or PIN format" }, { status: 400 });
+      return Response.json({ error: "Invalid store_id or PIN format" }, { status: 400, headers: corsHeaders });
     }
 
     const { data: settings, error: settingsError } = await supabase
@@ -112,7 +121,7 @@ serve(async (req) => {
       .single();
 
     if (settingsError || !settings?.v2_pin_auth_enabled) {
-      return Response.json({ error: "PIN auth not enabled for this store" }, { status: 403 });
+      return Response.json({ error: "PIN auth not enabled for this store" }, { status: 403, headers: corsHeaders });
     }
 
     const pinFingerprint = await getPinFingerprint(pin);
@@ -124,7 +133,7 @@ serve(async (req) => {
       .single();
 
     if (profileError || !profile || !profile.pin_hash) {
-      return Response.json({ error: "Invalid credentials" }, { status: 401 });
+      return Response.json({ error: "Invalid credentials" }, { status: 401, headers: corsHeaders });
     }
 
     const { data: membership, error: membershipError } = await supabase
@@ -135,7 +144,7 @@ serve(async (req) => {
       .single();
 
     if (membershipError || !membership) {
-      return Response.json({ error: "Invalid credentials" }, { status: 401 });
+      return Response.json({ error: "Invalid credentials" }, { status: 401, headers: corsHeaders });
     }
 
     if (profile.pin_locked_until && new Date(profile.pin_locked_until) > new Date()) {
@@ -144,7 +153,7 @@ serve(async (req) => {
       );
       return Response.json(
         { error: "Account locked", retry_after_minutes: minutesLeft },
-        { status: 429 }
+        { status: 429, headers: corsHeaders }
       );
     }
 
@@ -174,13 +183,13 @@ serve(async (req) => {
 
         return Response.json(
           { error: "Too many failed attempts", locked_for_minutes: lockoutMinutes },
-          { status: 429 }
+          { status: 429, headers: corsHeaders }
         );
       }
 
       return Response.json(
         { error: "Invalid credentials", attempts_remaining: maxAttempts - attempts },
-        { status: 401 }
+        { status: 401, headers: corsHeaders }
       );
     }
 
@@ -220,9 +229,9 @@ serve(async (req) => {
         store_id: store_id,
         stores: storeIds
       }
-    });
+    }, { headers: corsHeaders });
   } catch (err) {
     console.error("Auth error:", err);
-    return Response.json({ error: "Authentication failed" }, { status: 500 });
+    return Response.json({ error: "Authentication failed" }, { status: 500, headers: corsHeaders });
   }
 });

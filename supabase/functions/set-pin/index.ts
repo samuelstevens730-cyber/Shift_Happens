@@ -11,6 +11,12 @@ const PBKDF2_ITERATIONS = 150_000;
 const PBKDF2_HASH = "SHA-256";
 const DERIVED_KEY_BYTES = 32;
 
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
 async function getPinFingerprint(pin: string): Promise<string> {
   const encoder = new TextEncoder();
   const key = await crypto.subtle.importKey(
@@ -66,15 +72,18 @@ async function hashPin(pin: string, salt?: Uint8Array) {
 }
 
 serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
   if (req.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+    return new Response("Method not allowed", { status: 405, headers: corsHeaders });
   }
 
   try {
     const { profile_id, pin }: { profile_id: string; pin: string } = await req.json();
 
     if (!profile_id || !pin || !/^\d{4}$/.test(pin)) {
-      return Response.json({ error: "Invalid profile_id or PIN format" }, { status: 400 });
+      return Response.json({ error: "Invalid profile_id or PIN format" }, { status: 400, headers: corsHeaders });
     }
 
     const pinFingerprint = await getPinFingerprint(pin);
@@ -91,12 +100,12 @@ serve(async (req) => {
       .eq("id", profile_id);
 
     if (error) {
-      return Response.json({ error: error.message }, { status: 500 });
+      return Response.json({ error: error.message }, { status: 500, headers: corsHeaders });
     }
 
-    return Response.json({ ok: true });
+    return Response.json({ ok: true }, { headers: corsHeaders });
   } catch (err) {
     console.error("set-pin error:", err);
-    return Response.json({ error: "Server error" }, { status: 500 });
+    return Response.json({ error: "Server error" }, { status: 500, headers: corsHeaders });
   }
 });
