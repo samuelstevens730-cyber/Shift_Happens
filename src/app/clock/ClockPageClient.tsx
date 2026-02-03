@@ -389,6 +389,20 @@ export default function ClockPageClient() {
   }, []);
 
   useEffect(() => {
+    let alive = true;
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!alive) return;
+      if (data?.session?.user) {
+        setPinModalOpen(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
     if (!activeStoreId) return;
     if (!pinToken || !pinStoreId || pinStoreId !== activeStoreId) {
       setPinModalOpen(true);
