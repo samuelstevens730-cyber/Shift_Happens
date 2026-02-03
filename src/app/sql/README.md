@@ -20,6 +20,7 @@ Run order (top to bottom):
 15) 15_manual_close_review.sql
 16) 16_clock_windows.sql
 17) 17_pin_auth.sql
+18) 19_employee_rls.sql
 
 Notes:
 - These are safe to re-run (uses IF NOT EXISTS / CREATE OR REPLACE where possible).
