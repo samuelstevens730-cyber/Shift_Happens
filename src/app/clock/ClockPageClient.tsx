@@ -169,6 +169,7 @@ export default function ClockPageClient() {
   const [pinToken, setPinToken] = useState<string | null>(null);
   const [pinStoreId, setPinStoreId] = useState<string | null>(null);
   const [pinModalOpen, setPinModalOpen] = useState(true);
+  const [managerSession, setManagerSession] = useState(false);
   const [pinValue, setPinValue] = useState("");
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinLoading, setPinLoading] = useState(false);
@@ -393,23 +394,31 @@ export default function ClockPageClient() {
     (async () => {
       const { data } = await supabase.auth.getSession();
       if (!alive) return;
-      if (data?.session?.user) {
-        setPinModalOpen(false);
-      }
+      setManagerSession(Boolean(data?.session?.user));
     })();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      setManagerSession(Boolean(session?.user));
+    });
+
     return () => {
       alive = false;
+      sub?.subscription.unsubscribe();
     };
   }, []);
 
   useEffect(() => {
     if (!activeStoreId) return;
+    if (managerSession) {
+      setPinModalOpen(false);
+      return;
+    }
     if (!pinToken || !pinStoreId || pinStoreId !== activeStoreId) {
       setPinModalOpen(true);
     } else {
       setPinModalOpen(false);
     }
-  }, [activeStoreId, pinToken, pinStoreId]);
+  }, [activeStoreId, pinToken, pinStoreId, managerSession]);
 
   useEffect(() => {
     if (!pinModalOpen) return;
@@ -1016,7 +1025,7 @@ export default function ClockPageClient() {
         </div>
       </div>
 
-      {pinModalOpen && typeof document !== "undefined"
+      {pinModalOpen && !managerSession && typeof document !== "undefined"
         ? createPortal(
             <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/70 p-4">
               <div className={`card card-pad w-full max-w-md space-y-4 ${pinShake ? "shake" : ""}`}>
