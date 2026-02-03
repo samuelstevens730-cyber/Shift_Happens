@@ -198,6 +198,17 @@ export default function AdminIndex() {
               Store config and checklists.
             </p>
           </Link>
+
+          {/* Scheduler - build weekly schedules */}
+          <Link href="/admin/scheduler" className="tile">
+            <div className="flex items-center gap-2">
+              <span className="tile-dot" />
+              <div className="text-lg font-medium">Scheduler</div>
+            </div>
+            <p className="mt-2 text-sm muted">
+              Build and publish schedules for each store.
+            </p>
+          </Link>
         </section>
       </div>
     </div>
