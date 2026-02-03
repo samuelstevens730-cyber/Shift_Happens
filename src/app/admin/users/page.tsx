@@ -36,6 +36,7 @@ export default function UsersAdminPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAuthed, setIsAuthed] = useState(false);
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
 
@@ -70,6 +71,7 @@ export default function UsersAdminPage() {
     setError(null);
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token || "";
+    setSessionToken(token || null);
     if (!token) {
       router.replace("/login?next=/admin/users");
       return;
@@ -285,6 +287,7 @@ export default function UsersAdminPage() {
               storeIdToName={storeIdToName}
               onSave={updateUser}
               onDeactivate={deactivateUser}
+              sessionToken={sessionToken}
               saving={saving}
             />
           ))}
@@ -306,6 +309,7 @@ function UserCard({
   storeIdToName,
   onSave,
   onDeactivate,
+  sessionToken,
   saving,
 }: {
   user: UserRow;
@@ -313,6 +317,7 @@ function UserCard({
   storeIdToName: Map<string, string>;
   onSave: (user: UserRow, storeIds: string[]) => void;
   onDeactivate: (userId: string) => void;
+  sessionToken: string | null;
   saving: boolean;
 }) {
   const [name, setName] = useState(user.name);
@@ -338,6 +343,9 @@ function UserCard({
   }, [storeIds]);
 
   const canSave = name.trim().length > 0 && selectedStoreIds.length > 0 && !saving;
+  const [pinValue, setPinValue] = useState("");
+  const [pinSaving, setPinSaving] = useState(false);
+  const [pinMessage, setPinMessage] = useState<string | null>(null);
 
   return (
     <div className="card card-pad space-y-3">
@@ -380,6 +388,59 @@ function UserCard({
             </label>
           ))}
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm muted">Set PIN (4 digits)</label>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <input
+            className="input sm:max-w-[160px]"
+            type="password"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            maxLength={4}
+            value={pinValue}
+            onChange={e => setPinValue(e.target.value.replace(/\D/g, "").slice(0, 4))}
+            placeholder="1234"
+            disabled={pinSaving}
+          />
+          <button
+            className="btn-secondary px-4 py-2 disabled:opacity-50"
+            disabled={pinSaving || pinValue.length !== 4}
+            onClick={async () => {
+              setPinSaving(true);
+              setPinMessage(null);
+              try {
+                const res = await fetch(
+                  `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/set-pin`,
+                  {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
+                      ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+                    },
+                    body: JSON.stringify({ profile_id: user.id, pin: pinValue }),
+                  }
+                );
+                const json = await res.json();
+                if (!res.ok) {
+                  setPinMessage(json?.error || "Failed to set PIN.");
+                  return;
+                }
+                setPinMessage("PIN updated.");
+                setPinValue("");
+              } catch {
+                setPinMessage("Failed to set PIN.");
+              } finally {
+                setPinSaving(false);
+              }
+            }}
+          >
+            {pinSaving ? "Updating..." : "Set PIN"}
+          </button>
+        </div>
+        {pinMessage && <div className="text-xs muted">{pinMessage}</div>}
       </div>
 
       <div className="flex flex-wrap gap-2">
