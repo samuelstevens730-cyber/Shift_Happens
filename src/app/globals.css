@@ -344,9 +344,10 @@ body {
   height: 40vh;
   min-height: 240px;
   max-height: 400px;
-  padding: 24px 16px 16px;
+  padding: 24px 0 16px;
   gap: 24px;
   flex-shrink: 0;
+  width: 100%;
 }
 
 .bento-logo {
