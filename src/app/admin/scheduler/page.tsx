@@ -518,7 +518,6 @@ export default function AdminSchedulerPage() {
   useEffect(() => {
     if (!isAuthed) return;
     if (!stores.length) return;
-    if (!schedules.length) return;
     const hasSchedulesForPeriod = stores.every(
       store =>
         schedules.some(
