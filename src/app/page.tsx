@@ -168,7 +168,7 @@ function HomePageInner() {
           const { data: profile } = await supabase
             .from("profiles")
             .select("id")
-            .eq("user_id", userData.user.id)
+            .eq("auth_user_id", userData.user.id)
             .single();
           if (profile) targetProfileId = profile.id;
         }
