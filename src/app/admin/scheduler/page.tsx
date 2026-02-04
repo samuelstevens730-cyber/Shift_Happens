@@ -111,6 +111,17 @@ function calcHours(start: string, end: string) {
   return (e - s) / 60;
 }
 
+function formatTimeLabel(value?: string) {
+  if (!value) return "";
+  const [rawHour, rawMinute] = value.split(":");
+  const hour = Number(rawHour);
+  if (Number.isNaN(hour)) return value;
+  const minute = (rawMinute ?? "00").slice(0, 2);
+  const hour12 = ((hour + 11) % 12) + 1;
+  const suffix = hour >= 12 ? "PM" : "AM";
+  return `${hour12}:${minute} ${suffix}`;
+}
+
 function getWeekKey(dateStr: string) {
   const d = new Date(`${dateStr}T00:00:00`);
   const day = d.getDay();
@@ -187,8 +198,13 @@ export default function AdminSchedulerPage() {
       setError("error" in json ? json.error : "Failed to load schedules.");
       return;
     }
-    setStores(json.stores);
-    setTemplates(json.templates);
+      setStores(json.stores);
+      setTemplates(
+        (json.templates ?? []).map((t: TemplateRow) => ({
+          ...t,
+          day_of_week: Number(t.day_of_week),
+        }))
+      );
     setMemberships(json.memberships);
     setSchedules(json.schedules);
   }, [router]);
@@ -496,7 +512,12 @@ export default function AdminSchedulerPage() {
           <div className="text-xs muted">Admin</div>
         </div>
 
-        {error && <div className="banner banner-error text-sm">{error}</div>}
+          {error && <div className="banner banner-error text-sm">{error}</div>}
+          {!error && stores.length > 0 && templates.length === 0 && (
+            <div className="banner banner-warning text-sm">
+              Templates not found. Run the scheduler template seed (shift_templates) before scheduling.
+            </div>
+          )}
         {conflicts.length > 0 && (
           <div className="banner banner-error text-sm">
             <div className="font-semibold">Double-booking detected</div>
@@ -530,9 +551,10 @@ export default function AdminSchedulerPage() {
               <option value="second">16th-EOM</option>
             </select>
           </div>
-          <div className="text-sm muted">
-            {periodStart} to {periodEnd}
-          </div>
+            <div className="text-sm muted">
+              {periodStart} to {periodEnd}
+              <div className="text-xs muted">Times shown in CST.</div>
+            </div>
           <div className="flex gap-2">
             <button className="btn-secondary px-4 py-2" onClick={ensureSchedules}>
               Create/Load
@@ -610,9 +632,11 @@ export default function AdminSchedulerPage() {
                                 />
                               </div>
                             )}
-                            <div className="text-xs muted">
-                              {cellStart && cellEnd ? `${cellStart} - ${cellEnd}` : "Template missing"}
-                            </div>
+                              <div className="text-xs muted">
+                                {cellStart && cellEnd
+                                  ? `${formatTimeLabel(cellStart)} - ${formatTimeLabel(cellEnd)}`
+                                  : "Template missing"}
+                              </div>
                             {current?.profileId && (
                               <div className={`text-xs px-2 py-1 rounded border ${hashColor(current.profileId)}`}>
                                 {employees.find(p => p.id === current.profileId)?.name ?? "Employee"}

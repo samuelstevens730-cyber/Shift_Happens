@@ -26,7 +26,13 @@ create unique index if not exists idx_schedules_store_period_unique
 -- Seed weekly templates (LV1/LV2).
 -- Day of week: 0=Sun ... 6=Sat
 insert into public.shift_templates (store_id, day_of_week, shift_type, start_time, end_time, is_overnight)
-select s.id, v.dow, v.shift_type, v.start_time, v.end_time, v.is_overnight
+select
+  s.id,
+  v.dow,
+  v.shift_type::public.shift_type,
+  v.start_time::time,
+  v.end_time::time,
+  v.is_overnight
 from public.stores s
 join (
   values
