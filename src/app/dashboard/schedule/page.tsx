@@ -294,10 +294,31 @@ export default function EmployeeSchedulePage() {
   const [filterPeriod, setFilterPeriod] = useState<string>("all");
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // Check auth type: PIN for employees, Supabase session for managers
   useEffect(() => {
     if (typeof window === "undefined") return;
     const token = sessionStorage.getItem(PIN_TOKEN_KEY);
-    if (token) setPinToken(token);
+    if (token) {
+      setPinToken(token);
+      return;
+    }
+    // Check for manager Supabase session
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        // Manager logged in - get their profile
+        supabase
+          .from("profiles")
+          .select("id")
+          .eq("user_id", user.id)
+          .single()
+          .then(({ data }) => {
+            if (data) {
+              setProfileId(data.id);
+              setPinToken("manager"); // Flag to indicate manager auth
+            }
+          });
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -336,15 +357,36 @@ export default function EmployeeSchedulePage() {
     let alive = true;
     (async () => {
       setError(null);
-      const client = createEmployeeSupabase(pinToken);
-      const { data, error: shiftErr } = await client
-        .from("schedule_shifts")
-        .select(
-          "id, store_id, shift_date, shift_type, shift_mode, scheduled_start, scheduled_end, schedules!inner(period_start, period_end, status), stores(name)"
-        )
-        .eq("schedules.status", "published")
-        .order("shift_date", { ascending: true })
-        .returns<ScheduleShiftRow[]>();
+      
+      let data: ScheduleShiftRow[] | null = null;
+      let shiftErr: Error | null = null;
+      
+      if (pinToken === "manager") {
+        // Manager auth - use regular supabase with RLS
+        const result = await supabase
+          .from("schedule_shifts")
+          .select(
+            "id, store_id, shift_date, shift_type, shift_mode, scheduled_start, scheduled_end, schedules!inner(period_start, period_end, status), stores(name)"
+          )
+          .eq("schedules.status", "published")
+          .order("shift_date", { ascending: true })
+          .returns<ScheduleShiftRow[]>();
+        data = result.data;
+        shiftErr = result.error;
+      } else {
+        // Employee auth - use employee JWT
+        const client = createEmployeeSupabase(pinToken);
+        const result = await client
+          .from("schedule_shifts")
+          .select(
+            "id, store_id, shift_date, shift_type, shift_mode, scheduled_start, scheduled_end, schedules!inner(period_start, period_end, status), stores(name)"
+          )
+          .eq("schedules.status", "published")
+          .order("shift_date", { ascending: true })
+          .returns<ScheduleShiftRow[]>();
+        data = result.data;
+        shiftErr = result.error;
+      }
 
       if (!alive) return;
       if (shiftErr) {

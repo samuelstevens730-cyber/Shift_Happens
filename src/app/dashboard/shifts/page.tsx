@@ -92,10 +92,31 @@ export default function EmployeeShiftsPage() {
   const [filterStore, setFilterStore] = useState<string>("all");
   const [filterPeriod, setFilterPeriod] = useState<string>("all");
 
+  // Check auth type: PIN for employees, Supabase session for managers
   useEffect(() => {
     if (typeof window === "undefined") return;
     const token = sessionStorage.getItem(PIN_TOKEN_KEY);
-    if (token) setPinToken(token);
+    if (token) {
+      setPinToken(token);
+      return;
+    }
+    // Check for manager Supabase session
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) {
+        // Manager logged in - get their profile
+        supabase
+          .from("profiles")
+          .select("id")
+          .eq("user_id", user.id)
+          .single()
+          .then(({ data }) => {
+            if (data) {
+              setProfileId(data.id);
+              setPinToken("manager"); // Flag to indicate manager auth
+            }
+          });
+      }
+    });
   }, []);
 
   useEffect(() => {
@@ -134,12 +155,30 @@ export default function EmployeeShiftsPage() {
     let alive = true;
     (async () => {
       setError(null);
-      const client = createEmployeeSupabase(pinToken);
-      const { data, error: shiftErr } = await client
-        .from("shifts")
-        .select("id, store_id, shift_type, planned_start_at, started_at, ended_at, stores(name)")
-        .order("planned_start_at", { ascending: false })
-        .returns<ShiftRow[]>();
+      
+      let data: ShiftRow[] | null = null;
+      let shiftErr: Error | null = null;
+      
+      if (pinToken === "manager") {
+        // Manager auth - use regular supabase with RLS
+        const result = await supabase
+          .from("shifts")
+          .select("id, store_id, shift_type, planned_start_at, started_at, ended_at, stores(name)")
+          .order("planned_start_at", { ascending: false })
+          .returns<ShiftRow[]>();
+        data = result.data;
+        shiftErr = result.error;
+      } else {
+        // Employee auth - use employee JWT
+        const client = createEmployeeSupabase(pinToken);
+        const result = await client
+          .from("shifts")
+          .select("id, store_id, shift_type, planned_start_at, started_at, ended_at, stores(name)")
+          .order("planned_start_at", { ascending: false })
+          .returns<ShiftRow[]>();
+        data = result.data;
+        shiftErr = result.error;
+      }
 
       if (!alive) return;
       if (shiftErr) {
