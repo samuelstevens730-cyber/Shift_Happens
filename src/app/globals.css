@@ -352,9 +352,9 @@ body {
 
 .bento-logo {
   width: auto;
-  height: calc(45vh - 50px);
-  max-height: calc(500px - 50px);
-  min-height: calc(280px - 50px);
+  height: calc((45vh - 50px) * 0.85);
+  max-height: calc((500px - 50px) * 0.85);
+  min-height: calc((280px - 50px) * 0.85);
   max-width: 95vw;
   aspect-ratio: 1 / 1;
   border-radius: 50%;
@@ -548,9 +548,9 @@ body {
   }
   
   .bento-logo {
-    height: calc(55vh - 45px);
-    max-height: calc(450px - 45px);
-    min-height: calc(280px - 45px);
+    height: calc((55vh - 45px) * 0.85);
+    max-height: calc((450px - 45px) * 0.85);
+    min-height: calc((280px - 45px) * 0.85);
     max-width: 98vw;
   }
   
@@ -609,9 +609,9 @@ body {
   }
   
   .bento-logo {
-    height: calc(50vh - 40px);
-    max-height: calc(450px - 40px);
-    min-height: calc(220px - 40px);
+    height: calc((50vh - 40px) * 0.85);
+    max-height: calc((450px - 40px) * 0.85);
+    min-height: calc((220px - 40px) * 0.85);
   }
   
   .bento-nav {
