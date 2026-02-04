@@ -23,6 +23,7 @@ type ShiftRow = {
 };
 
 const PIN_TOKEN_KEY = "sh_pin_token";
+const PIN_PROFILE_KEY = "sh_pin_profile_id";
 
 function formatCst(dt: Date) {
   if (Number.isNaN(dt.getTime())) return "";
@@ -92,31 +93,43 @@ export default function EmployeeShiftsPage() {
   const [filterStore, setFilterStore] = useState<string>("all");
   const [filterPeriod, setFilterPeriod] = useState<string>("all");
 
-  // Check auth type: PIN for employees, Supabase session for managers
+  // Check auth: Supabase session FIRST, then PIN token, then redirect
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const token = sessionStorage.getItem(PIN_TOKEN_KEY);
-    if (token) {
-      setPinToken(token);
-      return;
-    }
-    // Check for manager Supabase session
-    supabase.auth.getUser().then(({ data: { user } }) => {
+    
+    async function checkAuth() {
+      // 1. Check Supabase session FIRST
+      const { data: { user } } = await supabase.auth.getUser();
+      
       if (user) {
         // Manager logged in - get their profile
-        supabase
+        const { data: profile } = await supabase
           .from("profiles")
           .select("id")
           .eq("user_id", user.id)
-          .single()
-          .then(({ data }) => {
-            if (data) {
-              setProfileId(data.id);
-              setPinToken("manager"); // Flag to indicate manager auth
-            }
-          });
+          .single();
+        
+        if (profile) {
+          setProfileId(profile.id);
+          setPinToken("manager"); // Flag to indicate manager auth
+        }
+        return;
       }
-    });
+      
+      // 2. No Supabase session - check for PIN token (employee auth)
+      const token = sessionStorage.getItem(PIN_TOKEN_KEY);
+      if (token) {
+        setPinToken(token);
+        const storedProfile = sessionStorage.getItem(PIN_PROFILE_KEY);
+        if (storedProfile) setProfileId(storedProfile);
+        return;
+      }
+      
+      // 3. No auth at all - redirect to login
+      window.location.href = "/login?next=/dashboard/shifts";
+    }
+    
+    checkAuth();
   }, []);
 
   useEffect(() => {
