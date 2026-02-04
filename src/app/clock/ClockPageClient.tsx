@@ -147,6 +147,15 @@ export default function ClockPageClient() {
     open: false,
     label: "",
   });
+  const [debugClockWindow, setDebugClockWindow] = useState<{
+    shiftKind: ShiftKind;
+    plannedLocal: string;
+    plannedCst: string;
+    plannedRoundedCst: string;
+    storeKey: string | null;
+    dow: number | null;
+    minutes: number | null;
+  } | null>(null);
   const [openShiftPrompt, setOpenShiftPrompt] = useState(false);
   const [openShiftInfo, setOpenShiftInfo] = useState<{
     id: string;
@@ -521,6 +530,16 @@ export default function ClockPageClient() {
     const roundedPlanned = roundTo30Minutes(planned);
     const windowCheck = checkClockWindow(shiftKind, roundedPlanned);
     if (!windowCheck.ok) {
+      const cst = getCstDowMinutes(roundedPlanned);
+      setDebugClockWindow({
+        shiftKind,
+        plannedLocal: plannedStartLocal,
+        plannedCst: formatCst(planned),
+        plannedRoundedCst: formatCst(roundedPlanned),
+        storeKey: storeKeyForWindow,
+        dow: cst?.dow ?? null,
+        minutes: cst?.minutes ?? null,
+      });
       triggerClockWindowModal(windowCheck.label);
       return;
     }
@@ -1274,6 +1293,16 @@ export default function ClockPageClient() {
                   The alarm indicates an invalid time entry and stops once the entry is corrected or the process is exited.
                 </div>
                 <div className="text-xs muted">Proper clock in window: {clockWindowModal.label}</div>
+                {debugClockWindow && (
+                  <div className="mt-2 rounded-lg border border-white/10 bg-white/5 p-2 text-[11px] text-white/70">
+                    <div><b>Debug</b> shift={debugClockWindow.shiftKind}</div>
+                    <div>plannedLocal={debugClockWindow.plannedLocal}</div>
+                    <div>plannedCST={debugClockWindow.plannedCst}</div>
+                    <div>roundedCST={debugClockWindow.plannedRoundedCst}</div>
+                    <div>storeKey={debugClockWindow.storeKey ?? "null"}</div>
+                    <div>dow={debugClockWindow.dow ?? "null"} minutes={debugClockWindow.minutes ?? "null"}</div>
+                  </div>
+                )}
                 <button
                   className="btn-secondary px-4 py-2"
                   onClick={() => setClockWindowModal({ open: false, label: "" })}
