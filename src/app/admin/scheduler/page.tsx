@@ -229,16 +229,24 @@ export default function AdminSchedulerPage() {
     setScheduleMap(map);
   }, [schedules, periodStart, periodEnd]);
 
+  const getScheduleForStore = useCallback(
+    (storeId: string) =>
+      schedules.find(
+        s => s.store_id === storeId && s.period_start === periodStart && s.period_end === periodEnd
+      ) ?? null,
+    [schedules, periodStart, periodEnd]
+  );
+
   const loadDetails = useCallback(async () => {
     const token = await getBearerToken();
     if (!token) return;
     const nextAssignments: Record<string, Assignment> = {};
-    for (const store of stores) {
-      const schedule = scheduleMap[store.id];
-      if (!schedule) continue;
-      const res = await fetch(`/api/admin/schedules/${schedule.id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      for (const store of stores) {
+        const schedule = getScheduleForStore(store.id);
+        if (!schedule) continue;
+        const res = await fetch(`/api/admin/schedules/${schedule.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
       const json = (await res.json()) as ScheduleDetailResponse | { error: string };
       if (!res.ok || "error" in json) {
         setError("error" in json ? json.error : "Failed to load schedule details.");
@@ -256,12 +264,12 @@ export default function AdminSchedulerPage() {
     }
     setAssignments(nextAssignments);
     setDirtyKeys(new Set());
-  }, [stores, scheduleMap]);
+  }, [stores, getScheduleForStore]);
 
   useEffect(() => {
     if (!isAuthed) return;
     void loadDetails();
-  }, [isAuthed, scheduleMap, loadDetails]);
+  }, [isAuthed, loadDetails]);
 
   const employeesByStore = useMemo(() => {
     const map: Record<string, Array<{ id: string; name: string }>> = {};
@@ -413,7 +421,7 @@ export default function AdminSchedulerPage() {
     if (!token) return false;
     for (const store of stores) {
       const assignmentsPayload: Array<Assignment & { date: string; shiftType: "open" | "close" }> = [];
-      const schedule = scheduleMap[store.id];
+      const schedule = getScheduleForStore(store.id);
       if (!schedule) continue;
       for (const dateStr of dates) {
         for (const shiftType of SHIFT_TYPES) {
@@ -447,7 +455,7 @@ export default function AdminSchedulerPage() {
     setDirtyKeys(new Set());
     await loadDetails();
     return true;
-  }, [dates, dirtyKeys, scheduleMap, stores, assignments, loadDetails, conflicts]);
+  }, [dates, dirtyKeys, stores, assignments, loadDetails, conflicts, getScheduleForStore]);
 
   const saveDraft = useCallback(async () => {
     setSaving(true);
@@ -470,7 +478,7 @@ export default function AdminSchedulerPage() {
         if (!saved) return;
       }
       for (const store of stores) {
-        const schedule = scheduleMap[store.id];
+        const schedule = getScheduleForStore(store.id);
         if (!schedule) continue;
         const res = await fetch(`/api/admin/schedules/${schedule.id}/publish`, {
           method: "POST",
@@ -487,7 +495,7 @@ export default function AdminSchedulerPage() {
     } finally {
       setSaving(false);
     }
-  }, [stores, scheduleMap, loadMeta, dirtyKeys, persistAssignments]);
+  }, [stores, loadMeta, dirtyKeys, persistAssignments, getScheduleForStore]);
 
   async function ensureSchedules() {
     setError(null);
@@ -508,6 +516,21 @@ export default function AdminSchedulerPage() {
     }
     await loadMeta();
   }
+
+  useEffect(() => {
+    if (!isAuthed) return;
+    if (!stores.length) return;
+    if (!schedules.length) return;
+    const hasSchedulesForPeriod = stores.every(
+      store =>
+        schedules.some(
+          s => s.store_id === store.id && s.period_start === periodStart && s.period_end === periodEnd
+        )
+    );
+    if (!hasSchedulesForPeriod) {
+      void ensureSchedules();
+    }
+  }, [isAuthed, stores, schedules, periodStart, periodEnd]);
 
   if (loading) return <div className="app-shell">Loading...</div>;
   if (!isAuthed) return null;
