@@ -476,6 +476,10 @@ body {
     inset 0 0 24px rgba(255, 255, 255, 0.03);
 }
 
+.bento-card-scroll {
+  scrollbar-gutter: stable;
+}
+
 .bento-card-expandable ::-webkit-scrollbar {
   width: 8px;
 }

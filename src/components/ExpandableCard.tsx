@@ -69,13 +69,13 @@ export default function ExpandableCard({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 min-h-0 overflow-hidden">
           {!isExpanded ? (
             <div className="p-4 pt-0 flex flex-col items-center justify-center">
               {collapsedContent}
             </div>
           ) : (
-            <div className="p-4 pt-0 overflow-y-auto max-h-[55vh]">
+            <div className="bento-card-scroll p-4 pt-0 h-full overflow-y-auto">
               {expandedContent}
 
               {/* View full link */}
