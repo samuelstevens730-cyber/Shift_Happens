@@ -87,6 +87,7 @@ export default function EmployeeShiftsPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [storeId, setStoreId] = useState("");
   const [profileId, setProfileId] = useState("");
+  const [managerProfileId, setManagerProfileId] = useState("");
   const [pinToken, setPinToken] = useState<string | null>(null);
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +104,7 @@ export default function EmployeeShiftsPage() {
       
       if (user) {
         // Manager logged in - get their profile
+        setPinToken("manager"); // Flag to indicate manager auth
         const { data: profile } = await supabase
           .from("profiles")
           .select("id")
@@ -110,8 +112,7 @@ export default function EmployeeShiftsPage() {
           .maybeSingle();
         
         if (profile) {
-          setProfileId(profile.id);
-          setPinToken("manager"); // Flag to indicate manager auth
+          setManagerProfileId(profile.id);
         }
         return;
       }
@@ -133,6 +134,7 @@ export default function EmployeeShiftsPage() {
   }, []);
 
   useEffect(() => {
+    if (pinToken === "manager") return;
     let alive = true;
     (async () => {
       try {
@@ -161,7 +163,7 @@ export default function EmployeeShiftsPage() {
     return () => {
       alive = false;
     };
-  }, [storeId, profileId]);
+  }, [pinToken, storeId, profileId]);
 
   useEffect(() => {
     if (!pinToken) return;
@@ -174,11 +176,17 @@ export default function EmployeeShiftsPage() {
       
       if (pinToken === "manager") {
         // Manager auth - use regular supabase with RLS
-        const result = await supabase
+        if (!managerProfileId) {
+          setShifts([]);
+          setError("No profile is linked to this manager account. Ask an admin to link your profile.");
+          return;
+        }
+        let query = supabase
           .from("shifts")
           .select("id, store_id, shift_type, planned_start_at, started_at, ended_at, stores(name)")
-          .order("planned_start_at", { ascending: false })
-          .returns<ShiftRow[]>();
+          .order("planned_start_at", { ascending: false });
+        query = query.eq("profile_id", managerProfileId);
+        const result = await query.returns<ShiftRow[]>();
         data = result.data;
         shiftErr = result.error;
       } else {
@@ -203,7 +211,7 @@ export default function EmployeeShiftsPage() {
     return () => {
       alive = false;
     };
-  }, [pinToken]);
+  }, [pinToken, managerProfileId, profileId]);
 
   const periods = useMemo(() => {
     const set = new Set<string>();
