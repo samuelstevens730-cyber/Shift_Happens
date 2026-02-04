@@ -43,8 +43,8 @@ export default function ExpandableCard({
 
   return (
     <div
-      className={`bento-card ${borderColor} transition-all duration-300 ease-out ${
-        isExpanded ? "flex-[3]" : ""
+      className={`bento-card bento-card-expandable ${borderColor} transition-all duration-300 ease-out ${
+        isExpanded ? "bento-card-expanded" : ""
       }`}
       onClick={() => !isExpanded && setIsExpanded(true)}
     >
@@ -75,7 +75,7 @@ export default function ExpandableCard({
               {collapsedContent}
             </div>
           ) : (
-            <div className="p-4 pt-0 overflow-y-auto max-h-[50vh]">
+            <div className="p-4 pt-0 overflow-y-auto max-h-[45vh]">
               {expandedContent}
 
               {/* View full link */}

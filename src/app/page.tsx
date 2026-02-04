@@ -38,12 +38,13 @@ type ScheduleShift = {
   stores?: { name: string } | null;
 };
 
-type TimeEntry = {
-  id: string;
-  started_at: string;
-  ended_at: string | null;
-  hours: number;
-};
+  type TimeEntry = {
+    id: string;
+    planned_start_at?: string | null;
+    started_at: string;
+    ended_at: string | null;
+    hours: number;
+  };
 
 function HomePageInner() {
   const router = useRouter();
@@ -182,8 +183,9 @@ function HomePageInner() {
       
       const { data: shifts } = await client
         .from("schedule_shifts")
-        .select("id, shift_date, shift_type, scheduled_start, scheduled_end, stores(name)")
+        .select("id, shift_date, shift_type, scheduled_start, scheduled_end, stores(name), schedules!inner(status)")
         .eq("schedules.status", "published")
+        .eq("profile_id", targetProfileId)
         .gte("shift_date", today)
         .lte("shift_date", nextWeek)
         .order("shift_date", { ascending: true })
@@ -214,16 +216,17 @@ function HomePageInner() {
 
       const { data: entries } = await client
         .from("shifts")
-        .select("id, started_at, ended_at")
-        .gte("started_at", `${periodStart}T00:00:00`)
-        .lte("started_at", `${periodEnd}T23:59:59`)
+        .select("id, planned_start_at, started_at, ended_at")
+        .eq("profile_id", targetProfileId)
+        .gte("planned_start_at", `${periodStart}T00:00:00`)
+        .lte("planned_start_at", `${periodEnd}T23:59:59`)
         .not("ended_at", "is", null)
-        .order("started_at", { ascending: false });
+        .order("planned_start_at", { ascending: false });
 
       if (!alive) return;
       if (entries) {
         const processedEntries = entries.map(e => {
-          const start = new Date(e.started_at);
+          const start = new Date(e.planned_start_at ?? e.started_at);
           const end = e.ended_at ? new Date(e.ended_at) : null;
           const hours = end ? (end.getTime() - start.getTime()) / 3600000 : 0;
           return { ...e, hours };

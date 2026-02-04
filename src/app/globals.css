@@ -464,6 +464,18 @@ body {
   min-height: 44px;
 }
 
+.bento-card-expandable {
+  align-items: stretch;
+  justify-content: flex-start;
+  min-height: 0;
+}
+
+.bento-card-expanded {
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.35),
+    inset 0 0 24px rgba(255, 255, 255, 0.03);
+}
+
 .bento-card:active {
   transform: scale(0.98);
 }
