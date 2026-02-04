@@ -341,25 +341,21 @@ body {
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
-  height: 45vh;
-  min-height: 280px;
-  max-height: 500px;
-  padding: 4px 0 2px;
-  gap: 4px;
+  padding: 16px 0 8px;
+  gap: 8px;
   flex-shrink: 0;
   width: 100%;
 }
 
 .bento-logo {
-  width: auto;
-  height: calc((45vh - 60px) * 0.65);
-  max-height: calc((500px - 60px) * 0.65);
-  min-height: calc((280px - 60px) * 0.65);
-  max-width: 95vw;
+  width: 120px;
+  height: 120px;
+  max-width: 30vw;
+  max-height: 30vw;
   aspect-ratio: 1 / 1;
   border-radius: 50%;
   object-fit: cover;
-  flex-shrink: 1;
+  flex-shrink: 0;
 }
 
 .bento-nav {
@@ -369,9 +365,8 @@ body {
   gap: 24px;
   flex-wrap: nowrap;
   width: 100%;
-  padding: 8px 4px;
+  padding: 4px;
   background: transparent;
-  margin-top: auto;
 }
 
 .bento-nav-link {
@@ -546,24 +541,20 @@ body {
    ============================================ */
 @media (max-width: 768px) {
   .bento-top-bar {
-    height: 55vh;
-    min-height: 280px;
-    max-height: 450px;
-    padding: 4px 0 2px;
-    gap: 4px;
-    justify-content: flex-start;
+    padding: 12px 0 8px;
+    gap: 8px;
   }
   
   .bento-logo {
-    height: calc((55vh - 50px) * 0.65);
-    max-height: calc((450px - 50px) * 0.65);
-    min-height: calc((280px - 50px) * 0.65);
-    max-width: 98vw;
+    width: 100px;
+    height: 100px;
+    max-width: 35vw;
+    max-height: 35vw;
   }
   
   .bento-nav {
     gap: 16px;
-    padding: 8px 4px;
+    padding: 4px;
   }
   
   .bento-nav-link {
@@ -614,21 +605,18 @@ body {
 /* Very small screens - slight adjustments */
 @media (max-width: 360px) {
   .bento-top-bar {
-    height: 50vh;
-    min-height: 220px;
-    gap: 2px;
-    padding: 2px 0 2px;
+    padding: 8px 0 6px;
+    gap: 6px;
   }
   
   .bento-logo {
-    height: calc((50vh - 45px) * 0.6);
-    max-height: calc((400px - 45px) * 0.6);
-    min-height: calc((220px - 45px) * 0.6);
+    width: 80px;
+    height: 80px;
   }
   
   .bento-nav {
     gap: 12px;
-    padding: 8px 2px;
+    padding: 4px 2px;
   }
   
   .bento-nav-link {
