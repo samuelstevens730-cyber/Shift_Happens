@@ -38,13 +38,74 @@ type ScheduleShift = {
   stores?: { name: string } | null;
 };
 
-  type TimeEntry = {
-    id: string;
-    planned_start_at?: string | null;
-    started_at: string;
-    ended_at: string | null;
-    hours: number;
+type TimeEntry = {
+  id: string;
+  planned_start_at?: string | null;
+  started_at: string;
+  ended_at: string | null;
+  hours: number;
+};
+
+const CST_TZ = "America/Chicago";
+
+function getCstDateKey(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: CST_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const get = (type: string) => parts.find(p => p.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function addDaysToKey(dateKey: string, days: number) {
+  const dt = new Date(`${dateKey}T00:00:00`);
+  dt.setDate(dt.getDate() + days);
+  return getCstDateKey(dt);
+}
+
+function formatCstLabel(dateKey: string) {
+  return new Date(`${dateKey}T00:00:00`).toLocaleDateString("en-US", {
+    timeZone: CST_TZ,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function getCstWeekdayIndex(dateKey: string) {
+  const label = new Date(`${dateKey}T00:00:00`).toLocaleDateString("en-US", {
+    timeZone: CST_TZ,
+    weekday: "short",
+  });
+  const map: Record<string, number> = {
+    Sun: 0,
+    Mon: 1,
+    Tue: 2,
+    Wed: 3,
+    Thu: 4,
+    Fri: 5,
+    Sat: 6,
   };
+  return map[label] ?? 0;
+}
+
+function formatTimeLabel(value?: string) {
+  if (!value) return "";
+  const [h, m] = value.split(":");
+  const hour = Number(h);
+  if (Number.isNaN(hour)) return value;
+  const minute = (m ?? "00").slice(0, 2);
+  const hour12 = ((hour + 11) % 12) + 1;
+  const suffix = hour >= 12 ? "PM" : "AM";
+  return `${hour12}:${minute} ${suffix}`;
+}
+
+function formatTimeRange(shift?: ScheduleShift) {
+  if (!shift) return "Off";
+  return `${formatTimeLabel(shift.scheduled_start)} - ${formatTimeLabel(shift.scheduled_end)}`;
+}
 
 function HomePageInner() {
   const router = useRouter();
@@ -343,6 +404,15 @@ function HomePageInner() {
   const showRequests = hasPinAuth || hasAdminAuth;
   const showAdmin = hasAdminAuth;
 
+  const todayKey = getCstDateKey(new Date());
+  const yesterdayKey = addDaysToKey(todayKey, -1);
+  const tomorrowKey = addDaysToKey(todayKey, 1);
+  const endOfWeekOffset = 6 - getCstWeekdayIndex(todayKey);
+  const endOfWeekKey = addDaysToKey(todayKey, endOfWeekOffset < 0 ? 0 : endOfWeekOffset);
+  const expandedKeys = Array.from({ length: endOfWeekOffset + 1 }).map((_, idx) =>
+    addDaysToKey(todayKey, idx)
+  );
+
   // Nav items: HOME | ADMIN | LOGOUT
   const navItems = [
     { href: "/", label: "HOME", active: pathname === "/" },
@@ -461,47 +531,55 @@ function HomePageInner() {
             fullViewLink="/dashboard/schedule"
             fullViewText="View full schedule"
             collapsedContent={
-              scheduleShifts.length > 0 ? (
-                <div className="text-center">
-                  <p className="text-lg font-bold text-white">
-                    {new Date(scheduleShifts[0].shift_date).toLocaleDateString("en-US", { weekday: "short" })}
-                  </p>
-                  <p className="text-sm text-sky-400">
-                    {scheduleShifts[0].scheduled_start?.slice(0, 5)} - {scheduleShifts[0].scheduled_end?.slice(0, 5)}
-                  </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {new Date(scheduleShifts[0].shift_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                  </p>
+              <div className="w-full space-y-3">
+                <div className="grid grid-cols-3 gap-2 text-center text-[10px] uppercase tracking-widest text-white/50">
+                  <div>Yesterday</div>
+                  <div>Today</div>
+                  <div>Tomorrow</div>
                 </div>
-              ) : (
-                <p className="text-gray-400 text-sm">No upcoming shifts</p>
-              )
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  {[yesterdayKey, todayKey, tomorrowKey].map(key => {
+                    const shift = scheduleShifts.find(s => s.shift_date === key);
+                    return (
+                      <div key={key} className="flex flex-col gap-1 rounded-lg border border-white/10 bg-white/5 p-2">
+                        <div className="text-xs font-semibold text-white">
+                          {formatTimeRange(shift)}
+                        </div>
+                        <div className="text-[10px] text-white/60">
+                          {shift?.stores?.name ?? "--"}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             }
             expandedContent={
               <div className="space-y-2">
-                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, idx) => {
-                  const shift = scheduleShifts.find(s => new Date(s.shift_date).getDay() === idx);
-                  const isToday = new Date().getDay() === idx;
+                {expandedKeys.map(key => {
+                  const shift = scheduleShifts.find(s => s.shift_date === key);
+                  const isToday = key === todayKey;
                   return (
                     <div
-                      key={day}
+                      key={key}
                       className={`flex justify-between items-center py-2 px-3 rounded-lg ${
                         isToday ? "bg-sky-500/20 border border-sky-500/30" : "bg-white/5"
                       }`}
                     >
-                      <span className="text-sm font-medium w-10">{day}</span>
-                      <span className="text-sm text-gray-300">
-                        {shift ? `${shift.scheduled_start?.slice(0, 5)} - ${shift.scheduled_end?.slice(0, 5)}` : "OFF"}
-                      </span>
-                      {shift && (
-                        <span className="text-xs text-gray-500">
-                          {((new Date(`2000-01-01T${shift.scheduled_end}`).getTime() - 
-                            new Date(`2000-01-01T${shift.scheduled_start}`).getTime()) / 3600000).toFixed(1)}h
-                        </span>
-                      )}
+                      <span className="text-sm font-medium w-24">{formatCstLabel(key)}</span>
+                      <span className="text-sm text-gray-300">{formatTimeRange(shift)}</span>
+                      <span className="text-xs text-gray-500">{shift?.stores?.name ?? "--"}</span>
                     </div>
                   );
                 })}
+                <div className="grid grid-cols-2 gap-2 pt-3">
+                  <Link href="/dashboard/schedule?week=next" className="btn-secondary text-xs py-2 text-center">
+                    Next week
+                  </Link>
+                  <Link href="/dashboard/shifts" className="btn-secondary text-xs py-2 text-center">
+                    View Full Schedule
+                  </Link>
+                </div>
               </div>
             }
           />
