@@ -432,7 +432,7 @@ body {
   min-height: 0;
 }
 
-/* Left Column: Time Clock, Dashboard, Requests */
+/* Left Column: Time Clock, Requests */
 .bento-left {
   flex: 1;
   display: flex;
@@ -440,7 +440,7 @@ body {
   gap: 2px;
 }
 
-/* Right Column: My Schedule (tall), Admin (short) */
+/* Right Column: My Schedule, Admin */
 .bento-right {
   flex: 1;
   display: flex;
@@ -483,9 +483,9 @@ body {
   pointer-events: none;
 }
 
-/* Left Column Cards - Horizontal orientation, decreasing heights */
+/* Left Column Cards */
 .bento-time-clock {
-  flex: 3;
+  flex: 2;
   border: 2px solid rgba(32, 240, 138, 0.5);
   box-shadow: 
     0 0 40px rgba(32, 240, 138, 0.15),
@@ -496,20 +496,6 @@ body {
   box-shadow: 
     0 0 60px rgba(32, 240, 138, 0.3),
     inset 0 0 40px rgba(32, 240, 138, 0.08);
-}
-
-.bento-dashboard {
-  flex: 2;
-  border: 2px solid rgba(180, 112, 255, 0.5);
-  box-shadow: 
-    0 0 40px rgba(180, 112, 255, 0.15),
-    inset 0 0 30px rgba(180, 112, 255, 0.05);
-}
-
-.bento-dashboard:hover {
-  box-shadow: 
-    0 0 60px rgba(180, 112, 255, 0.3),
-    inset 0 0 40px rgba(180, 112, 255, 0.08);
 }
 
 .bento-requests {
@@ -526,9 +512,9 @@ body {
     inset 0 0 40px rgba(255, 160, 80, 0.08);
 }
 
-/* Right Column Cards - Vertical orientation */
+/* Right Column Cards */
 .bento-my-schedule {
-  flex: 4;
+  flex: 2;
   border: 2px solid rgba(100, 180, 255, 0.5);
   box-shadow: 
     0 0 40px rgba(100, 180, 255, 0.15),
@@ -542,7 +528,7 @@ body {
 }
 
 .bento-admin {
-  flex: 2;
+  flex: 1;
   border: 2px solid rgba(255, 100, 150, 0.5);
   box-shadow: 
     0 0 40px rgba(255, 100, 150, 0.15),
@@ -597,11 +583,7 @@ body {
   
   /* Adjust flex ratios for mobile to create asymmetry */
   .bento-time-clock {
-    flex: 2.5;
-  }
-  
-  .bento-dashboard {
-    flex: 1.5;
+    flex: 2;
   }
   
   .bento-requests {
@@ -609,11 +591,11 @@ body {
   }
   
   .bento-my-schedule {
-    flex: 3.5;
+    flex: 2;
   }
   
   .bento-admin {
-    flex: 1.5;
+    flex: 1;
   }
   
   .bento-card-title {

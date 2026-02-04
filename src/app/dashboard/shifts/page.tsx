@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { createEmployeeSupabase } from "@/lib/employeeSupabase";
 import PinGate from "@/components/PinGate";
+import HomeHeader from "@/components/HomeHeader";
 
 type Store = { id: string; name: string };
 type Profile = { id: string; name: string; active: boolean | null };
@@ -187,9 +188,18 @@ export default function EmployeeShiftsPage() {
     return totals;
   }, [filteredShifts]);
 
+  // Check if user is manager for HomeHeader
+  const [isManager, setIsManager] = useState(false);
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setIsManager(!!data.user);
+    });
+  }, []);
+
   return (
-    <div className="app-shell">
-      <div className="max-w-4xl mx-auto space-y-4">
+    <div className="bento-shell">
+      <HomeHeader isManager={isManager} />
+      <div className="max-w-4xl mx-auto space-y-4 px-4 py-4">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">My Shifts</h1>
           <span className="text-xs muted">Employee</span>

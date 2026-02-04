@@ -1,34 +1,22 @@
 /**
- * Home Page - Asymmetric Bento Layout
+ * Home Page - Consolidated Dashboard
  *
- * Desktop: 20% padding on sides, centered asymmetric grid
- * Mobile: Two-column masonry with intentional misalignment
- *
- * Layout (Mobile):
- * ┌──────────────────┬─────────────────┐
- * │  TIME CLOCK      │                 │
- * │  (large rect)    │  MY SCHEDULE    │
- * │                  │  (tall vertical)│
- * ├──────────────────┤                 │
- * │  DASHBOARD       │                 │
- * │  (medium rect)   ├─────────────────┤
- * │                  │  ADMIN          │
- * │                  │  (short vert)   │
- * ├──────────────────┼─────────────────┤
- * │  REQUESTS        │                 │
- * │  (small rect)    │                 │
- * └──────────────────┴─────────────────┘
+ * Features:
+ * - Bento grid: TIME CLOCK (modal), MY SCHEDULE, REQUESTS, ADMIN
+ * - Nav: HOME | ADMIN | LOGOUT
+ * - Employee messages banner
+ * - QR code store preselection via ?store=STORE_ID
  */
 
 "use client";
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import PinGate from "@/components/PinGate";
-import { Clock, Calendar, LayoutDashboard, FileText, Shield } from "lucide-react";
+import { Clock, Calendar, FileText, Shield, X } from "lucide-react";
 
 // Storage keys (match PinGate.tsx)
 const PIN_TOKEN_KEY = "sh_pin_token";
@@ -37,10 +25,13 @@ const PIN_PROFILE_KEY = "sh_pin_profile_id";
 
 type Store = { id: string; name: string };
 type Profile = { id: string; name: string; active: boolean | null };
+type EmployeeMessage = { id: string; content: string; created_at: string };
 
-export default function Home() {
+function HomePageInner() {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const preselectedStore = searchParams.get("store");
 
   // Auth state
   const [hasAdminAuth, setHasAdminAuth] = useState(false);
@@ -57,6 +48,12 @@ export default function Home() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [storeId, setStoreId] = useState("");
   const [profileId, setProfileId] = useState("");
+
+  // Clock modal state
+  const [showClockModal, setShowClockModal] = useState(false);
+
+  // Employee messages
+  const [employeeMessages, setEmployeeMessages] = useState<EmployeeMessage[]>([]);
 
   // Check for existing auth on mount
   useEffect(() => {
@@ -105,7 +102,32 @@ export default function Home() {
     };
   }, []);
 
-  // Listen for PIN auth changes (in case user logs in via PIN in another tab)
+  // Fetch employee messages when authenticated
+  useEffect(() => {
+    if (!hasPinAuth && !hasAdminAuth) return;
+
+    let alive = true;
+    async function fetchMessages() {
+      const profileId = sessionStorage.getItem(PIN_PROFILE_KEY);
+      if (!profileId) return;
+
+      const { data } = await supabase
+        .from("employee_messages")
+        .select("id, content, created_at")
+        .eq("profile_id", profileId)
+        .eq("is_read", false)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      if (!alive) return;
+      if (data) setEmployeeMessages(data);
+    }
+
+    fetchMessages();
+    return () => { alive = false; };
+  }, [hasPinAuth, hasAdminAuth]);
+
+  // Listen for PIN auth changes
   useEffect(() => {
     const checkPinAuth = () => {
       if (typeof window === "undefined") return;
@@ -137,9 +159,9 @@ export default function Home() {
     };
   }, []);
 
-  // Fetch stores/profiles when showing PIN gate
+  // Fetch stores/profiles when showing PIN gate or clock modal
   useEffect(() => {
-    if (!showPinGate) return;
+    if (!showPinGate && !showClockModal) return;
 
     let alive = true;
     setPinLoading(true);
@@ -161,8 +183,10 @@ export default function Home() {
         setStores(storesData);
         setProfiles(profilesData);
 
-        // Set defaults
-        if (storesData.length > 0 && !storeId) {
+        // Set defaults - use preselected store from QR if available
+        if (preselectedStore && storesData.find((s: Store) => s.id === preselectedStore)) {
+          setStoreId(preselectedStore);
+        } else if (storesData.length > 0 && !storeId) {
           setStoreId(storesData[0].id);
         }
         if (profilesData.length > 0 && !profileId) {
@@ -175,7 +199,7 @@ export default function Home() {
 
     loadData();
     return () => { alive = false; };
-  }, [showPinGate, storeId, profileId]);
+  }, [showPinGate, showClockModal, preselectedStore, storeId, profileId]);
 
   // Handle PIN authorization success
   const handlePinAuthorized = () => {
@@ -195,21 +219,21 @@ export default function Home() {
     router.push("/login?next=/");
   };
 
+  // Dismiss employee message
+  const dismissMessage = async (messageId: string) => {
+    await supabase.from("employee_messages").update({ is_read: true }).eq("id", messageId);
+    setEmployeeMessages((prev) => prev.filter((m) => m.id !== messageId));
+  };
+
   // Determine which cards to show
-  const showTimeClock = true;
   const showMySchedule = hasPinAuth || hasAdminAuth;
-  const showDashboard = hasPinAuth || hasAdminAuth;
   const showRequests = hasPinAuth || hasAdminAuth;
   const showAdmin = hasAdminAuth;
 
-  // Nav items based on auth state
+  // Nav items: HOME | ADMIN | LOGOUT
   const navItems = [
-    { href: "/", label: "HOME" },
-    { href: "/admin", label: "ADMIN" },
-    { href: "/dashboard", label: "DASHBOARD" },
-    ...(hasAdminAuth
-      ? [{ href: "#logout", label: "LOGOUT", isLogout: true }]
-      : [{ href: "/login", label: "LOGIN" }]),
+    { href: "/", label: "HOME", active: pathname === "/" },
+    ...(hasAdminAuth ? [{ href: "/admin", label: "ADMIN", active: pathname === "/admin" }] : []),
   ];
 
   if (!authChecked) {
@@ -222,81 +246,82 @@ export default function Home() {
 
   return (
     <div className="bento-shell">
-      {/* Top Bar: Logo + Nav */}
+      {/* Top Bar: Logo + Navigation */}
       <div className="bento-top-bar">
         <Image
           src="/brand/no_cap_logo.jpg"
           alt="No Cap Smoke Shop"
-          width={80}
-          height={80}
+          width={120}
+          height={120}
           priority
           className="bento-logo"
         />
         <nav className="bento-nav">
-          {navItems.map((item) => {
-            const isActive = pathname === item.href && !item.isLogout;
-            const baseClasses = "bento-nav-link";
-            const activeClasses = "bento-nav-active";
-            const inactiveClasses = "bento-nav-inactive";
-
-            if (item.isLogout) {
-              return (
-                <button
-                  key="logout"
-                  onClick={async () => {
-                    await supabase.auth.signOut();
-                    setHasAdminAuth(false);
-                    router.push("/");
-                  }}
-                  className={`${baseClasses} ${inactiveClasses}`}
-                >
-                  {item.label}
-                </button>
-              );
-            }
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`${baseClasses} ${isActive ? activeClasses : inactiveClasses}`}
-              >
-                {item.label}
-              </Link>
-            );
-          })}
+          {navItems.map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`bento-nav-link ${item.active ? "bento-nav-active" : "bento-nav-inactive"}`}
+            >
+              {item.label}
+            </Link>
+          ))}
+          <button
+            onClick={async () => {
+              await supabase.auth.signOut();
+              sessionStorage.removeItem(PIN_TOKEN_KEY);
+              sessionStorage.removeItem(PIN_STORE_KEY);
+              sessionStorage.removeItem(PIN_PROFILE_KEY);
+              setHasAdminAuth(false);
+              setHasPinAuth(false);
+              router.push("/");
+            }}
+            className="bento-nav-link bento-nav-inactive"
+          >
+            LOGOUT
+          </button>
         </nav>
       </div>
 
-      {/* Bento Grid */}
+      {/* Employee Messages Banner */}
+      {employeeMessages.length > 0 && (
+        <div className="w-full px-4 mb-4">
+          {employeeMessages.map((message) => (
+            <div
+              key={message.id}
+              className="bg-[var(--card)] border border-[var(--green)]/30 rounded-xl p-4 relative"
+            >
+              <h3 className="text-[var(--green)] font-semibold text-sm mb-1">
+                Message from Management
+              </h3>
+              <p className="text-sm text-[var(--text)]">{message.content}</p>
+              <button
+                onClick={() => dismissMessage(message.id)}
+                className="absolute top-2 right-2 text-xs text-[var(--muted)] hover:text-[var(--text)]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Bento Grid - No DASHBOARD card */}
       <div className="bento-container">
         {/* Left Column */}
         <div className="bento-left">
-          {showTimeClock && (
-            <Link href="/clock" className="bento-card bento-time-clock">
-              <div className="flex flex-col items-center justify-center gap-3">
-                <Clock className="w-10 h-10 md:w-12 md:h-12" style={{ color: 'var(--green)' }} strokeWidth={1.5} />
-                <span className="bento-card-title">TIME CLOCK</span>
-              </div>
-            </Link>
-          )}
-          
-          {showDashboard ? (
-            <Link href="/dashboard" className="bento-card bento-dashboard">
-              <div className="flex flex-col items-center justify-center gap-3">
-                <LayoutDashboard className="w-10 h-10 md:w-12 md:h-12" style={{ color: 'var(--purple)' }} strokeWidth={1.5} />
-                <span className="bento-card-title">DASHBOARD</span>
-              </div>
-            </Link>
-          ) : (
-            <div className="bento-card bento-dashboard bento-card-disabled">
-              <div className="flex flex-col items-center justify-center gap-3">
-                <LayoutDashboard className="w-10 h-10 md:w-12 md:h-12" style={{ color: 'var(--purple)' }} strokeWidth={1.5} />
-                <span className="bento-card-title">DASHBOARD</span>
-              </div>
+          {/* TIME CLOCK - opens modal */}
+          <button
+            onClick={() => setShowClockModal(true)}
+            className="bento-card bento-time-clock text-left"
+          >
+            <div className="flex flex-col items-center justify-center gap-3">
+              <Clock className="w-10 h-10 md:w-12 md:h-12" style={{ color: "var(--green)" }} strokeWidth={1.5} />
+              <span className="bento-card-title">TIME CLOCK</span>
             </div>
-          )}
-          
+          </button>
+
+          {/* REQUESTS */}
           {showRequests ? (
             <Link href="/dashboard/shifts" className="bento-card bento-requests">
               <div className="flex flex-col items-center justify-center gap-3">
@@ -316,6 +341,7 @@ export default function Home() {
 
         {/* Right Column */}
         <div className="bento-right">
+          {/* MY SCHEDULE */}
           {showMySchedule ? (
             <Link href="/dashboard/schedule" className="bento-card bento-my-schedule">
               <div className="flex flex-col items-center justify-center gap-3">
@@ -331,7 +357,8 @@ export default function Home() {
               </div>
             </div>
           )}
-          
+
+          {/* ADMIN */}
           {showAdmin ? (
             <Link href="/admin" className="bento-card bento-admin">
               <div className="flex flex-col items-center justify-center gap-3">
@@ -404,6 +431,58 @@ export default function Home() {
           }}
         />
       )}
+
+      {/* Clock Modal */}
+      {showClockModal && (
+        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/80 p-4">
+          <div className="card card-pad w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Time Clock</h2>
+              <button
+                onClick={() => setShowClockModal(false)}
+                className="text-muted hover:text-[var(--text)]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {preselectedStore && (
+              <div className="mb-4 p-3 bg-[var(--green)]/10 border border-[var(--green)]/30 rounded-lg">
+                <p className="text-sm text-[var(--green)]">
+                  Store preselected from QR code
+                </p>
+              </div>
+            )}
+
+            <PinGate
+              loading={pinLoading}
+              stores={stores}
+              profiles={profiles}
+              qrToken={preselectedStore || ""}
+              tokenStore={preselectedStore ? stores.find((s) => s.id === preselectedStore) || null : null}
+              storeId={storeId}
+              setStoreId={setStoreId}
+              profileId={profileId}
+              setProfileId={setProfileId}
+              onLockChange={() => {}}
+              onAuthorized={(token) => {
+                handlePinAuthorized();
+                // Navigate to clock page with auth
+                router.push("/clock");
+              }}
+              onClose={() => setShowClockModal(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={<div className="bento-shell flex items-center justify-center"><div className="text-muted">Loading...</div></div>}>
+      <HomePageInner />
+    </Suspense>
   );
 }

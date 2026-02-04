@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { createEmployeeSupabase } from "@/lib/employeeSupabase";
 import PinGate from "@/components/PinGate";
+import HomeHeader from "@/components/HomeHeader";
 
 type Store = { id: string; name: string };
 type Profile = { id: string; name: string; active: boolean | null };
@@ -429,9 +430,18 @@ export default function EmployeeSchedulePage() {
     return Array.from(groups.values()).sort((a, b) => a.localeCompare(b));
   }, [futureShiftDates]);
 
+  // Check if user is manager for HomeHeader
+  const [isManager, setIsManager] = useState(false);
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => {
+      setIsManager(!!data.user);
+    });
+  }, []);
+
   return (
-    <div className="app-shell">
-      <div className="max-w-4xl mx-auto space-y-4">
+    <div className="bento-shell">
+      <HomeHeader isManager={isManager} />
+      <div className="max-w-4xl mx-auto space-y-4 px-4 py-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold">My Schedule</h1>
