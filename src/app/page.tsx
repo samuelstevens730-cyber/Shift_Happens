@@ -413,6 +413,10 @@ function HomePageInner() {
   const expandedKeys = Array.from({ length: endOfWeekOffset + 1 }).map((_, idx) =>
     addDaysToKey(todayKey, idx)
   );
+  const nextWeekKeys = Array.from({ length: 7 }).map((_, idx) =>
+    addDaysToKey(todayKey, endOfWeekOffset + 1 + idx)
+  );
+  const [showNextWeek, setShowNextWeek] = useState(false);
 
   // Nav items: HOME | ADMIN | LOGOUT
   const navItems = [
@@ -573,11 +577,36 @@ function HomePageInner() {
                     </div>
                   );
                 })}
+                {showNextWeek && (
+                  <div className="space-y-2 pt-2">
+                    <div className="text-xs uppercase tracking-widest text-white/50">Next 7 days</div>
+                    {nextWeekKeys.map(key => {
+                      const shift = scheduleShifts.find(s => s.shift_date === key);
+                      return (
+                        <div
+                          key={key}
+                          className="flex justify-between items-center py-2 px-3 rounded-lg bg-white/5"
+                        >
+                          <span className="text-sm font-medium w-24">{formatCstLabel(key)}</span>
+                          <span className="text-sm text-gray-300">{formatTimeRange(shift)}</span>
+                          <span className="text-xs text-gray-500">{shift?.stores?.name ?? "--"}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
                 <div className="-mx-4 mt-3 sticky bottom-0 bg-gradient-to-t from-[#0d0f12] via-[#0d0f12]/90 to-transparent px-4 pt-3">
                   <div className="grid grid-cols-2 gap-2">
-                    <Link href="/dashboard/schedule?week=next" className="btn-secondary text-xs py-2 text-center">
-                      Next week
-                    </Link>
+                    <button
+                      type="button"
+                      className="btn-secondary text-xs py-2 text-center"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowNextWeek(prev => !prev);
+                      }}
+                    >
+                      {showNextWeek ? "Hide next week" : "Next 7 days"}
+                    </button>
                     <Link href="/dashboard/shifts" className="btn-secondary text-xs py-2 text-center">
                       View Full Schedule
                     </Link>
