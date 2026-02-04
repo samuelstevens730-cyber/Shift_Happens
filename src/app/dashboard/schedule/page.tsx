@@ -289,6 +289,7 @@ export default function EmployeeSchedulePage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [storeId, setStoreId] = useState("");
   const [profileId, setProfileId] = useState("");
+  const [managerProfileId, setManagerProfileId] = useState("");
   const [pinToken, setPinToken] = useState<string | null>(null);
   const [scheduleShifts, setScheduleShifts] = useState<ScheduleShiftRow[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -314,7 +315,7 @@ export default function EmployeeSchedulePage() {
           .maybeSingle();
 
         if (profile) {
-          setProfileId(profile.id);
+          setManagerProfileId(profile.id);
         }
         return;
       }
@@ -336,6 +337,7 @@ export default function EmployeeSchedulePage() {
   }, []);
 
   useEffect(() => {
+    if (pinToken === "manager") return;
     let alive = true;
     (async () => {
       try {
@@ -364,7 +366,7 @@ export default function EmployeeSchedulePage() {
     return () => {
       alive = false;
     };
-  }, [storeId, profileId]);
+  }, [pinToken, storeId, profileId]);
 
   useEffect(() => {
     if (!pinToken) return;
@@ -377,7 +379,7 @@ export default function EmployeeSchedulePage() {
       
       if (pinToken === "manager") {
         // Manager auth - use regular supabase with RLS
-        if (!profileId) {
+        if (!managerProfileId) {
           setScheduleShifts([]);
           setError("No profile is linked to this manager account. Ask an admin to link your profile.");
           return;
@@ -390,7 +392,7 @@ export default function EmployeeSchedulePage() {
           .eq("schedules.status", "published")
           .order("shift_date", { ascending: true });
 
-        query = query.eq("profile_id", profileId);
+        query = query.eq("profile_id", managerProfileId);
 
         const result = await query.returns<ScheduleShiftRow[]>();
         data = result.data;
@@ -420,7 +422,7 @@ export default function EmployeeSchedulePage() {
     return () => {
       alive = false;
     };
-  }, [pinToken, refreshKey]);
+  }, [pinToken, refreshKey, managerProfileId, profileId]);
 
   const periods = useMemo(() => {
     const set = new Set<string>();
