@@ -29,6 +29,7 @@ type PinGateProps = {
   setProfileId: (id: string) => void;
   onLockChange?: (locked: boolean) => void;
   onAuthorized?: (token: string) => void;
+  onClose?: () => void; // Optional close callback for modal usage
 };
 
 export default function PinGate({
@@ -43,6 +44,7 @@ export default function PinGate({
   setProfileId,
   onLockChange,
   onAuthorized,
+  onClose,
 }: PinGateProps) {
   const [pinToken, setPinToken] = useState<string | null>(null);
   const [pinStoreId, setPinStoreId] = useState<string | null>(null);
@@ -126,7 +128,19 @@ export default function PinGate({
   return createPortal(
     <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/70 p-4">
       <div className={`card card-pad w-full max-w-md space-y-4 ${pinShake ? "shake" : ""}`}>
-        <div className="text-lg font-semibold text-center">Employee PIN</div>
+        <div className="flex items-center justify-between">
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="text-sm muted hover:text-[var(--text)] transition-colors"
+              type="button"
+            >
+              ← Back
+            </button>
+          )}
+          <div className="text-lg font-semibold text-center flex-1">Employee PIN</div>
+          {onClose && <div className="w-10" />} {/* Spacer for centering */}
+        </div>
         <div className="text-xs muted text-center">Enter your 4-digit PIN to continue.</div>
 
         {!qrToken && (
