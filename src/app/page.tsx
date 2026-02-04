@@ -49,9 +49,6 @@ function HomePageInner() {
   const [storeId, setStoreId] = useState("");
   const [profileId, setProfileId] = useState("");
 
-  // Clock modal state
-  const [showClockModal, setShowClockModal] = useState(false);
-
   // Employee messages
   const [employeeMessages, setEmployeeMessages] = useState<EmployeeMessage[]>([]);
 
@@ -159,9 +156,9 @@ function HomePageInner() {
     };
   }, []);
 
-  // Fetch stores/profiles when showing PIN gate or clock modal
+  // Fetch stores/profiles when showing PIN gate
   useEffect(() => {
-    if (!showPinGate && !showClockModal) return;
+    if (!showPinGate) return;
 
     let alive = true;
     setPinLoading(true);
@@ -199,7 +196,7 @@ function HomePageInner() {
 
     loadData();
     return () => { alive = false; };
-  }, [showPinGate, showClockModal, preselectedStore, storeId, profileId]);
+  }, [showPinGate, preselectedStore, storeId, profileId]);
 
   // Handle PIN authorization success
   const handlePinAuthorized = () => {
@@ -310,16 +307,13 @@ function HomePageInner() {
       <div className="bento-container">
         {/* Left Column */}
         <div className="bento-left">
-          {/* TIME CLOCK - opens modal */}
-          <button
-            onClick={() => setShowClockModal(true)}
-            className="bento-card bento-time-clock text-left"
-          >
+          {/* TIME CLOCK - redirects to clock page */}
+          <Link href="/clock" className="bento-card bento-time-clock">
             <div className="flex flex-col items-center justify-center gap-3">
               <Clock className="w-10 h-10 md:w-12 md:h-12" style={{ color: "var(--green)" }} strokeWidth={1.5} />
               <span className="bento-card-title">TIME CLOCK</span>
             </div>
-          </button>
+          </Link>
 
           {/* REQUESTS */}
           {showRequests ? (
@@ -432,49 +426,6 @@ function HomePageInner() {
         />
       )}
 
-      {/* Clock Modal */}
-      {showClockModal && (
-        <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/80 p-4">
-          <div className="card card-pad w-full max-w-md">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold">Time Clock</h2>
-              <button
-                onClick={() => setShowClockModal(false)}
-                className="text-muted hover:text-[var(--text)]"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            {preselectedStore && (
-              <div className="mb-4 p-3 bg-[var(--green)]/10 border border-[var(--green)]/30 rounded-lg">
-                <p className="text-sm text-[var(--green)]">
-                  Store preselected from QR code
-                </p>
-              </div>
-            )}
-
-            <PinGate
-              loading={pinLoading}
-              stores={stores}
-              profiles={profiles}
-              qrToken={preselectedStore || ""}
-              tokenStore={preselectedStore ? stores.find((s) => s.id === preselectedStore) || null : null}
-              storeId={storeId}
-              setStoreId={setStoreId}
-              profileId={profileId}
-              setProfileId={setProfileId}
-              onLockChange={() => {}}
-              onAuthorized={(token) => {
-                handlePinAuthorized();
-                // Navigate to clock page with auth
-                router.push("/clock");
-              }}
-              onClose={() => setShowClockModal(false)}
-            />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
