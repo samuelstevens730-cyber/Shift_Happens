@@ -15,8 +15,10 @@ import Image from "next/image";
 import { useEffect, useState, Suspense } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { createEmployeeSupabase } from "@/lib/employeeSupabase";
 import PinGate from "@/components/PinGate";
-import { Clock, Calendar, FileText, Shield, X } from "lucide-react";
+import ExpandableCard from "@/components/ExpandableCard";
+import { Clock, Calendar, FileText, Shield, X, Timer } from "lucide-react";
 
 // Storage keys (match PinGate.tsx)
 const PIN_TOKEN_KEY = "sh_pin_token";
@@ -26,6 +28,22 @@ const PIN_PROFILE_KEY = "sh_pin_profile_id";
 type Store = { id: string; name: string };
 type Profile = { id: string; name: string; active: boolean | null };
 type EmployeeMessage = { id: string; content: string; created_at: string };
+
+type ScheduleShift = {
+  id: string;
+  shift_date: string;
+  shift_type: string;
+  scheduled_start: string;
+  scheduled_end: string;
+  stores?: { name: string } | null;
+};
+
+type TimeEntry = {
+  id: string;
+  started_at: string;
+  ended_at: string | null;
+  hours: number;
+};
 
 function HomePageInner() {
   const router = useRouter();
@@ -51,6 +69,12 @@ function HomePageInner() {
 
   // Employee messages
   const [employeeMessages, setEmployeeMessages] = useState<EmployeeMessage[]>([]);
+
+  // Schedule and hours data
+  const [scheduleShifts, setScheduleShifts] = useState<ScheduleShift[]>([]);
+  const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
+  const [currentPeriodHours, setCurrentPeriodHours] = useState(0);
+  const [payPeriodRange, setPayPeriodRange] = useState({ start: "", end: "" });
 
   // Check for existing auth on mount
   useEffect(() => {
@@ -121,6 +145,95 @@ function HomePageInner() {
     }
 
     fetchMessages();
+    return () => { alive = false; };
+  }, [hasPinAuth, hasAdminAuth]);
+
+  // Fetch schedule and hours data when authenticated
+  useEffect(() => {
+    if (!hasPinAuth && !hasAdminAuth) return;
+
+    let alive = true;
+    async function fetchData() {
+      const pinToken = sessionStorage.getItem(PIN_TOKEN_KEY);
+      const profileId = sessionStorage.getItem(PIN_PROFILE_KEY);
+      
+      // Determine client based on auth type
+      const client = pinToken ? createEmployeeSupabase(pinToken) : supabase;
+      
+      // Get profile ID for managers
+      let targetProfileId = profileId;
+      if (!targetProfileId && hasAdminAuth) {
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData.user) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("user_id", userData.user.id)
+            .single();
+          if (profile) targetProfileId = profile.id;
+        }
+      }
+      
+      if (!targetProfileId) return;
+
+      // Fetch schedule shifts (next 7 days)
+      const today = new Date().toISOString().split("T")[0];
+      const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      
+      const { data: shifts } = await client
+        .from("schedule_shifts")
+        .select("id, shift_date, shift_type, scheduled_start, scheduled_end, stores(name)")
+        .eq("schedules.status", "published")
+        .gte("shift_date", today)
+        .lte("shift_date", nextWeek)
+        .order("shift_date", { ascending: true })
+        .limit(10);
+
+      if (!alive) return;
+      if (shifts) setScheduleShifts((shifts as unknown) as ScheduleShift[]);
+
+      // Fetch current pay period hours
+      const now = new Date();
+      const day = now.getDate();
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const lastDay = new Date(year, month, 0).getDate();
+      
+      let periodStart: string;
+      let periodEnd: string;
+      
+      if (day <= 15) {
+        periodStart = `${year}-${String(month).padStart(2, "0")}-01`;
+        periodEnd = `${year}-${String(month).padStart(2, "0")}-15`;
+      } else {
+        periodStart = `${year}-${String(month).padStart(2, "0")}-16`;
+        periodEnd = `${year}-${String(month).padStart(2, "0")}-${lastDay}`;
+      }
+      
+      setPayPeriodRange({ start: periodStart, end: periodEnd });
+
+      const { data: entries } = await client
+        .from("shifts")
+        .select("id, started_at, ended_at")
+        .gte("started_at", `${periodStart}T00:00:00`)
+        .lte("started_at", `${periodEnd}T23:59:59`)
+        .not("ended_at", "is", null)
+        .order("started_at", { ascending: false });
+
+      if (!alive) return;
+      if (entries) {
+        const processedEntries = entries.map(e => {
+          const start = new Date(e.started_at);
+          const end = e.ended_at ? new Date(e.ended_at) : null;
+          const hours = end ? (end.getTime() - start.getTime()) / 3600000 : 0;
+          return { ...e, hours };
+        });
+        setTimeEntries(processedEntries);
+        setCurrentPeriodHours(processedEntries.reduce((sum, e) => sum + e.hours, 0));
+      }
+    }
+
+    fetchData();
     return () => { alive = false; };
   }, [hasPinAuth, hasAdminAuth]);
 
@@ -335,22 +448,106 @@ function HomePageInner() {
 
         {/* Right Column */}
         <div className="bento-right">
-          {/* MY SCHEDULE */}
-          {showMySchedule ? (
-            <Link href="/dashboard/schedule" className="bento-card bento-my-schedule">
-              <div className="flex flex-col items-center justify-center gap-3">
-                <Calendar className="w-10 h-10 md:w-12 md:h-12 text-sky-400" strokeWidth={1.5} />
-                <span className="bento-card-title">MY SCHEDULE</span>
+          {/* MY SCHEDULE - Expandable */}
+          <ExpandableCard
+            title="MY SCHEDULE"
+            icon={Calendar}
+            iconColor="text-sky-400"
+            borderColor="bento-my-schedule"
+            disabled={!showMySchedule}
+            fullViewLink="/dashboard/schedule"
+            fullViewText="View full schedule"
+            collapsedContent={
+              scheduleShifts.length > 0 ? (
+                <div className="text-center">
+                  <p className="text-lg font-bold text-white">
+                    {new Date(scheduleShifts[0].shift_date).toLocaleDateString("en-US", { weekday: "short" })}
+                  </p>
+                  <p className="text-sm text-sky-400">
+                    {scheduleShifts[0].scheduled_start?.slice(0, 5)} - {scheduleShifts[0].scheduled_end?.slice(0, 5)}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-1">
+                    {new Date(scheduleShifts[0].shift_date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-gray-400 text-sm">No upcoming shifts</p>
+              )
+            }
+            expandedContent={
+              <div className="space-y-2">
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, idx) => {
+                  const shift = scheduleShifts.find(s => new Date(s.shift_date).getDay() === idx);
+                  const isToday = new Date().getDay() === idx;
+                  return (
+                    <div
+                      key={day}
+                      className={`flex justify-between items-center py-2 px-3 rounded-lg ${
+                        isToday ? "bg-sky-500/20 border border-sky-500/30" : "bg-white/5"
+                      }`}
+                    >
+                      <span className="text-sm font-medium w-10">{day}</span>
+                      <span className="text-sm text-gray-300">
+                        {shift ? `${shift.scheduled_start?.slice(0, 5)} - ${shift.scheduled_end?.slice(0, 5)}` : "OFF"}
+                      </span>
+                      {shift && (
+                        <span className="text-xs text-gray-500">
+                          {((new Date(`2000-01-01T${shift.scheduled_end}`).getTime() - 
+                            new Date(`2000-01-01T${shift.scheduled_start}`).getTime()) / 3600000).toFixed(1)}h
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            </Link>
-          ) : (
-            <div className="bento-card bento-my-schedule bento-card-disabled">
-              <div className="flex flex-col items-center justify-center gap-3">
-                <Calendar className="w-10 h-10 md:w-12 md:h-12 text-sky-400" strokeWidth={1.5} />
-                <span className="bento-card-title">MY SCHEDULE</span>
+            }
+          />
+
+          {/* CURRENT HOURS - Expandable */}
+          <ExpandableCard
+            title="CURRENT HOURS"
+            icon={Timer}
+            iconColor="text-orange-400"
+            borderColor="bento-hours"
+            disabled={!showMySchedule}
+            fullViewLink="/dashboard/shifts"
+            fullViewText="View full timecard"
+            collapsedContent={
+              <div className="text-center">
+                <p className="text-3xl font-bold text-white">{currentPeriodHours.toFixed(1)}</p>
+                <p className="text-sm text-orange-400">hours this period</p>
+                <p className="text-xs text-gray-400 mt-1">
+                  {new Date(payPeriodRange.start).toLocaleDateString("en-US", { month: "short", day: "numeric" })} - {" "}
+                  {new Date(payPeriodRange.end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                </p>
               </div>
-            </div>
-          )}
+            }
+            expandedContent={
+              <div className="space-y-3">
+                <div className="flex justify-between items-center pb-2 border-b border-white/10">
+                  <span className="text-sm text-gray-400">Period Total</span>
+                  <span className="text-xl font-bold text-orange-400">{currentPeriodHours.toFixed(2)} hrs</span>
+                </div>
+                <div className="space-y-2 max-h-[40vh] overflow-y-auto">
+                  {timeEntries.slice(0, 5).map((entry) => (
+                    <div key={entry.id} className="flex justify-between items-center py-2 px-3 bg-white/5 rounded-lg">
+                      <div>
+                        <p className="text-sm font-medium">
+                          {new Date(entry.started_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          {new Date(entry.started_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} - {" "}
+                          {entry.ended_at ? new Date(entry.ended_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "--"}
+                        </p>
+                      </div>
+                      <span className="text-sm font-bold text-white">{entry.hours.toFixed(1)}h</span>
+                    </div>
+                  ))}
+                </div>
+                {timeEntries.length === 0 && <p className="text-center text-gray-400 py-4">No hours logged this period</p>}
+              </div>
+            }
+          />
 
           {/* ADMIN */}
           {showAdmin ? (

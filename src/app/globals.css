@@ -485,7 +485,7 @@ body {
 
 /* Left Column Cards */
 .bento-time-clock {
-  flex: 2;
+  flex: 3;
   border: 2px solid rgba(32, 240, 138, 0.5);
   box-shadow: 
     0 0 40px rgba(32, 240, 138, 0.15),
@@ -499,7 +499,7 @@ body {
 }
 
 .bento-requests {
-  flex: 1;
+  flex: 2;
   border: 2px solid rgba(255, 160, 80, 0.5);
   box-shadow: 
     0 0 40px rgba(255, 160, 80, 0.15),
@@ -525,6 +525,20 @@ body {
   box-shadow: 
     0 0 60px rgba(100, 180, 255, 0.3),
     inset 0 0 40px rgba(100, 180, 255, 0.08);
+}
+
+.bento-hours {
+  flex: 2;
+  border: 2px solid rgba(255, 160, 80, 0.5);
+  box-shadow: 
+    0 0 40px rgba(255, 160, 80, 0.15),
+    inset 0 0 30px rgba(255, 160, 80, 0.05);
+}
+
+.bento-hours:hover {
+  box-shadow: 
+    0 0 60px rgba(255, 160, 80, 0.3),
+    inset 0 0 40px rgba(255, 160, 80, 0.08);
 }
 
 .bento-admin {
@@ -583,14 +597,18 @@ body {
   
   /* Adjust flex ratios for mobile to create asymmetry */
   .bento-time-clock {
-    flex: 2;
+    flex: 3;
   }
   
   .bento-requests {
-    flex: 1;
+    flex: 2;
   }
   
   .bento-my-schedule {
+    flex: 2;
+  }
+  
+  .bento-hours {
     flex: 2;
   }
   
