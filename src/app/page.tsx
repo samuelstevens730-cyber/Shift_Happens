@@ -28,6 +28,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import PinGate from "@/components/PinGate";
+import { Clock, Calendar, LayoutDashboard, FileText, Shield } from "lucide-react";
 
 // Storage keys (match PinGate.tsx)
 const PIN_TOKEN_KEY = "sh_pin_token";
@@ -273,27 +274,42 @@ export default function Home() {
         <div className="bento-left">
           {showTimeClock && (
             <Link href="/clock" className="bento-card bento-time-clock">
-              <span className="bento-card-title">TIME CLOCK</span>
+              <div className="flex flex-col items-center justify-center gap-3">
+                <Clock className="w-10 h-10 md:w-12 md:h-12" style={{ color: 'var(--green)' }} strokeWidth={1.5} />
+                <span className="bento-card-title">TIME CLOCK</span>
+              </div>
             </Link>
           )}
           
           {showDashboard ? (
             <Link href="/dashboard" className="bento-card bento-dashboard">
-              <span className="bento-card-title">DASHBOARD</span>
+              <div className="flex flex-col items-center justify-center gap-3">
+                <LayoutDashboard className="w-10 h-10 md:w-12 md:h-12" style={{ color: 'var(--purple)' }} strokeWidth={1.5} />
+                <span className="bento-card-title">DASHBOARD</span>
+              </div>
             </Link>
           ) : (
             <div className="bento-card bento-dashboard bento-card-disabled">
-              <span className="bento-card-title">DASHBOARD</span>
+              <div className="flex flex-col items-center justify-center gap-3">
+                <LayoutDashboard className="w-10 h-10 md:w-12 md:h-12" style={{ color: 'var(--purple)' }} strokeWidth={1.5} />
+                <span className="bento-card-title">DASHBOARD</span>
+              </div>
             </div>
           )}
           
           {showRequests ? (
             <Link href="/dashboard/shifts" className="bento-card bento-requests">
-              <span className="bento-card-title">REQUESTS</span>
+              <div className="flex flex-col items-center justify-center gap-3">
+                <FileText className="w-10 h-10 md:w-12 md:h-12 text-amber-400" strokeWidth={1.5} />
+                <span className="bento-card-title">REQUESTS</span>
+              </div>
             </Link>
           ) : (
             <div className="bento-card bento-requests bento-card-disabled">
-              <span className="bento-card-title">REQUESTS</span>
+              <div className="flex flex-col items-center justify-center gap-3">
+                <FileText className="w-10 h-10 md:w-12 md:h-12 text-amber-400" strokeWidth={1.5} />
+                <span className="bento-card-title">REQUESTS</span>
+              </div>
             </div>
           )}
         </div>
@@ -302,21 +318,33 @@ export default function Home() {
         <div className="bento-right">
           {showMySchedule ? (
             <Link href="/dashboard/schedule" className="bento-card bento-my-schedule">
-              <span className="bento-card-title">MY SCHEDULE</span>
+              <div className="flex flex-col items-center justify-center gap-3">
+                <Calendar className="w-10 h-10 md:w-12 md:h-12 text-sky-400" strokeWidth={1.5} />
+                <span className="bento-card-title">MY SCHEDULE</span>
+              </div>
             </Link>
           ) : (
             <div className="bento-card bento-my-schedule bento-card-disabled">
-              <span className="bento-card-title">MY SCHEDULE</span>
+              <div className="flex flex-col items-center justify-center gap-3">
+                <Calendar className="w-10 h-10 md:w-12 md:h-12 text-sky-400" strokeWidth={1.5} />
+                <span className="bento-card-title">MY SCHEDULE</span>
+              </div>
             </div>
           )}
           
           {showAdmin ? (
             <Link href="/admin" className="bento-card bento-admin">
-              <span className="bento-card-title">ADMIN</span>
+              <div className="flex flex-col items-center justify-center gap-3">
+                <Shield className="w-10 h-10 md:w-12 md:h-12 text-pink-400" strokeWidth={1.5} />
+                <span className="bento-card-title">ADMIN</span>
+              </div>
             </Link>
           ) : (
             <div className="bento-card bento-admin bento-card-disabled">
-              <span className="bento-card-title">ADMIN</span>
+              <div className="flex flex-col items-center justify-center gap-3">
+                <Shield className="w-10 h-10 md:w-12 md:h-12 text-pink-400" strokeWidth={1.5} />
+                <span className="bento-card-title">ADMIN</span>
+              </div>
             </div>
           )}
         </div>
