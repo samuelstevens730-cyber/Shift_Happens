@@ -335,29 +335,31 @@ body {
   overflow: hidden;
 }
 
-/* Top Bar: Logo + Navigation - Fills top portion fully */
+/* Top Bar: Logo + Navigation - Tightly packed, no dead space */
 .bento-top-bar {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   height: 45vh;
   min-height: 280px;
   max-height: 500px;
-  padding: 0;
-  gap: 0;
+  padding: 4px 0 2px;
+  gap: 4px;
   flex-shrink: 0;
   width: 100%;
 }
 
 .bento-logo {
-  width: min(200px, 35vh);
-  height: min(200px, 35vh);
-  max-width: 280px;
-  max-height: 280px;
+  width: auto;
+  height: calc(45vh - 50px);
+  max-height: calc(500px - 50px);
+  min-height: calc(280px - 50px);
+  max-width: 95vw;
+  aspect-ratio: 1 / 1;
   border-radius: 50%;
   object-fit: cover;
-  margin-top: 2px;
+  flex-shrink: 1;
 }
 
 .bento-nav {
@@ -367,8 +369,9 @@ body {
   gap: clamp(8px, 3vw, 48px);
   flex-wrap: nowrap;
   width: 100%;
-  padding: 8px 4px;
+  padding: 0 4px;
   background: transparent;
+  margin-top: auto;
 }
 
 .bento-nav-link {
@@ -539,22 +542,21 @@ body {
     height: 55vh;
     min-height: 280px;
     max-height: 450px;
-    padding: 0;
-    gap: 0;
-    justify-content: space-between;
+    padding: 4px 0 2px;
+    gap: 4px;
+    justify-content: flex-start;
   }
   
   .bento-logo {
-    width: min(160px, 40vh);
-    height: min(160px, 40vh);
-    max-width: 220px;
-    max-height: 220px;
-    margin-top: 4px;
+    height: calc(55vh - 45px);
+    max-height: calc(450px - 45px);
+    min-height: calc(280px - 45px);
+    max-width: 98vw;
   }
   
   .bento-nav {
     gap: clamp(6px, 2.5vw, 24px);
-    padding: 4px 2px;
+    padding: 0 2px;
   }
   
   .bento-container {
@@ -602,17 +604,19 @@ body {
   .bento-top-bar {
     height: 50vh;
     min-height: 220px;
-    gap: 0;
+    gap: 2px;
+    padding: 2px 0 2px;
   }
   
   .bento-logo {
-    width: min(120px, 35vh);
-    height: min(120px, 35vh);
+    height: calc(50vh - 40px);
+    max-height: calc(450px - 40px);
+    min-height: calc(220px - 40px);
   }
   
   .bento-nav {
     gap: clamp(4px, 2vw, 16px);
-    padding: 4px 2px;
+    padding: 0 2px;
   }
   
   .bento-card-title {
