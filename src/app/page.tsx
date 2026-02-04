@@ -572,13 +572,15 @@ function HomePageInner() {
                     </div>
                   );
                 })}
-                <div className="grid grid-cols-2 gap-2 pt-3">
-                  <Link href="/dashboard/schedule?week=next" className="btn-secondary text-xs py-2 text-center">
-                    Next week
-                  </Link>
-                  <Link href="/dashboard/shifts" className="btn-secondary text-xs py-2 text-center">
-                    View Full Schedule
-                  </Link>
+                <div className="-mx-4 mt-3 sticky bottom-0 bg-gradient-to-t from-[#0d0f12] via-[#0d0f12]/90 to-transparent px-4 pt-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Link href="/dashboard/schedule?week=next" className="btn-secondary text-xs py-2 text-center">
+                      Next week
+                    </Link>
+                    <Link href="/dashboard/shifts" className="btn-secondary text-xs py-2 text-center">
+                      View Full Schedule
+                    </Link>
+                  </div>
                 </div>
               </div>
             }

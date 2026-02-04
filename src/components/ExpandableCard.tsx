@@ -75,7 +75,7 @@ export default function ExpandableCard({
               {collapsedContent}
             </div>
           ) : (
-            <div className="p-4 pt-0 overflow-y-auto max-h-[45vh]">
+            <div className="p-4 pt-0 overflow-y-auto max-h-[55vh]">
               {expandedContent}
 
               {/* View full link */}
