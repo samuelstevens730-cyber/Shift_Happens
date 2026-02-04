@@ -384,22 +384,34 @@ body {
   text-underline-offset: 4px;
 }
 
-/* Bento Grid - Fills remaining viewport */
-.bento-grid {
+/* Bento Container - Desktop with 20% side padding */
+.bento-container {
   flex: 1;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 3fr 1.25fr 0.75fr;
-  grid-template-areas:
-    "time-clock my-schedule"
-    "dashboard dashboard"
-    "requests admin";
+  display: flex;
   gap: 2px;
   padding: 2px;
+  padding-left: 20%;
+  padding-right: 20%;
   min-height: 0;
 }
 
-/* Bento Cards */
+/* Left Column: Time Clock, Dashboard, Requests */
+.bento-left {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Right Column: My Schedule (tall), Admin (short) */
+.bento-right {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* Bento Cards Base */
 .bento-card {
   display: flex;
   flex-direction: column;
@@ -412,7 +424,7 @@ body {
   position: relative;
   overflow: hidden;
   transition: transform 150ms ease, box-shadow 200ms ease;
-  min-height: 44px; /* Touch target minimum */
+  min-height: 44px;
 }
 
 .bento-card:active {
@@ -420,7 +432,7 @@ body {
 }
 
 .bento-card-title {
-  font-size: clamp(0.875rem, 2.5vw, 1.25rem);
+  font-size: clamp(0.75rem, 1.5vw, 1.1rem);
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
@@ -429,14 +441,14 @@ body {
 }
 
 .bento-card-disabled {
-  opacity: 0.25;
+  opacity: 0.2;
   cursor: not-allowed;
   pointer-events: none;
 }
 
-/* Grid Area Assignments */
+/* Left Column Cards - Horizontal orientation, decreasing heights */
 .bento-time-clock {
-  grid-area: time-clock;
+  flex: 3;
   border: 2px solid rgba(32, 240, 138, 0.5);
   box-shadow: 
     0 0 40px rgba(32, 240, 138, 0.15),
@@ -449,22 +461,8 @@ body {
     inset 0 0 40px rgba(32, 240, 138, 0.08);
 }
 
-.bento-my-schedule {
-  grid-area: my-schedule;
-  border: 2px solid rgba(100, 180, 255, 0.5);
-  box-shadow: 
-    0 0 40px rgba(100, 180, 255, 0.15),
-    inset 0 0 30px rgba(100, 180, 255, 0.05);
-}
-
-.bento-my-schedule:hover {
-  box-shadow: 
-    0 0 60px rgba(100, 180, 255, 0.3),
-    inset 0 0 40px rgba(100, 180, 255, 0.08);
-}
-
 .bento-dashboard {
-  grid-area: dashboard;
+  flex: 2;
   border: 2px solid rgba(180, 112, 255, 0.5);
   box-shadow: 
     0 0 40px rgba(180, 112, 255, 0.15),
@@ -478,7 +476,7 @@ body {
 }
 
 .bento-requests {
-  grid-area: requests;
+  flex: 1;
   border: 2px solid rgba(255, 160, 80, 0.5);
   box-shadow: 
     0 0 40px rgba(255, 160, 80, 0.15),
@@ -491,8 +489,23 @@ body {
     inset 0 0 40px rgba(255, 160, 80, 0.08);
 }
 
+/* Right Column Cards - Vertical orientation */
+.bento-my-schedule {
+  flex: 4;
+  border: 2px solid rgba(100, 180, 255, 0.5);
+  box-shadow: 
+    0 0 40px rgba(100, 180, 255, 0.15),
+    inset 0 0 30px rgba(100, 180, 255, 0.05);
+}
+
+.bento-my-schedule:hover {
+  box-shadow: 
+    0 0 60px rgba(100, 180, 255, 0.3),
+    inset 0 0 40px rgba(100, 180, 255, 0.08);
+}
+
 .bento-admin {
-  grid-area: admin;
+  flex: 2;
   border: 2px solid rgba(255, 100, 150, 0.5);
   box-shadow: 
     0 0 40px rgba(255, 100, 150, 0.15),
@@ -505,17 +518,43 @@ body {
     inset 0 0 40px rgba(255, 100, 150, 0.08);
 }
 
-/* Responsive: Stack on small screens */
-@media (max-width: 480px) {
-  .bento-grid {
-    grid-template-columns: 1fr;
-    grid-template-rows: 2fr 2fr 1fr 1fr 1fr;
-    grid-template-areas:
-      "time-clock"
-      "my-schedule"
-      "dashboard"
-      "requests"
-      "admin";
+/* ============================================
+   MOBILE: Asymmetric Two-Column Layout
+   ============================================ */
+@media (max-width: 768px) {
+  .bento-container {
+    padding-left: 4px;
+    padding-right: 4px;
+    gap: 4px;
+  }
+  
+  .bento-left {
+    gap: 4px;
+  }
+  
+  .bento-right {
+    gap: 4px;
+  }
+  
+  /* Adjust flex ratios for mobile to create asymmetry */
+  .bento-time-clock {
+    flex: 2.5;
+  }
+  
+  .bento-dashboard {
+    flex: 1.5;
+  }
+  
+  .bento-requests {
+    flex: 1;
+  }
+  
+  .bento-my-schedule {
+    flex: 3.5;
+  }
+  
+  .bento-admin {
+    flex: 1.5;
   }
   
   .bento-logo {
@@ -530,12 +569,20 @@ body {
   .bento-nav-link {
     font-size: 0.7rem;
   }
+  
+  .bento-card-title {
+    font-size: 0.75rem;
+  }
 }
 
-/* Tablet: Keep asymmetric but adjust ratios */
-@media (min-width: 481px) and (max-width: 768px) {
-  .bento-grid {
-    grid-template-rows: 2.5fr 1fr 0.75fr;
+/* Very small screens - slight adjustments */
+@media (max-width: 360px) {
+  .bento-card-title {
+    font-size: 0.65rem;
+  }
+  
+  .bento-nav-link {
+    font-size: 0.6rem;
   }
 }
 

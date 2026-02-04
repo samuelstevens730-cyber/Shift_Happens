@@ -1,28 +1,23 @@
 /**
  * Home Page - Asymmetric Bento Layout
  *
- * New Flow:
- * - On load: Check for existing JWT (admin session) or PIN token (employee session)
- * - No auth: Show modal with Employee/Admin choice
- *   - Employee → PIN entry → JWT token → Home screen
- *   - Admin → Login screen → Session → Home screen
- * - Has auth: Show home screen directly with appropriate cards
+ * Desktop: 20% padding on sides, centered asymmetric grid
+ * Mobile: Two-column masonry with intentional misalignment
  *
- * Bento Layout:
- * ┌─────────────────┬───────────────┐
- * │   TIME CLOCK    │  MY SCHEDULE  │
- * │    (large)      │   (medium)    │
- * │   50% width     │   50% width   │
- * │   60% height    │   60% height  │
- * ├─────────────────┴───────────────┤
- * │         DASHBOARD               │
- * │        100% width               │
- * │        25% height               │
- * ├─────────────────┬───────────────┤
- * │    REQUESTS     │     ADMIN     │
- * │   50% width     │   50% width   │
- * │   15% height    │   15% height  │
- * └─────────────────┴───────────────┘
+ * Layout (Mobile):
+ * ┌──────────────────┬─────────────────┐
+ * │  TIME CLOCK      │                 │
+ * │  (large rect)    │  MY SCHEDULE    │
+ * │                  │  (tall vertical)│
+ * ├──────────────────┤                 │
+ * │  DASHBOARD       │                 │
+ * │  (medium rect)   ├─────────────────┤
+ * │                  │  ADMIN          │
+ * │                  │  (short vert)   │
+ * ├──────────────────┼─────────────────┤
+ * │  REQUESTS        │                 │
+ * │  (small rect)    │                 │
+ * └──────────────────┴─────────────────┘
  */
 
 "use client";
@@ -200,11 +195,11 @@ export default function Home() {
   };
 
   // Determine which cards to show
-  const showTimeClock = true; // Always show
-  const showMySchedule = hasPinAuth || hasAdminAuth; // Needs auth
-  const showDashboard = hasPinAuth || hasAdminAuth; // Needs auth
-  const showRequests = hasPinAuth || hasAdminAuth; // Needs auth
-  const showAdmin = hasAdminAuth; // Only admin
+  const showTimeClock = true;
+  const showMySchedule = hasPinAuth || hasAdminAuth;
+  const showDashboard = hasPinAuth || hasAdminAuth;
+  const showRequests = hasPinAuth || hasAdminAuth;
+  const showAdmin = hasAdminAuth;
 
   // Nav items based on auth state
   const navItems = [
@@ -272,56 +267,59 @@ export default function Home() {
         </nav>
       </div>
 
-      {/* Bento Grid - Fills remaining viewport */}
-      <div className="bento-grid">
-        {/* Row 1: Time Clock (large) | My Schedule (medium) */}
-        {showTimeClock && (
-          <Link href="/clock" className="bento-card bento-time-clock">
-            <span className="bento-card-title">TIME CLOCK</span>
-          </Link>
-        )}
-        
-        {showMySchedule ? (
-          <Link href="/dashboard/schedule" className="bento-card bento-my-schedule">
-            <span className="bento-card-title">MY SCHEDULE</span>
-          </Link>
-        ) : (
-          <div className="bento-card bento-my-schedule bento-card-disabled">
-            <span className="bento-card-title">MY SCHEDULE</span>
-          </div>
-        )}
+      {/* Bento Grid */}
+      <div className="bento-container">
+        {/* Left Column */}
+        <div className="bento-left">
+          {showTimeClock && (
+            <Link href="/clock" className="bento-card bento-time-clock">
+              <span className="bento-card-title">TIME CLOCK</span>
+            </Link>
+          )}
+          
+          {showDashboard ? (
+            <Link href="/dashboard" className="bento-card bento-dashboard">
+              <span className="bento-card-title">DASHBOARD</span>
+            </Link>
+          ) : (
+            <div className="bento-card bento-dashboard bento-card-disabled">
+              <span className="bento-card-title">DASHBOARD</span>
+            </div>
+          )}
+          
+          {showRequests ? (
+            <Link href="/dashboard/shifts" className="bento-card bento-requests">
+              <span className="bento-card-title">REQUESTS</span>
+            </Link>
+          ) : (
+            <div className="bento-card bento-requests bento-card-disabled">
+              <span className="bento-card-title">REQUESTS</span>
+            </div>
+          )}
+        </div>
 
-        {/* Row 2: Dashboard (wide) */}
-        {showDashboard ? (
-          <Link href="/dashboard" className="bento-card bento-dashboard">
-            <span className="bento-card-title">DASHBOARD</span>
-          </Link>
-        ) : (
-          <div className="bento-card bento-dashboard bento-card-disabled">
-            <span className="bento-card-title">DASHBOARD</span>
-          </div>
-        )}
-
-        {/* Row 3: Requests | Admin */}
-        {showRequests ? (
-          <Link href="/dashboard/shifts" className="bento-card bento-requests">
-            <span className="bento-card-title">REQUESTS</span>
-          </Link>
-        ) : (
-          <div className="bento-card bento-requests bento-card-disabled">
-            <span className="bento-card-title">REQUESTS</span>
-          </div>
-        )}
-        
-        {showAdmin ? (
-          <Link href="/admin" className="bento-card bento-admin">
-            <span className="bento-card-title">ADMIN</span>
-          </Link>
-        ) : (
-          <div className="bento-card bento-admin bento-card-disabled">
-            <span className="bento-card-title">ADMIN</span>
-          </div>
-        )}
+        {/* Right Column */}
+        <div className="bento-right">
+          {showMySchedule ? (
+            <Link href="/dashboard/schedule" className="bento-card bento-my-schedule">
+              <span className="bento-card-title">MY SCHEDULE</span>
+            </Link>
+          ) : (
+            <div className="bento-card bento-my-schedule bento-card-disabled">
+              <span className="bento-card-title">MY SCHEDULE</span>
+            </div>
+          )}
+          
+          {showAdmin ? (
+            <Link href="/admin" className="bento-card bento-admin">
+              <span className="bento-card-title">ADMIN</span>
+            </Link>
+          ) : (
+            <div className="bento-card bento-admin bento-card-disabled">
+              <span className="bento-card-title">ADMIN</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Auth Choice Modal */}
