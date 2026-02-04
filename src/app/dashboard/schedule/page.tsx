@@ -377,6 +377,11 @@ export default function EmployeeSchedulePage() {
       
       if (pinToken === "manager") {
         // Manager auth - use regular supabase with RLS
+        if (!profileId) {
+          setScheduleShifts([]);
+          setError("No profile is linked to this manager account. Ask an admin to link your profile.");
+          return;
+        }
         let query = supabase
           .from("schedule_shifts")
           .select(
@@ -385,9 +390,7 @@ export default function EmployeeSchedulePage() {
           .eq("schedules.status", "published")
           .order("shift_date", { ascending: true });
 
-        if (profileId) {
-          query = query.eq("profile_id", profileId);
-        }
+        query = query.eq("profile_id", profileId);
 
         const result = await query.returns<ScheduleShiftRow[]>();
         data = result.data;
