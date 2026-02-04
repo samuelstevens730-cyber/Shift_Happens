@@ -1,5 +1,5 @@
 /**
- * Home Page - Redesigned with Auth Gate
+ * Home Page - Asymmetric Bento Layout
  *
  * New Flow:
  * - On load: Check for existing JWT (admin session) or PIN token (employee session)
@@ -8,11 +8,21 @@
  *   - Admin → Login screen → Session → Home screen
  * - Has auth: Show home screen directly with appropriate cards
  *
- * Card Layout:
- * [LOGO - centered]
- * [TIME CLOCK] [MY SCHEDULE]
- * [   DASHBOARD   ]
- * [REQUESTS] [ADMIN]
+ * Bento Layout:
+ * ┌─────────────────┬───────────────┐
+ * │   TIME CLOCK    │  MY SCHEDULE  │
+ * │    (large)      │   (medium)    │
+ * │   50% width     │   50% width   │
+ * │   60% height    │   60% height  │
+ * ├─────────────────┴───────────────┤
+ * │         DASHBOARD               │
+ * │        100% width               │
+ * │        25% height               │
+ * ├─────────────────┬───────────────┤
+ * │    REQUESTS     │     ADMIN     │
+ * │   50% width     │   50% width   │
+ * │   15% height    │   15% height  │
+ * └─────────────────┴───────────────┘
  */
 
 "use client";
@@ -196,43 +206,42 @@ export default function Home() {
   const showRequests = hasPinAuth || hasAdminAuth; // Needs auth
   const showAdmin = hasAdminAuth; // Only admin
 
+  // Nav items based on auth state
+  const navItems = [
+    { href: "/", label: "HOME" },
+    { href: "/admin", label: "ADMIN" },
+    { href: "/dashboard", label: "DASHBOARD" },
+    ...(hasAdminAuth
+      ? [{ href: "#logout", label: "LOGOUT", isLogout: true }]
+      : [{ href: "/login", label: "LOGIN" }]),
+  ];
+
   if (!authChecked) {
     return (
-      <div className="app-shell flex items-center justify-center">
+      <div className="bento-shell flex items-center justify-center">
         <div className="text-muted">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="app-shell">
-      <div className="max-w-md mx-auto space-y-8">
-        {/* Logo - centered */}
-        <div className="flex justify-center">
-          <Image
-            src="/brand/no_cap_logo.jpg"
-            alt="No Cap Smoke Shop"
-            width={200}
-            height={200}
-            priority
-            className="h-40 w-40 rounded-full object-cover"
-          />
-        </div>
-
-        {/* Navigation - under logo, no background */}
-        <nav className="flex justify-center gap-8">
-          {[
-            { href: "/", label: "HOME" },
-            { href: "/admin", label: "ADMIN" },
-            { href: "/dashboard", label: "DASHBOARD" },
-            ...(hasAdminAuth
-              ? [{ href: "#logout", label: "LOGOUT", isLogout: true }]
-              : [{ href: "/login", label: "LOGIN" }]),
-          ].map((item) => {
+    <div className="bento-shell">
+      {/* Top Bar: Logo + Nav */}
+      <div className="bento-top-bar">
+        <Image
+          src="/brand/no_cap_logo.jpg"
+          alt="No Cap Smoke Shop"
+          width={80}
+          height={80}
+          priority
+          className="bento-logo"
+        />
+        <nav className="bento-nav">
+          {navItems.map((item) => {
             const isActive = pathname === item.href && !item.isLogout;
-            const baseClasses = "text-sm font-medium tracking-wide transition-colors duration-200";
-            const activeClasses = "text-[var(--green)] underline underline-offset-4";
-            const inactiveClasses = "text-white hover:text-[var(--green)] hover:underline hover:underline-offset-4";
+            const baseClasses = "bento-nav-link";
+            const activeClasses = "bento-nav-active";
+            const inactiveClasses = "bento-nav-inactive";
 
             if (item.isLogout) {
               return (
@@ -261,77 +270,63 @@ export default function Home() {
             );
           })}
         </nav>
+      </div>
 
-        {/* Card Grid */}
-        <div className="space-y-4">
-          {/* Row 1: Time Clock (green) | My Schedule (blue) */}
-          <div className="grid grid-cols-2 gap-4">
-            {showTimeClock && (
-              <Link href="/clock" className="home-card home-card-green">
-                <span>TIME CLOCK</span>
-              </Link>
-            )}
-            {showMySchedule ? (
-              <Link href="/dashboard/schedule" className="home-card home-card-blue">
-                <span>MY SCHEDULE</span>
-              </Link>
-            ) : (
-              <div className="home-card home-card-blue opacity-30 cursor-not-allowed">
-                <span>MY SCHEDULE</span>
-              </div>
-            )}
+      {/* Bento Grid - Fills remaining viewport */}
+      <div className="bento-grid">
+        {/* Row 1: Time Clock (large) | My Schedule (medium) */}
+        {showTimeClock && (
+          <Link href="/clock" className="bento-card bento-time-clock">
+            <span className="bento-card-title">TIME CLOCK</span>
+          </Link>
+        )}
+        
+        {showMySchedule ? (
+          <Link href="/dashboard/schedule" className="bento-card bento-my-schedule">
+            <span className="bento-card-title">MY SCHEDULE</span>
+          </Link>
+        ) : (
+          <div className="bento-card bento-my-schedule bento-card-disabled">
+            <span className="bento-card-title">MY SCHEDULE</span>
           </div>
+        )}
 
-          {/* Row 2: Dashboard (purple) - full width */}
-          {showDashboard ? (
-            <Link href="/dashboard" className="home-card home-card-purple w-full">
-              <span>DASHBOARD</span>
-            </Link>
-          ) : (
-            <div className="home-card home-card-purple w-full opacity-30 cursor-not-allowed">
-              <span>DASHBOARD</span>
-            </div>
-          )}
-
-          {/* Row 3: Requests (orange) | Admin (pink) */}
-          <div className="grid grid-cols-2 gap-4">
-            {showRequests ? (
-              <Link href="/dashboard/shifts" className="home-card home-card-orange">
-                <span>REQUESTS</span>
-              </Link>
-            ) : (
-              <div className="home-card home-card-orange opacity-30 cursor-not-allowed">
-                <span>REQUESTS</span>
-              </div>
-            )}
-            {showAdmin ? (
-              <Link href="/admin" className="home-card home-card-pink">
-                <span>ADMIN</span>
-              </Link>
-            ) : (
-              <div className="home-card home-card-pink opacity-30 cursor-not-allowed">
-                <span>ADMIN</span>
-              </div>
-            )}
+        {/* Row 2: Dashboard (wide) */}
+        {showDashboard ? (
+          <Link href="/dashboard" className="bento-card bento-dashboard">
+            <span className="bento-card-title">DASHBOARD</span>
+          </Link>
+        ) : (
+          <div className="bento-card bento-dashboard bento-card-disabled">
+            <span className="bento-card-title">DASHBOARD</span>
           </div>
-        </div>
+        )}
 
-        {/* Auth hint for unauthenticated users */}
-        {!hasAdminAuth && !hasPinAuth && (
-          <div className="text-center">
-            <button
-              onClick={() => setShowAuthModal(true)}
-              className="text-sm text-muted hover:text-[var(--green)] transition-colors"
-            >
-              Sign in to access all features →
-            </button>
+        {/* Row 3: Requests | Admin */}
+        {showRequests ? (
+          <Link href="/dashboard/shifts" className="bento-card bento-requests">
+            <span className="bento-card-title">REQUESTS</span>
+          </Link>
+        ) : (
+          <div className="bento-card bento-requests bento-card-disabled">
+            <span className="bento-card-title">REQUESTS</span>
+          </div>
+        )}
+        
+        {showAdmin ? (
+          <Link href="/admin" className="bento-card bento-admin">
+            <span className="bento-card-title">ADMIN</span>
+          </Link>
+        ) : (
+          <div className="bento-card bento-admin bento-card-disabled">
+            <span className="bento-card-title">ADMIN</span>
           </div>
         )}
       </div>
 
       {/* Auth Choice Modal */}
       {showAuthModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 p-4">
           <div className="card card-pad w-full max-w-sm space-y-6">
             <div className="text-center space-y-2">
               <h2 className="text-xl font-semibold">Welcome</h2>

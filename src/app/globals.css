@@ -322,6 +322,223 @@ body {
   box-shadow: 0 0 30px rgba(255, 120, 180, 0.25), inset 0 0 20px rgba(255, 120, 180, 0.05);
 }
 
+/* ============================================
+   ASYMMETRIC BENTO LAYOUT
+   ============================================ */
+
+.bento-shell {
+  min-height: 100vh;
+  width: 100vw;
+  background: #0a0a0f;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Top Bar: Logo + Navigation */
+.bento-top-bar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 12px 16px 8px;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.bento-logo {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.bento-nav {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.bento-nav-link {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  transition: color 200ms ease;
+  padding: 4px 0;
+}
+
+.bento-nav-active {
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.bento-nav-inactive {
+  color: #ffffff;
+}
+
+.bento-nav-inactive:hover {
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+/* Bento Grid - Fills remaining viewport */
+.bento-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 3fr 1.25fr 0.75fr;
+  grid-template-areas:
+    "time-clock my-schedule"
+    "dashboard dashboard"
+    "requests admin";
+  gap: 2px;
+  padding: 2px;
+  min-height: 0;
+}
+
+/* Bento Cards */
+.bento-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: rgba(18, 21, 27, 0.95);
+  border-radius: 16px;
+  text-decoration: none;
+  color: #ffffff;
+  position: relative;
+  overflow: hidden;
+  transition: transform 150ms ease, box-shadow 200ms ease;
+  min-height: 44px; /* Touch target minimum */
+}
+
+.bento-card:active {
+  transform: scale(0.98);
+}
+
+.bento-card-title {
+  font-size: clamp(0.875rem, 2.5vw, 1.25rem);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-align: center;
+  padding: 8px;
+}
+
+.bento-card-disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Grid Area Assignments */
+.bento-time-clock {
+  grid-area: time-clock;
+  border: 2px solid rgba(32, 240, 138, 0.5);
+  box-shadow: 
+    0 0 40px rgba(32, 240, 138, 0.15),
+    inset 0 0 30px rgba(32, 240, 138, 0.05);
+}
+
+.bento-time-clock:hover {
+  box-shadow: 
+    0 0 60px rgba(32, 240, 138, 0.3),
+    inset 0 0 40px rgba(32, 240, 138, 0.08);
+}
+
+.bento-my-schedule {
+  grid-area: my-schedule;
+  border: 2px solid rgba(100, 180, 255, 0.5);
+  box-shadow: 
+    0 0 40px rgba(100, 180, 255, 0.15),
+    inset 0 0 30px rgba(100, 180, 255, 0.05);
+}
+
+.bento-my-schedule:hover {
+  box-shadow: 
+    0 0 60px rgba(100, 180, 255, 0.3),
+    inset 0 0 40px rgba(100, 180, 255, 0.08);
+}
+
+.bento-dashboard {
+  grid-area: dashboard;
+  border: 2px solid rgba(180, 112, 255, 0.5);
+  box-shadow: 
+    0 0 40px rgba(180, 112, 255, 0.15),
+    inset 0 0 30px rgba(180, 112, 255, 0.05);
+}
+
+.bento-dashboard:hover {
+  box-shadow: 
+    0 0 60px rgba(180, 112, 255, 0.3),
+    inset 0 0 40px rgba(180, 112, 255, 0.08);
+}
+
+.bento-requests {
+  grid-area: requests;
+  border: 2px solid rgba(255, 160, 80, 0.5);
+  box-shadow: 
+    0 0 40px rgba(255, 160, 80, 0.15),
+    inset 0 0 30px rgba(255, 160, 80, 0.05);
+}
+
+.bento-requests:hover {
+  box-shadow: 
+    0 0 60px rgba(255, 160, 80, 0.3),
+    inset 0 0 40px rgba(255, 160, 80, 0.08);
+}
+
+.bento-admin {
+  grid-area: admin;
+  border: 2px solid rgba(255, 100, 150, 0.5);
+  box-shadow: 
+    0 0 40px rgba(255, 100, 150, 0.15),
+    inset 0 0 30px rgba(255, 100, 150, 0.05);
+}
+
+.bento-admin:hover {
+  box-shadow: 
+    0 0 60px rgba(255, 100, 150, 0.3),
+    inset 0 0 40px rgba(255, 100, 150, 0.08);
+}
+
+/* Responsive: Stack on small screens */
+@media (max-width: 480px) {
+  .bento-grid {
+    grid-template-columns: 1fr;
+    grid-template-rows: 2fr 2fr 1fr 1fr 1fr;
+    grid-template-areas:
+      "time-clock"
+      "my-schedule"
+      "dashboard"
+      "requests"
+      "admin";
+  }
+  
+  .bento-logo {
+    width: 48px;
+    height: 48px;
+  }
+  
+  .bento-nav {
+    gap: 16px;
+  }
+  
+  .bento-nav-link {
+    font-size: 0.7rem;
+  }
+}
+
+/* Tablet: Keep asymmetric but adjust ratios */
+@media (min-width: 481px) and (max-width: 768px) {
+  .bento-grid {
+    grid-template-rows: 2.5fr 1fr 0.75fr;
+  }
+}
+
 /* Hide the small built-in "Forgot your password?" link inside Supabase Auth form */
 .supabase-auth-ui_ui-anchor.c-dumjqv {
   display: none !important;
