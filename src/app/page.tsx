@@ -20,7 +20,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import PinGate from "@/components/PinGate";
 
@@ -34,6 +34,7 @@ type Profile = { id: string; name: string; active: boolean | null };
 
 export default function Home() {
   const router = useRouter();
+  const pathname = usePathname();
 
   // Auth state
   const [hasAdminAuth, setHasAdminAuth] = useState(false);
@@ -204,6 +205,31 @@ export default function Home() {
             className="h-40 w-40 rounded-full object-cover"
           />
         </div>
+
+        {/* Navigation - under logo, no background */}
+        <nav className="flex justify-center gap-8">
+          {[
+            { href: "/", label: "HOME" },
+            { href: "/admin", label: "ADMIN" },
+            { href: "/dashboard", label: "DASHBOARD" },
+            { href: "/login", label: "LOGIN" },
+          ].map((item) => {
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`text-sm font-medium tracking-wide transition-colors duration-200 ${
+                  isActive
+                    ? "text-[var(--green)] underline underline-offset-4"
+                    : "text-white hover:text-[var(--green)] hover:underline hover:underline-offset-4"
+                }`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </nav>
 
         {/* Card Grid */}
         <div className="space-y-4">
