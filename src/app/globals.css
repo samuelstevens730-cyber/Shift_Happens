@@ -352,9 +352,9 @@ body {
 
 .bento-logo {
   width: auto;
-  height: calc((45vh - 50px) * 0.85);
-  max-height: calc((500px - 50px) * 0.85);
-  min-height: calc((280px - 50px) * 0.85);
+  height: calc((45vh - 60px) * 0.65);
+  max-height: calc((500px - 60px) * 0.65);
+  min-height: calc((280px - 60px) * 0.65);
   max-width: 95vw;
   aspect-ratio: 1 / 1;
   border-radius: 50%;
@@ -366,18 +366,19 @@ body {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: clamp(8px, 3vw, 48px);
+  gap: 24px;
   flex-wrap: nowrap;
   width: 100%;
-  padding: 0 4px;
+  padding: 8px 4px;
   background: transparent;
   margin-top: auto;
 }
 
 .bento-nav-link {
-  font-size: clamp(0.65rem, 2.5vw, 1.25rem);
+  position: relative;
+  font-size: 0.875rem;
   font-weight: 600;
-  letter-spacing: clamp(0.05em, 0.5vw, 0.15em);
+  letter-spacing: 0.2em;
   text-transform: uppercase;
   transition: color 200ms ease;
   padding: 8px 0;
@@ -386,18 +387,24 @@ body {
 
 .bento-nav-active {
   color: var(--green);
-  text-decoration: underline;
-  text-underline-offset: 4px;
+}
+
+.bento-nav-active::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--green);
 }
 
 .bento-nav-inactive {
-  color: #ffffff;
+  color: #9aa3b2;
 }
 
 .bento-nav-inactive:hover {
-  color: var(--green);
-  text-decoration: underline;
-  text-underline-offset: 4px;
+  color: #e6e6e6;
 }
 
 /* Bento Container - Desktop with 20% side padding */
@@ -548,15 +555,20 @@ body {
   }
   
   .bento-logo {
-    height: calc((55vh - 45px) * 0.85);
-    max-height: calc((450px - 45px) * 0.85);
-    min-height: calc((280px - 45px) * 0.85);
+    height: calc((55vh - 50px) * 0.65);
+    max-height: calc((450px - 50px) * 0.65);
+    min-height: calc((280px - 50px) * 0.65);
     max-width: 98vw;
   }
   
   .bento-nav {
-    gap: clamp(6px, 2.5vw, 24px);
-    padding: 0 2px;
+    gap: 16px;
+    padding: 8px 4px;
+  }
+  
+  .bento-nav-link {
+    font-size: 0.75rem;
+    letter-spacing: 0.15em;
   }
   
   .bento-container {
@@ -609,14 +621,19 @@ body {
   }
   
   .bento-logo {
-    height: calc((50vh - 40px) * 0.85);
-    max-height: calc((450px - 40px) * 0.85);
-    min-height: calc((220px - 40px) * 0.85);
+    height: calc((50vh - 45px) * 0.6);
+    max-height: calc((400px - 45px) * 0.6);
+    min-height: calc((220px - 45px) * 0.6);
   }
   
   .bento-nav {
-    gap: clamp(4px, 2vw, 16px);
-    padding: 0 2px;
+    gap: 12px;
+    padding: 8px 2px;
+  }
+  
+  .bento-nav-link {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
   }
   
   .bento-card-title {
