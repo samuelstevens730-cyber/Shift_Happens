@@ -279,42 +279,47 @@ body {
 
 .home-card-green {
   border: 2px solid rgba(32, 240, 138, 0.6);
+  box-shadow: 0 0 30px rgba(32, 240, 138, 0.1), inset 0 0 20px rgba(32, 240, 138, 0.03);
 }
 
 .home-card-green:hover {
-  box-shadow: 0 0 20px rgba(32, 240, 138, 0.2);
+  box-shadow: 0 0 30px rgba(32, 240, 138, 0.25), inset 0 0 20px rgba(32, 240, 138, 0.05);
 }
 
 .home-card-blue {
   border: 2px solid rgba(100, 180, 255, 0.6);
+  box-shadow: 0 0 30px rgba(100, 180, 255, 0.1), inset 0 0 20px rgba(100, 180, 255, 0.03);
 }
 
 .home-card-blue:hover {
-  box-shadow: 0 0 20px rgba(100, 180, 255, 0.2);
+  box-shadow: 0 0 30px rgba(100, 180, 255, 0.25), inset 0 0 20px rgba(100, 180, 255, 0.05);
 }
 
 .home-card-purple {
   border: 2px solid rgba(180, 112, 255, 0.6);
+  box-shadow: 0 0 30px rgba(180, 112, 255, 0.1), inset 0 0 20px rgba(180, 112, 255, 0.03);
 }
 
 .home-card-purple:hover {
-  box-shadow: 0 0 20px rgba(180, 112, 255, 0.2);
+  box-shadow: 0 0 30px rgba(180, 112, 255, 0.25), inset 0 0 20px rgba(180, 112, 255, 0.05);
 }
 
 .home-card-orange {
   border: 2px solid rgba(255, 160, 80, 0.6);
+  box-shadow: 0 0 30px rgba(255, 160, 80, 0.1), inset 0 0 20px rgba(255, 160, 80, 0.03);
 }
 
 .home-card-orange:hover {
-  box-shadow: 0 0 20px rgba(255, 160, 80, 0.2);
+  box-shadow: 0 0 30px rgba(255, 160, 80, 0.25), inset 0 0 20px rgba(255, 160, 80, 0.05);
 }
 
 .home-card-pink {
   border: 2px solid rgba(255, 120, 180, 0.6);
+  box-shadow: 0 0 30px rgba(255, 120, 180, 0.1), inset 0 0 20px rgba(255, 120, 180, 0.03);
 }
 
 .home-card-pink:hover {
-  box-shadow: 0 0 20px rgba(255, 120, 180, 0.2);
+  box-shadow: 0 0 30px rgba(255, 120, 180, 0.25), inset 0 0 20px rgba(255, 120, 180, 0.05);
 }
 
 /* Hide the small built-in "Forgot your password?" link inside Supabase Auth form */

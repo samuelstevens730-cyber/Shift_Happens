@@ -118,6 +118,19 @@ export default function Home() {
     return () => window.removeEventListener("storage", checkPinAuth);
   }, []);
 
+  // Hide original header on home page
+  useEffect(() => {
+    const header = document.querySelector("header");
+    if (header) {
+      header.style.display = "none";
+    }
+    return () => {
+      if (header) {
+        header.style.display = "";
+      }
+    };
+  }, []);
+
   // Fetch stores/profiles when showing PIN gate
   useEffect(() => {
     if (!showPinGate) return;
@@ -212,18 +225,36 @@ export default function Home() {
             { href: "/", label: "HOME" },
             { href: "/admin", label: "ADMIN" },
             { href: "/dashboard", label: "DASHBOARD" },
-            { href: "/login", label: "LOGIN" },
+            ...(hasAdminAuth
+              ? [{ href: "#logout", label: "LOGOUT", isLogout: true }]
+              : [{ href: "/login", label: "LOGIN" }]),
           ].map((item) => {
-            const isActive = pathname === item.href;
+            const isActive = pathname === item.href && !item.isLogout;
+            const baseClasses = "text-sm font-medium tracking-wide transition-colors duration-200";
+            const activeClasses = "text-[var(--green)] underline underline-offset-4";
+            const inactiveClasses = "text-white hover:text-[var(--green)] hover:underline hover:underline-offset-4";
+
+            if (item.isLogout) {
+              return (
+                <button
+                  key="logout"
+                  onClick={async () => {
+                    await supabase.auth.signOut();
+                    setHasAdminAuth(false);
+                    router.push("/");
+                  }}
+                  className={`${baseClasses} ${inactiveClasses}`}
+                >
+                  {item.label}
+                </button>
+              );
+            }
+
             return (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`text-sm font-medium tracking-wide transition-colors duration-200 ${
-                  isActive
-                    ? "text-[var(--green)] underline underline-offset-4"
-                    : "text-white hover:text-[var(--green)] hover:underline hover:underline-offset-4"
-                }`}
+                className={`${baseClasses} ${isActive ? activeClasses : inactiveClasses}`}
               >
                 {item.label}
               </Link>
