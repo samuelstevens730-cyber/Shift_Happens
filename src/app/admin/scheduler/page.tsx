@@ -404,63 +404,71 @@ export default function AdminSchedulerPage() {
       });
   }, [assignments, dates, stores, memberships]);
 
-  const saveDraft = useCallback(async () => {
-    setSaving(true);
+  const persistAssignments = useCallback(async () => {
     if (conflicts.length) {
       setError("Resolve double-booking conflicts before saving.");
-      setSaving(false);
-      return;
+      return false;
     }
-    try {
-      const token = await getBearerToken();
-      if (!token) return;
-      for (const store of stores) {
-        const assignmentsPayload: Array<Assignment & { date: string; shiftType: "open" | "close" }> = [];
-        const schedule = scheduleMap[store.id];
-        if (!schedule) continue;
-        for (const dateStr of dates) {
-          for (const shiftType of SHIFT_TYPES) {
-            const key = `${store.id}|${dateStr}|${shiftType.key}`;
-            if (!dirtyKeys.has(key)) continue;
-            const current = assignments[key];
-            assignmentsPayload.push({
-              date: dateStr,
-              shiftType: shiftType.key,
-              profileId: current?.profileId ?? null,
-              shiftMode: current?.shiftMode ?? "standard",
-              scheduledStart: current?.scheduledStart ?? undefined,
-              scheduledEnd: current?.scheduledEnd ?? undefined,
-            });
-          }
-        }
-        if (!assignmentsPayload.length) continue;
-        const res = await fetch(`/api/admin/schedules/${schedule.id}/assign-batch`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ assignments: assignmentsPayload }),
-        });
-        if (!res.ok) {
-          const json = (await res.json()) as { error?: string };
-          throw new Error(json.error || "Failed to save schedule.");
+    const token = await getBearerToken();
+    if (!token) return false;
+    for (const store of stores) {
+      const assignmentsPayload: Array<Assignment & { date: string; shiftType: "open" | "close" }> = [];
+      const schedule = scheduleMap[store.id];
+      if (!schedule) continue;
+      for (const dateStr of dates) {
+        for (const shiftType of SHIFT_TYPES) {
+          const key = `${store.id}|${dateStr}|${shiftType.key}`;
+          if (!dirtyKeys.has(key)) continue;
+          const current = assignments[key];
+          assignmentsPayload.push({
+            date: dateStr,
+            shiftType: shiftType.key,
+            profileId: current?.profileId ?? null,
+            shiftMode: current?.shiftMode ?? "standard",
+            scheduledStart: current?.scheduledStart ?? undefined,
+            scheduledEnd: current?.scheduledEnd ?? undefined,
+          });
         }
       }
-      setDirtyKeys(new Set());
-      await loadDetails();
+      if (!assignmentsPayload.length) continue;
+      const res = await fetch(`/api/admin/schedules/${schedule.id}/assign-batch`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ assignments: assignmentsPayload }),
+      });
+      if (!res.ok) {
+        const json = (await res.json()) as { error?: string };
+        throw new Error(json.error || "Failed to save schedule.");
+      }
+    }
+    setDirtyKeys(new Set());
+    await loadDetails();
+    return true;
+  }, [dates, dirtyKeys, scheduleMap, stores, assignments, loadDetails, conflicts]);
+
+  const saveDraft = useCallback(async () => {
+    setSaving(true);
+    try {
+      await persistAssignments();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save schedule.");
     } finally {
       setSaving(false);
     }
-  }, [dates, dirtyKeys, scheduleMap, stores, assignments, loadDetails, conflicts]);
+  }, [persistAssignments]);
 
   const publishSchedules = useCallback(async () => {
     setSaving(true);
     try {
       const token = await getBearerToken();
       if (!token) return;
+      if (dirtyKeys.size > 0) {
+        const saved = await persistAssignments();
+        if (!saved) return;
+      }
       for (const store of stores) {
         const schedule = scheduleMap[store.id];
         if (!schedule) continue;
@@ -479,7 +487,7 @@ export default function AdminSchedulerPage() {
     } finally {
       setSaving(false);
     }
-  }, [stores, scheduleMap, loadMeta]);
+  }, [stores, scheduleMap, loadMeta, dirtyKeys, persistAssignments]);
 
   async function ensureSchedules() {
     setError(null);
