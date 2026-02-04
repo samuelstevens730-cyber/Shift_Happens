@@ -238,16 +238,17 @@ function HomePageInner() {
       
       if (!targetProfileId) return;
 
-      // Fetch schedule shifts (next 7 days)
-      const today = new Date().toISOString().split("T")[0];
-      const nextWeek = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      // Fetch schedule shifts (yesterday -> next 7 days, CST)
+      const today = getCstDateKey(new Date());
+      const yesterday = addDaysToKey(today, -1);
+      const nextWeek = addDaysToKey(today, 7);
       
       const { data: shifts } = await client
         .from("schedule_shifts")
         .select("id, shift_date, shift_type, scheduled_start, scheduled_end, stores(name), schedules!inner(status)")
         .eq("schedules.status", "published")
         .eq("profile_id", targetProfileId)
-        .gte("shift_date", today)
+        .gte("shift_date", yesterday)
         .lte("shift_date", nextWeek)
         .order("shift_date", { ascending: true })
         .limit(10);
