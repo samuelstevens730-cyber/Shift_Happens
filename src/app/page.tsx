@@ -169,7 +169,7 @@ function HomePageInner() {
             .from("profiles")
             .select("id")
             .eq("auth_user_id", userData.user.id)
-            .single();
+            .maybeSingle();
           if (profile) targetProfileId = profile.id;
         }
       }

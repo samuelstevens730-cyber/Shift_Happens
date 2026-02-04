@@ -107,7 +107,7 @@ export default function EmployeeShiftsPage() {
           .from("profiles")
           .select("id")
           .eq("auth_user_id", user.id)
-          .single();
+          .maybeSingle();
         
         if (profile) {
           setProfileId(profile.id);
