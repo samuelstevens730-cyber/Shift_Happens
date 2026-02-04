@@ -377,14 +377,19 @@ export default function EmployeeSchedulePage() {
       
       if (pinToken === "manager") {
         // Manager auth - use regular supabase with RLS
-        const result = await supabase
+        let query = supabase
           .from("schedule_shifts")
           .select(
             "id, store_id, shift_date, shift_type, shift_mode, scheduled_start, scheduled_end, schedules!inner(period_start, period_end, status), stores(name)"
           )
           .eq("schedules.status", "published")
-          .order("shift_date", { ascending: true })
-          .returns<ScheduleShiftRow[]>();
+          .order("shift_date", { ascending: true });
+
+        if (profileId) {
+          query = query.eq("profile_id", profileId);
+        }
+
+        const result = await query.returns<ScheduleShiftRow[]>();
         data = result.data;
         shiftErr = result.error;
       } else {
