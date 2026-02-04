@@ -62,6 +62,9 @@ export default function EmployeeDashboard() {
           <Link className="btn-primary px-4 py-2 text-center" href="/dashboard/shifts">
             My Shifts
           </Link>
+          <Link className="btn-secondary px-4 py-2 text-center" href="/dashboard/schedule">
+            My Schedule
+          </Link>
         </div>
       </div>
 

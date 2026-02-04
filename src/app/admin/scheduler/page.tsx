@@ -555,7 +555,7 @@ export default function AdminSchedulerPage() {
               {periodStart} to {periodEnd}
               <div className="text-xs muted">Times shown in CST.</div>
             </div>
-          <div className="flex gap-2">
+            <div className="flex gap-2 justify-end">
             <button className="btn-secondary px-4 py-2" onClick={ensureSchedules}>
               Create/Load
             </button>
@@ -592,8 +592,10 @@ export default function AdminSchedulerPage() {
                       const current = assignments[key];
                       const employees = employeesByStore[store.id] ?? [];
                       const tpl = templateLookup(store.id, dateStr, shift.key);
-                      const cellStart = current?.shiftMode === "other" ? current?.scheduledStart : tpl?.start_time;
-                      const cellEnd = current?.shiftMode === "other" ? current?.scheduledEnd : tpl?.end_time;
+                        const cellStart = current?.shiftMode === "other" ? current?.scheduledStart : tpl?.start_time;
+                        const cellEnd = current?.shiftMode === "other" ? current?.scheduledEnd : tpl?.end_time;
+                        const cellHours =
+                          cellStart && cellEnd ? calcHours(cellStart, cellEnd).toFixed(2) : null;
                       return (
                         <td key={key} className="px-2 py-2 align-top min-w-[220px]">
                           <div className="space-y-1">
@@ -637,11 +639,16 @@ export default function AdminSchedulerPage() {
                                   ? `${formatTimeLabel(cellStart)} - ${formatTimeLabel(cellEnd)}`
                                   : "Template missing"}
                               </div>
-                            {current?.profileId && (
-                              <div className={`text-xs px-2 py-1 rounded border ${hashColor(current.profileId)}`}>
-                                {employees.find(p => p.id === current.profileId)?.name ?? "Employee"}
-                              </div>
-                            )}
+                              {current?.profileId && (
+                                <div
+                                  className={`text-xs px-2 py-1 rounded border flex items-center justify-between gap-2 ${hashColor(
+                                    current.profileId
+                                  )}`}
+                                >
+                                  <span>{employees.find(p => p.id === current.profileId)?.name ?? "Employee"}</span>
+                                  {cellHours && <span className="ml-auto">{cellHours} hrs</span>}
+                                </div>
+                              )}
                           </div>
                         </td>
                       );

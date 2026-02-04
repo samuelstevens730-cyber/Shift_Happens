@@ -36,25 +36,44 @@ select
 from public.stores s
 join (
   values
-    -- Mon-Wed
-    (1, 'open',  '09:00', '15:00', false),
-    (1, 'close', '15:00', '21:00', false),
-    (2, 'open',  '09:00', '15:00', false),
-    (2, 'close', '15:00', '21:00', false),
-    (3, 'open',  '09:00', '15:00', false),
-    (3, 'close', '15:00', '21:00', false),
-    -- Thu
-    (4, 'open',  '09:00', '15:30', false),
-    (4, 'close', '15:30', '22:00', false),
-    -- Fri-Sat
-    (5, 'open',  '09:00', '17:00', false),
-    (5, 'close', '17:00', '00:00', true),
-    (6, 'open',  '09:00', '17:00', false),
-    (6, 'close', '17:00', '00:00', true),
-    -- Sun
-    (0, 'open',  '12:00', '16:00', false),
-    (0, 'close', '16:00', '21:00', false)
-) as v(dow, shift_type, start_time, end_time, is_overnight)
-  on true
+    -- LV1 Mon-Wed
+    ('LV1', 1, 'open',  '09:00', '15:00', false),
+    ('LV1', 1, 'close', '15:00', '21:00', false),
+    ('LV1', 2, 'open',  '09:00', '15:00', false),
+    ('LV1', 2, 'close', '15:00', '21:00', false),
+    ('LV1', 3, 'open',  '09:00', '15:00', false),
+    ('LV1', 3, 'close', '15:00', '21:00', false),
+    -- LV1 Thu
+    ('LV1', 4, 'open',  '09:00', '15:30', false),
+    ('LV1', 4, 'close', '15:30', '22:00', false),
+    -- LV1 Fri-Sat (close at 10 PM)
+    ('LV1', 5, 'open',  '09:00', '17:00', false),
+    ('LV1', 5, 'close', '17:00', '22:00', false),
+    ('LV1', 6, 'open',  '09:00', '17:00', false),
+    ('LV1', 6, 'close', '17:00', '22:00', false),
+    -- LV1 Sun
+    ('LV1', 0, 'open',  '12:00', '16:00', false),
+    ('LV1', 0, 'close', '16:00', '21:00', false),
+
+    -- LV2 Mon-Wed
+    ('LV2', 1, 'open',  '09:00', '15:00', false),
+    ('LV2', 1, 'close', '15:00', '21:00', false),
+    ('LV2', 2, 'open',  '09:00', '15:00', false),
+    ('LV2', 2, 'close', '15:00', '21:00', false),
+    ('LV2', 3, 'open',  '09:00', '15:00', false),
+    ('LV2', 3, 'close', '15:00', '21:00', false),
+    -- LV2 Thu
+    ('LV2', 4, 'open',  '09:00', '15:30', false),
+    ('LV2', 4, 'close', '15:30', '22:00', false),
+    -- LV2 Fri-Sat (close at midnight)
+    ('LV2', 5, 'open',  '09:00', '17:00', false),
+    ('LV2', 5, 'close', '17:00', '00:00', true),
+    ('LV2', 6, 'open',  '09:00', '17:00', false),
+    ('LV2', 6, 'close', '17:00', '00:00', true),
+    -- LV2 Sun
+    ('LV2', 0, 'open',  '12:00', '16:00', false),
+    ('LV2', 0, 'close', '16:00', '21:00', false)
+) as v(store_name, dow, shift_type, start_time, end_time, is_overnight)
+  on s.name = v.store_name
 where s.name in ('LV1', 'LV2')
 on conflict do nothing;
