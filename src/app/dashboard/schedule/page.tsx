@@ -302,18 +302,19 @@ export default function EmployeeSchedulePage() {
     async function checkAuth() {
       // 1. Check Supabase session FIRST
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (user) {
-        // Manager logged in - get their profile
+        // Manager logged in - allow schedule access regardless of profile row
+        setPinToken("manager"); // Flag to indicate manager auth
+
         const { data: profile } = await supabase
           .from("profiles")
           .select("id")
           .eq("user_id", user.id)
           .single();
-        
+
         if (profile) {
           setProfileId(profile.id);
-          setPinToken("manager"); // Flag to indicate manager auth
         }
         return;
       }
