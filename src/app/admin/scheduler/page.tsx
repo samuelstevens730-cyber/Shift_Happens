@@ -188,7 +188,7 @@ export default function AdminSchedulerPage() {
     const token = await getBearerToken();
     if (!token) {
       router.replace("/login?next=/admin/scheduler");
-      return;
+      return null;
     }
     const res = await fetch("/api/admin/schedules", {
       headers: { Authorization: `Bearer ${token}` },
@@ -196,17 +196,18 @@ export default function AdminSchedulerPage() {
     const json = (await res.json()) as SchedulesResponse | { error: string };
     if (!res.ok || "error" in json) {
       setError("error" in json ? json.error : "Failed to load schedules.");
-      return;
+      return null;
     }
-      setStores(json.stores);
-      setTemplates(
-        (json.templates ?? []).map((t: TemplateRow) => ({
-          ...t,
-          day_of_week: Number(t.day_of_week),
-        }))
-      );
+    setStores(json.stores);
+    setTemplates(
+      (json.templates ?? []).map((t: TemplateRow) => ({
+        ...t,
+        day_of_week: Number(t.day_of_week),
+      }))
+    );
     setMemberships(json.memberships);
     setSchedules(json.schedules);
+    return json;
   }, [router]);
 
   useEffect(() => {
@@ -230,8 +231,8 @@ export default function AdminSchedulerPage() {
   }, [schedules, periodStart, periodEnd]);
 
   const getScheduleForStore = useCallback(
-    (storeId: string) =>
-      schedules.find(
+    (storeId: string, list: ScheduleRow[] = schedules) =>
+      list.find(
         s => s.store_id === storeId && s.period_start === periodStart && s.period_end === periodEnd
       ) ?? null,
     [schedules, periodStart, periodEnd]
@@ -412,7 +413,7 @@ export default function AdminSchedulerPage() {
       });
   }, [assignments, dates, stores, memberships]);
 
-  const persistAssignments = useCallback(async (forceAll = false) => {
+  const persistAssignments = useCallback(async (forceAll = false, list?: ScheduleRow[]) => {
     if (conflicts.length) {
       setError("Resolve double-booking conflicts before saving.");
       return false;
@@ -421,7 +422,7 @@ export default function AdminSchedulerPage() {
     if (!token) return false;
     for (const store of stores) {
       const assignmentsPayload: Array<Assignment & { date: string; shiftType: "open" | "close" }> = [];
-      const schedule = getScheduleForStore(store.id);
+      const schedule = getScheduleForStore(store.id, list ?? schedules);
       if (!schedule) continue;
         for (const dateStr of dates) {
           for (const shiftType of SHIFT_TYPES) {
@@ -455,7 +456,7 @@ export default function AdminSchedulerPage() {
     setDirtyKeys(new Set());
     await loadDetails();
     return true;
-  }, [dates, dirtyKeys, stores, assignments, loadDetails, conflicts, getScheduleForStore]);
+  }, [dates, dirtyKeys, stores, assignments, loadDetails, conflicts, getScheduleForStore, schedules]);
 
   const saveDraft = useCallback(async () => {
     setSaving(true);
@@ -473,10 +474,23 @@ export default function AdminSchedulerPage() {
     try {
       const token = await getBearerToken();
       if (!token) return;
-      const saved = await persistAssignments(true);
+      let meta = await loadMeta();
+      let metaSchedules = meta?.schedules ?? schedules;
+      const missing = stores.some(store => !getScheduleForStore(store.id, metaSchedules));
+      if (missing) {
+        await ensureSchedules();
+        meta = await loadMeta();
+        metaSchedules = meta?.schedules ?? schedules;
+      }
+      if (stores.some(store => !getScheduleForStore(store.id, metaSchedules))) {
+        setError("Schedules not initialized. Click Create/Load first.");
+        return;
+      }
+
+      const saved = await persistAssignments(true, metaSchedules);
       if (!saved) return;
       for (const store of stores) {
-        const schedule = getScheduleForStore(store.id);
+        const schedule = getScheduleForStore(store.id, metaSchedules);
         if (!schedule) continue;
         const res = await fetch(`/api/admin/schedules/${schedule.id}/publish`, {
           method: "POST",
@@ -493,7 +507,7 @@ export default function AdminSchedulerPage() {
     } finally {
       setSaving(false);
     }
-  }, [stores, loadMeta, persistAssignments, getScheduleForStore]);
+  }, [stores, loadMeta, persistAssignments, getScheduleForStore, schedules]);
 
   async function ensureSchedules() {
     setError(null);
