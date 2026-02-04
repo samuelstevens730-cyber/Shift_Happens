@@ -335,19 +335,23 @@ body {
   overflow: hidden;
 }
 
-/* Top Bar: Logo + Navigation */
+/* Top Bar: Logo + Navigation - Takes ~20% of viewport */
 .bento-top-bar {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 12px 16px 8px;
-  gap: 8px;
+  justify-content: center;
+  height: 20vh;
+  min-height: 120px;
+  max-height: 180px;
+  padding: 16px 16px 12px;
+  gap: 16px;
   flex-shrink: 0;
 }
 
 .bento-logo {
-  width: 64px;
-  height: 64px;
+  width: 80px;
+  height: 80px;
   border-radius: 50%;
   object-fit: cover;
 }
@@ -355,17 +359,17 @@ body {
 .bento-nav {
   display: flex;
   justify-content: center;
-  gap: 24px;
+  gap: 32px;
   flex-wrap: wrap;
 }
 
 .bento-nav-link {
-  font-size: 0.75rem;
+  font-size: 1rem;
   font-weight: 600;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.15em;
   text-transform: uppercase;
   transition: color 200ms ease;
-  padding: 4px 0;
+  padding: 6px 0;
 }
 
 .bento-nav-active {
@@ -522,6 +526,28 @@ body {
    MOBILE: Asymmetric Two-Column Layout
    ============================================ */
 @media (max-width: 768px) {
+  .bento-top-bar {
+    height: 18vh;
+    min-height: 100px;
+    max-height: 140px;
+    padding: 12px 12px 8px;
+    gap: 12px;
+  }
+  
+  .bento-logo {
+    width: 56px;
+    height: 56px;
+  }
+  
+  .bento-nav {
+    gap: 20px;
+  }
+  
+  .bento-nav-link {
+    font-size: 0.8rem;
+    letter-spacing: 0.1em;
+  }
+  
   .bento-container {
     padding-left: 4px;
     padding-right: 4px;
@@ -557,6 +583,19 @@ body {
     flex: 1.5;
   }
   
+  .bento-card-title {
+    font-size: 0.75rem;
+  }
+}
+
+/* Very small screens - slight adjustments */
+@media (max-width: 360px) {
+  .bento-top-bar {
+    height: 16vh;
+    min-height: 90px;
+    gap: 8px;
+  }
+  
   .bento-logo {
     width: 48px;
     height: 48px;
@@ -571,18 +610,7 @@ body {
   }
   
   .bento-card-title {
-    font-size: 0.75rem;
-  }
-}
-
-/* Very small screens - slight adjustments */
-@media (max-width: 360px) {
-  .bento-card-title {
     font-size: 0.65rem;
-  }
-  
-  .bento-nav-link {
-    font-size: 0.6rem;
   }
 }
 
