@@ -412,7 +412,7 @@ export default function AdminSchedulerPage() {
       });
   }, [assignments, dates, stores, memberships]);
 
-  const persistAssignments = useCallback(async () => {
+  const persistAssignments = useCallback(async (forceAll = false) => {
     if (conflicts.length) {
       setError("Resolve double-booking conflicts before saving.");
       return false;
@@ -423,21 +423,21 @@ export default function AdminSchedulerPage() {
       const assignmentsPayload: Array<Assignment & { date: string; shiftType: "open" | "close" }> = [];
       const schedule = getScheduleForStore(store.id);
       if (!schedule) continue;
-      for (const dateStr of dates) {
-        for (const shiftType of SHIFT_TYPES) {
-          const key = `${store.id}|${dateStr}|${shiftType.key}`;
-          if (!dirtyKeys.has(key)) continue;
-          const current = assignments[key];
-          assignmentsPayload.push({
-            date: dateStr,
-            shiftType: shiftType.key,
-            profileId: current?.profileId ?? null,
-            shiftMode: current?.shiftMode ?? "standard",
-            scheduledStart: current?.scheduledStart ?? undefined,
-            scheduledEnd: current?.scheduledEnd ?? undefined,
-          });
+        for (const dateStr of dates) {
+          for (const shiftType of SHIFT_TYPES) {
+            const key = `${store.id}|${dateStr}|${shiftType.key}`;
+            if (!forceAll && !dirtyKeys.has(key)) continue;
+            const current = assignments[key];
+            assignmentsPayload.push({
+              date: dateStr,
+              shiftType: shiftType.key,
+              profileId: current?.profileId ?? null,
+              shiftMode: current?.shiftMode ?? "standard",
+              scheduledStart: current?.scheduledStart ?? undefined,
+              scheduledEnd: current?.scheduledEnd ?? undefined,
+            });
+          }
         }
-      }
       if (!assignmentsPayload.length) continue;
       const res = await fetch(`/api/admin/schedules/${schedule.id}/assign-batch`, {
         method: "POST",
@@ -473,10 +473,8 @@ export default function AdminSchedulerPage() {
     try {
       const token = await getBearerToken();
       if (!token) return;
-      if (dirtyKeys.size > 0) {
-        const saved = await persistAssignments();
-        if (!saved) return;
-      }
+      const saved = await persistAssignments(true);
+      if (!saved) return;
       for (const store of stores) {
         const schedule = getScheduleForStore(store.id);
         if (!schedule) continue;
@@ -495,7 +493,7 @@ export default function AdminSchedulerPage() {
     } finally {
       setSaving(false);
     }
-  }, [stores, loadMeta, dirtyKeys, persistAssignments, getScheduleForStore]);
+  }, [stores, loadMeta, persistAssignments, getScheduleForStore]);
 
   async function ensureSchedules() {
     setError(null);
