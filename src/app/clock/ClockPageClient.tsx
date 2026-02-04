@@ -8,12 +8,11 @@
  * Flow:
  * 1. Select store (or auto-selected via QR)
  * 2. Select employee name
- * 3. Choose shift type (open/close/double/other)
- * 4. Enter planned start time (rounded to 30-min increments for payroll)
- * 5. Enter starting drawer count (required for open/close/double, optional for other)
- * 6. If drawer out of threshold: must confirm count and notify manager
- * 7. Confirmation modal before submitting
- * 8. Redirect to shift detail page on success
+ * 3. Enter planned start time (rounded to 30-min increments for payroll)
+ * 4. Enter starting drawer count (required for open/close/double, optional for other)
+ * 5. If drawer out of threshold: must confirm count and notify manager
+ * 6. Confirmation modal before submitting
+ * 7. Redirect to shift detail page on success
  *
  * Local storage persists last-used store/employee for faster repeat clock-ins.
  */
@@ -99,6 +98,48 @@ function toCstDateFromLocalInput(value: string) {
   return new Date(utcMillis);
 }
 
+function toCstMinutes(dt: Date) {
+  const cst = getCstDowMinutes(dt);
+  if (!cst) return null;
+  return { dow: cst.dow, minutes: cst.minutes };
+}
+
+function getStoreShiftStarts(storeName: string | null, dow: number) {
+  if (!storeName) return null;
+  const name = storeName.toUpperCase();
+  const isLV1 = name.startsWith("LV1");
+  const isLV2 = name.startsWith("LV2");
+  if (!isLV1 && !isLV2) return null;
+
+  if (dow === 0) {
+    return { openStart: 12 * 60, closeStart: 16 * 60 };
+  }
+  if (dow >= 1 && dow <= 3) {
+    return { openStart: 9 * 60, closeStart: 15 * 60 };
+  }
+  if (dow === 4) {
+    return { openStart: 9 * 60, closeStart: 15 * 60 + 30 };
+  }
+  if (dow === 5 || dow === 6) {
+    return { openStart: 9 * 60, closeStart: 17 * 60 };
+  }
+  return null;
+}
+
+function inferShiftKind(plannedLocal: string, storeName: string | null) {
+  const planned = toCstDateFromLocalInput(plannedLocal);
+  if (!planned) return "other" as ShiftKind;
+  const cst = toCstMinutes(planned);
+  if (!cst) return "other" as ShiftKind;
+  const starts = getStoreShiftStarts(storeName, cst.dow);
+  if (!starts) return "other" as ShiftKind;
+  const withinOpen = Math.abs(cst.minutes - starts.openStart) <= 120;
+  const withinClose = Math.abs(cst.minutes - starts.closeStart) <= 120;
+  if (withinOpen) return "open" as ShiftKind;
+  if (withinClose) return "close" as ShiftKind;
+  return "other" as ShiftKind;
+}
+
 function formatCst(dt: Date) {
   if (Number.isNaN(dt.getTime())) return "";
   return dt.toLocaleString("en-US", {
@@ -128,6 +169,10 @@ export default function ClockPageClient() {
   const [storeId, setStoreId] = useState("");
   const [profileId, setProfileId] = useState("");
   const [shiftKind, setShiftKind] = useState<ShiftKind>("open");
+  const [unscheduledPrompt, setUnscheduledPrompt] = useState<{
+    plannedLabel: string;
+    storeName: string;
+  } | null>(null);
   const [tokenStore, setTokenStore] = useState<Store | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
 
@@ -147,15 +192,6 @@ export default function ClockPageClient() {
     open: false,
     label: "",
   });
-  const [debugClockWindow, setDebugClockWindow] = useState<{
-    shiftKind: ShiftKind;
-    plannedLocal: string;
-    plannedCst: string;
-    plannedRoundedCst: string;
-    storeKey: string | null;
-    dow: number | null;
-    minutes: number | null;
-  } | null>(null);
   const [openShiftPrompt, setOpenShiftPrompt] = useState(false);
   const [openShiftInfo, setOpenShiftInfo] = useState<{
     id: string;
@@ -254,6 +290,12 @@ export default function ClockPageClient() {
     return toStoreKey(storeName);
   }, [tokenStore, stores, storeId]);
 
+  useEffect(() => {
+    const storeName = tokenStore?.name ?? stores.find(s => s.id === storeId)?.name ?? null;
+    if (!plannedStartLocal) return;
+    setShiftKind(inferShiftKind(plannedStartLocal, storeName));
+  }, [plannedStartLocal, tokenStore, stores, storeId]);
+
   const plannedStartRoundedLabel = useMemo(() => {
     if (!plannedStartLocal) return "";
     const dt = toCstDateFromLocalInput(plannedStartLocal);
@@ -261,25 +303,6 @@ export default function ClockPageClient() {
     return formatCst(roundTo30Minutes(dt));
   }, [plannedStartLocal]);
 
-  const debugClockPanel = useMemo(() => {
-    if (!plannedStartLocal) return null;
-    const planned = toCstDateFromLocalInput(plannedStartLocal);
-    if (!planned) return null;
-    const rounded = roundTo30Minutes(planned);
-    const cst = getCstDowMinutes(rounded);
-    const windowCheck = checkClockWindow(shiftKind, rounded);
-    return {
-      shiftKind,
-      plannedLocal: plannedStartLocal,
-      plannedCst: formatCst(planned),
-      plannedRoundedCst: formatCst(rounded),
-      storeKey: storeKeyForWindow,
-      dow: cst?.dow ?? null,
-      minutes: cst?.minutes ?? null,
-      windowOk: windowCheck.ok,
-      windowLabel: windowCheck.label || "Outside allowed clock window",
-    };
-  }, [plannedStartLocal, shiftKind, storeKeyForWindow]);
 
   const activeStoreId = useMemo(() => {
     return tokenStore?.id ?? storeId ?? "";
@@ -538,7 +561,7 @@ export default function ClockPageClient() {
     }
   }, [requiresManagerNotify]);
 
-  async function startShift() {
+  async function startShift(force = false) {
     setError(null);
 
     const planned = toCstDateFromLocalInput(plannedStartLocal);
@@ -550,16 +573,6 @@ export default function ClockPageClient() {
     const roundedPlanned = roundTo30Minutes(planned);
     const windowCheck = checkClockWindow(shiftKind, roundedPlanned);
     if (!windowCheck.ok) {
-      const cst = getCstDowMinutes(roundedPlanned);
-      setDebugClockWindow({
-        shiftKind,
-        plannedLocal: plannedStartLocal,
-        plannedCst: formatCst(planned),
-        plannedRoundedCst: formatCst(roundedPlanned),
-        storeKey: storeKeyForWindow,
-        dow: cst?.dow ?? null,
-        minutes: cst?.minutes ?? null,
-      });
       triggerClockWindowModal(windowCheck.label);
       return;
     }
@@ -599,18 +612,26 @@ export default function ClockPageClient() {
           qrToken,
           storeId,
           profileId,
-          shiftType: shiftKind,
+          shiftTypeHint: shiftKind,
           plannedStartAt: roundedPlanned.toISOString(),
           startDrawerCents, // null allowed for "other"
           changeDrawerCents, // change drawer count in cents
           confirmed,
           notifiedManager: startDrawerCents == null ? false : startNotifiedManager,
           note: null,
+          force,
         }),
       });
 
       const json = await res.json();
       if (!res.ok) {
+        if (json?.code === "UNSCHEDULED") {
+          setUnscheduledPrompt({
+            plannedLabel: plannedStartRoundedLabel || formatCst(roundedPlanned),
+            storeName: selectedStoreName,
+          });
+          return;
+        }
         if (json?.code === "CLOCK_WINDOW_VIOLATION") {
           triggerClockWindowModal(json?.windowLabel ?? "Outside allowed clock window");
           return;
@@ -644,8 +665,9 @@ export default function ClockPageClient() {
       if (!shiftId) throw new Error("API did not return shiftId.");
       stopAlarm();
 
+      const resolvedType = (json?.shiftType as ShiftKind | undefined) ?? shiftKind;
       // Redirect based on shift type - open/double go through run page first
-      const base = shiftKind === "open" || shiftKind === "double" ? `/run/${shiftId}` : `/shift/${shiftId}`;
+      const base = resolvedType === "open" || resolvedType === "double" ? `/run/${shiftId}` : `/shift/${shiftId}`;
       const params = new URLSearchParams();
       if (qrToken) params.set("t", qrToken);
       // Handle reused shift (employee already clocked in today)
@@ -885,6 +907,38 @@ export default function ClockPageClient() {
           </div>
         )}
 
+        {unscheduledPrompt && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4">
+            <div className="card card-pad w-full max-w-md space-y-4">
+              <div className="text-lg font-semibold">Not on schedule</div>
+              <div className="text-sm muted">
+                You are not scheduled for this shift and it will require management approval.
+              </div>
+              <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
+                <div><b>Store:</b> {unscheduledPrompt.storeName}</div>
+                <div><b>Planned:</b> {unscheduledPrompt.plannedLabel}</div>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <button
+                  className="btn-secondary px-4 py-2"
+                  onClick={() => setUnscheduledPrompt(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn-primary px-4 py-2"
+                  onClick={async () => {
+                    setUnscheduledPrompt(null);
+                    await startShift(true);
+                  }}
+                >
+                  Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">Clock In</h1>
           <span className="text-xs muted">Employee</span>
@@ -915,19 +969,6 @@ export default function ClockPageClient() {
 
           {error && (
             <div className="banner banner-error text-sm">{error}</div>
-          )}
-
-          {debugClockPanel && (
-            <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-[11px] text-white/70">
-              <div className="text-xs font-semibold text-white/80">Debug clock window</div>
-              <div>shift={debugClockPanel.shiftKind}</div>
-              <div>plannedLocal={debugClockPanel.plannedLocal}</div>
-              <div>plannedCST={debugClockPanel.plannedCst}</div>
-              <div>roundedCST={debugClockPanel.plannedRoundedCst}</div>
-              <div>storeKey={debugClockPanel.storeKey ?? "null"}</div>
-              <div>dow={debugClockPanel.dow ?? "null"} minutes={debugClockPanel.minutes ?? "null"}</div>
-              <div>windowOk={String(debugClockPanel.windowOk)} label={debugClockPanel.windowLabel}</div>
-            </div>
           )}
 
           {/* Store selector - hidden when QR token locks the store */}
@@ -965,26 +1006,7 @@ export default function ClockPageClient() {
             </select>
           </div>
 
-          <div className="space-y-2">
-            <label className="text-sm muted">Shift type</label>
-            <select
-              className="select"
-              value={shiftKind}
-              onChange={e => {
-                const next = e.target.value as ShiftKind;
-                setShiftKind(next);
-                // Reset threshold confirmations when shift type changes
-                setStartConfirmThreshold(false);
-                setStartNotifiedManager(false);
-              }}
-              disabled={submitting}
-            >
-              <option value="open">Open</option>
-              <option value="close">Close</option>
-              <option value="double">Double</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
+          <div className="text-xs muted">Shift type: {shiftKind.toUpperCase()}</div>
 
         <div className="space-y-2">
           <label className="text-sm muted">Planned start time</label>

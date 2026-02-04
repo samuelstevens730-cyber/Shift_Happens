@@ -7,7 +7,7 @@
  * - qrToken?: string - QR token to identify the store (alternative to storeId)
  * - storeId?: string - Store ID (alternative to qrToken; one of qrToken or storeId required)
  * - profileId: string - Employee profile ID (required)
- * - shiftType: "open" | "close" | "double" | "other" - Type of shift (required)
+ * - shiftTypeHint?: "open" | "close" | "double" | "other" - Optional hint (server derives shift_type)
  * - plannedStartAt: string - ISO timestamp of planned start time (required)
  * - startDrawerCents?: number | null - Starting drawer count in cents (required for non-"other" shifts)
  * - changeDrawerCents?: number | null - Change drawer count in cents (required for non-"other" shifts)
@@ -27,6 +27,7 @@
  * - If drawer count is outside expected threshold, requires manager notification
  * - Prevents duplicate active shifts - returns existing shift if employee already clocked in at same store
  * - Blocks clock-in if employee has active shift at different store
+ * - Matches planned start to published schedule (within -5/+15 min). If not scheduled, requires approval.
  * - Creates shift record and drawer count atomically (cleans up shift if drawer count fails)
  */
 import { NextResponse } from "next/server";
@@ -38,13 +39,14 @@ type Body = {
   qrToken?: string;
   storeId?: string;
   profileId: string;
-  shiftType: ShiftType;
+  shiftTypeHint?: ShiftType;
   plannedStartAt: string; // ISO string
   startDrawerCents?: number | null; // required for non-"other"
   changeDrawerCents?: number | null; // change drawer count in cents
   confirmed?: boolean; // required if out of threshold
   notifiedManager?: boolean;
   note?: string | null;
+  force?: boolean;
 };
 
 const ALLOWED_SHIFT_TYPES: ShiftType[] = ["open", "close", "double", "other"];
@@ -65,9 +67,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing qrToken or storeId." }, { status: 400 });
     }
     if (!body.profileId) return NextResponse.json({ error: "Missing profileId." }, { status: 400 });
-    if (!body.shiftType) return NextResponse.json({ error: "Missing shiftType." }, { status: 400 });
-    if (!ALLOWED_SHIFT_TYPES.includes(body.shiftType))
-      return NextResponse.json({ error: "Invalid shiftType." }, { status: 400 });
+    if (body.shiftTypeHint && !ALLOWED_SHIFT_TYPES.includes(body.shiftTypeHint))
+      return NextResponse.json({ error: "Invalid shiftTypeHint." }, { status: 400 });
 
     if (!body.plannedStartAt) return NextResponse.json({ error: "Missing plannedStartAt." }, { status: 400 });
 
@@ -111,8 +112,81 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid plannedStartAt." }, { status: 400 });
     const plannedRounded = roundTo30Minutes(planned);
 
-    // 4b) Enforce clock window for open shifts only (close windows are enforced on clock-out)
-    if (body.shiftType === "open") {
+    // 4b) Determine schedule match + shift type from schedule if possible
+    const plannedCst = getCstDowMinutes(plannedRounded);
+    const plannedDateKey = plannedRounded.toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+    const plannedMinutes = plannedCst?.minutes ?? null;
+
+    const { data: scheduledRows, error: schedErr } = await supabaseServer
+      .from("schedule_shifts")
+      .select("id, shift_type, scheduled_start, scheduled_end, shift_date, schedules!inner(status)")
+      .eq("store_id", store.id)
+      .eq("profile_id", body.profileId)
+      .eq("shift_date", plannedDateKey)
+      .eq("schedules.status", "published");
+
+    if (schedErr) return NextResponse.json({ error: schedErr.message }, { status: 500 });
+
+    let matchedSchedule: { id: string; shift_type: ShiftType } | null = null;
+    if (plannedMinutes != null && scheduledRows?.length) {
+      let best: { id: string; shift_type: ShiftType; score: number } | null = null;
+      for (const row of scheduledRows) {
+        const [h, m] = row.scheduled_start.split(":");
+        const schedMinutes = Number(h) * 60 + Number(m);
+        const diff = plannedMinutes - schedMinutes;
+        if (diff >= -5 && diff <= 15) {
+          const score = Math.abs(diff);
+          if (!best || score < best.score) {
+            best = { id: row.id, shift_type: row.shift_type as ShiftType, score };
+          }
+        }
+      }
+      if (best) matchedSchedule = { id: best.id, shift_type: best.shift_type };
+    }
+
+    const isScheduled = Boolean(matchedSchedule);
+    if (!isScheduled && !body.force) {
+      return NextResponse.json(
+        { error: "UNSCHEDULED", code: "UNSCHEDULED", requiresApproval: true },
+        { status: 409 }
+      );
+    }
+
+    let resolvedShiftType: ShiftType = matchedSchedule?.shift_type ?? "other";
+    if (!isScheduled) {
+      if (plannedCst) {
+        const { data: templates } = await supabaseServer
+          .from("shift_templates")
+          .select("shift_type, start_time")
+          .eq("store_id", store.id)
+          .eq("day_of_week", plannedCst.dow)
+          .in("shift_type", ["open", "close"]);
+
+        const toMinutes = (timeStr: string) => {
+          const [hh, mm] = timeStr.split(":");
+          return Number(hh) * 60 + Number(mm);
+        };
+
+        if (templates && templates.length > 0 && plannedMinutes != null) {
+          const openStart = templates.find(t => t.shift_type === "open")?.start_time;
+          const closeStart = templates.find(t => t.shift_type === "close")?.start_time;
+          if (openStart && Math.abs(plannedMinutes - toMinutes(openStart)) <= 120) {
+            resolvedShiftType = "open";
+          } else if (closeStart && Math.abs(plannedMinutes - toMinutes(closeStart)) <= 120) {
+            resolvedShiftType = "close";
+          } else {
+            resolvedShiftType = "other";
+          }
+        } else if (body.shiftTypeHint && ALLOWED_SHIFT_TYPES.includes(body.shiftTypeHint)) {
+          resolvedShiftType = body.shiftTypeHint;
+        }
+      } else if (body.shiftTypeHint && ALLOWED_SHIFT_TYPES.includes(body.shiftTypeHint)) {
+        resolvedShiftType = body.shiftTypeHint;
+      }
+    }
+
+    // 4c) Enforce clock window for open shifts only when scheduled
+    if (isScheduled && resolvedShiftType === "open") {
       const storeKey = toStoreKey(store.name);
       const cst = getCstDowMinutes(plannedRounded);
       if (!storeKey || !cst) {
@@ -123,7 +197,7 @@ export async function POST(req: Request) {
       }
       const windowCheck = isTimeWithinWindow({
         storeKey,
-        shiftType: body.shiftType,
+        shiftType: "open",
         localDow: cst.dow,
         minutes: cst.minutes,
       });
@@ -139,7 +213,7 @@ export async function POST(req: Request) {
     const startCents = body.startDrawerCents ?? null;
     const changeCents = body.changeDrawerCents ?? null;
 
-    if (body.shiftType !== "other") {
+    if (resolvedShiftType !== "other") {
       // Required for open/close/double
       if (startCents === null || startCents === undefined) {
         return NextResponse.json(
@@ -190,7 +264,7 @@ export async function POST(req: Request) {
     // 6) Prevent duplicate active shifts (employee taps twice, phone refreshes, life happens)
     const { data: existing, error: existingErr } = await supabaseServer
       .from("shifts")
-      .select("id, store_id, started_at")
+      .select("id, store_id, started_at, shift_type")
       .eq("profile_id", body.profileId)
       .is("ended_at", null)
       .maybeSingle();
@@ -211,6 +285,7 @@ export async function POST(req: Request) {
         shiftId: existing.id,
         reused: true,
         startedAt: existing.started_at ?? null,
+        shiftType: existing.shift_type ?? null,
       });
     }
 
@@ -220,7 +295,11 @@ export async function POST(req: Request) {
       .insert({
         store_id: store.id,
         profile_id: body.profileId,
-        shift_type: body.shiftType,
+        shift_type: resolvedShiftType,
+        schedule_shift_id: matchedSchedule?.id ?? null,
+        shift_source: isScheduled ? "scheduled" : "manual",
+        requires_override: !isScheduled,
+        override_note: !isScheduled ? "Unscheduled clock-in" : null,
         planned_start_at: plannedRounded.toISOString(),
         started_at: new Date().toISOString(),
       })
@@ -258,7 +337,7 @@ export async function POST(req: Request) {
       }
     }
 
-    return NextResponse.json({ shiftId: shift.id, reused: false });
+    return NextResponse.json({ shiftId: shift.id, reused: false, shiftType: resolvedShiftType });
   } catch (e: unknown) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Start shift failed." },
