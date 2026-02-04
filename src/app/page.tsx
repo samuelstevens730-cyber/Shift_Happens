@@ -35,6 +35,7 @@ type ScheduleShift = {
   shift_type: string;
   scheduled_start: string;
   scheduled_end: string;
+  shift_mode?: string | null;
   stores?: { name: string } | null;
 };
 
@@ -102,9 +103,44 @@ function formatTimeLabel(value?: string) {
   return `${hour12}:${minute} ${suffix}`;
 }
 
-function formatTimeRange(shift?: ScheduleShift) {
-  if (!shift) return "Off";
-  return `${formatTimeLabel(shift.scheduled_start)} - ${formatTimeLabel(shift.scheduled_end)}`;
+function toMinutes(value?: string) {
+  if (!value) return NaN;
+  const [h, m] = value.split(":");
+  return Number(h) * 60 + Number(m);
+}
+
+function getShiftTimeRange(shifts: ScheduleShift[]) {
+  if (!shifts.length) return "Off";
+  let minStart = Number.POSITIVE_INFINITY;
+  let maxEnd = Number.NEGATIVE_INFINITY;
+  shifts.forEach(shift => {
+    const start = toMinutes(shift.scheduled_start);
+    let end = toMinutes(shift.scheduled_end);
+    if (Number.isNaN(start) || Number.isNaN(end)) return;
+    if (end < start) end += 24 * 60;
+    if (start < minStart) minStart = start;
+    if (end > maxEnd) maxEnd = end;
+  });
+  if (!Number.isFinite(minStart) || !Number.isFinite(maxEnd)) return "Off";
+  const displayStart = formatTimeLabel(
+    `${Math.floor(minStart / 60)
+      .toString()
+      .padStart(2, "0")}:${String(minStart % 60).padStart(2, "0")}`
+  );
+  const displayEndMinutes = maxEnd % (24 * 60);
+  const displayEnd = formatTimeLabel(
+    `${Math.floor(displayEndMinutes / 60)
+      .toString()
+      .padStart(2, "0")}:${String(displayEndMinutes % 60).padStart(2, "0")}`
+  );
+  return `${displayStart} - ${displayEnd}`;
+}
+
+function getStoreLabel(shifts: ScheduleShift[]) {
+  if (!shifts.length) return "--";
+  const names = shifts.map(s => s.stores?.name ?? "--").filter(Boolean);
+  const unique = Array.from(new Set(names));
+  return unique.length === 1 ? unique[0] : "Multiple";
 }
 
 function HomePageInner() {
@@ -245,7 +281,7 @@ function HomePageInner() {
       
       const { data: shifts } = await client
         .from("schedule_shifts")
-        .select("id, shift_date, shift_type, scheduled_start, scheduled_end, stores(name), schedules!inner(status)")
+        .select("id, shift_date, shift_type, shift_mode, scheduled_start, scheduled_end, stores(name), schedules!inner(status)")
         .eq("schedules.status", "published")
         .eq("profile_id", targetProfileId)
         .gte("shift_date", yesterday)
@@ -544,14 +580,14 @@ function HomePageInner() {
                 </div>
                 <div className="grid grid-cols-3 gap-2 text-center">
                   {[yesterdayKey, todayKey, tomorrowKey].map(key => {
-                    const shift = scheduleShifts.find(s => s.shift_date === key);
+                    const shiftsForDay = scheduleShifts.filter(s => s.shift_date === key);
                     return (
                       <div key={key} className="flex flex-col gap-1 rounded-lg border border-white/10 bg-white/5 p-2">
                         <div className="text-xs font-semibold text-white">
-                          {formatTimeRange(shift)}
+                          {getShiftTimeRange(shiftsForDay)}
                         </div>
                         <div className="text-[10px] text-white/60">
-                          {shift?.stores?.name ?? "--"}
+                          {getStoreLabel(shiftsForDay)}
                         </div>
                       </div>
                     );
@@ -562,7 +598,7 @@ function HomePageInner() {
             expandedContent={
               <div className="space-y-2">
                 {expandedKeys.map(key => {
-                  const shift = scheduleShifts.find(s => s.shift_date === key);
+                  const shiftsForDay = scheduleShifts.filter(s => s.shift_date === key);
                   const isToday = key === todayKey;
                   return (
                     <div
@@ -572,8 +608,8 @@ function HomePageInner() {
                       }`}
                     >
                       <span className="text-sm font-medium w-24">{formatCstLabel(key)}</span>
-                      <span className="text-sm text-gray-300">{formatTimeRange(shift)}</span>
-                      <span className="text-xs text-gray-500">{shift?.stores?.name ?? "--"}</span>
+                      <span className="text-sm text-gray-300">{getShiftTimeRange(shiftsForDay)}</span>
+                      <span className="text-xs text-gray-500">{getStoreLabel(shiftsForDay)}</span>
                     </div>
                   );
                 })}
@@ -581,15 +617,15 @@ function HomePageInner() {
                   <div className="space-y-2 pt-2">
                     <div className="text-xs uppercase tracking-widest text-white/50">Next 7 days</div>
                     {nextWeekKeys.map(key => {
-                      const shift = scheduleShifts.find(s => s.shift_date === key);
+                      const shiftsForDay = scheduleShifts.filter(s => s.shift_date === key);
                       return (
                         <div
                           key={key}
                           className="flex justify-between items-center py-2 px-3 rounded-lg bg-white/5"
                         >
                           <span className="text-sm font-medium w-24">{formatCstLabel(key)}</span>
-                          <span className="text-sm text-gray-300">{formatTimeRange(shift)}</span>
-                          <span className="text-xs text-gray-500">{shift?.stores?.name ?? "--"}</span>
+                          <span className="text-sm text-gray-300">{getShiftTimeRange(shiftsForDay)}</span>
+                          <span className="text-xs text-gray-500">{getStoreLabel(shiftsForDay)}</span>
                         </div>
                       );
                     })}
