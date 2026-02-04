@@ -249,6 +249,11 @@ export default function ClockPageClient() {
     return formatCst(dt);
   }, [plannedStartLocal]);
 
+  const storeKeyForWindow = useMemo(() => {
+    const storeName = tokenStore?.name ?? stores.find(s => s.id === storeId)?.name ?? null;
+    return toStoreKey(storeName);
+  }, [tokenStore, stores, storeId]);
+
   const plannedStartRoundedLabel = useMemo(() => {
     if (!plannedStartLocal) return "";
     const dt = toCstDateFromLocalInput(plannedStartLocal);
@@ -276,11 +281,6 @@ export default function ClockPageClient() {
     };
   }, [plannedStartLocal, shiftKind, storeKeyForWindow]);
 
-  const storeKeyForWindow = useMemo(() => {
-    const storeName = tokenStore?.name ?? stores.find(s => s.id === storeId)?.name ?? null;
-    return toStoreKey(storeName);
-  }, [tokenStore, stores, storeId]);
-
   const activeStoreId = useMemo(() => {
     return tokenStore?.id ?? storeId ?? "";
   }, [tokenStore, storeId]);
@@ -291,7 +291,7 @@ export default function ClockPageClient() {
   }
 
   function checkClockWindow(shiftType: ShiftKind, dt: Date) {
-    if (shiftType !== "open" && shiftType !== "close") return { ok: true, label: "" };
+    if (shiftType !== "open") return { ok: true, label: "" };
     const storeKey = storeKeyForWindow;
     const cst = getCstDowMinutes(dt);
     if (!storeKey || !cst) {

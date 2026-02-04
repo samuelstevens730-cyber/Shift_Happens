@@ -111,8 +111,8 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid plannedStartAt." }, { status: 400 });
     const plannedRounded = roundTo30Minutes(planned);
 
-    // 4b) Enforce clock window for open/close shifts (use entered + rounded time)
-    if (body.shiftType === "open" || body.shiftType === "close") {
+    // 4b) Enforce clock window for open shifts only (close windows are enforced on clock-out)
+    if (body.shiftType === "open") {
       const storeKey = toStoreKey(store.name);
       const cst = getCstDowMinutes(plannedRounded);
       if (!storeKey || !cst) {

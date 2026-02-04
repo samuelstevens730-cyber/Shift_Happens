@@ -130,9 +130,9 @@ returns trigger
 language plpgsql
 as $$
 begin
-  -- Clock-in: validate planned_start_at for open/close
+  -- Clock-in: validate planned_start_at for open only
   if TG_OP = 'INSERT' then
-    if new.shift_type in ('open','close') then
+    if new.shift_type in ('open') then
       perform public.clock_window_check(new.store_id, new.shift_type, new.planned_start_at);
     end if;
     return new;
