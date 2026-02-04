@@ -256,6 +256,26 @@ export default function ClockPageClient() {
     return formatCst(roundTo30Minutes(dt));
   }, [plannedStartLocal]);
 
+  const debugClockPanel = useMemo(() => {
+    if (!plannedStartLocal) return null;
+    const planned = toCstDateFromLocalInput(plannedStartLocal);
+    if (!planned) return null;
+    const rounded = roundTo30Minutes(planned);
+    const cst = getCstDowMinutes(rounded);
+    const windowCheck = checkClockWindow(shiftKind, rounded);
+    return {
+      shiftKind,
+      plannedLocal: plannedStartLocal,
+      plannedCst: formatCst(planned),
+      plannedRoundedCst: formatCst(rounded),
+      storeKey: storeKeyForWindow,
+      dow: cst?.dow ?? null,
+      minutes: cst?.minutes ?? null,
+      windowOk: windowCheck.ok,
+      windowLabel: windowCheck.label || "Outside allowed clock window",
+    };
+  }, [plannedStartLocal, shiftKind, storeKeyForWindow]);
+
   const storeKeyForWindow = useMemo(() => {
     const storeName = tokenStore?.name ?? stores.find(s => s.id === storeId)?.name ?? null;
     return toStoreKey(storeName);
@@ -895,6 +915,19 @@ export default function ClockPageClient() {
 
           {error && (
             <div className="banner banner-error text-sm">{error}</div>
+          )}
+
+          {debugClockPanel && (
+            <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-[11px] text-white/70">
+              <div className="text-xs font-semibold text-white/80">Debug clock window</div>
+              <div>shift={debugClockPanel.shiftKind}</div>
+              <div>plannedLocal={debugClockPanel.plannedLocal}</div>
+              <div>plannedCST={debugClockPanel.plannedCst}</div>
+              <div>roundedCST={debugClockPanel.plannedRoundedCst}</div>
+              <div>storeKey={debugClockPanel.storeKey ?? "null"}</div>
+              <div>dow={debugClockPanel.dow ?? "null"} minutes={debugClockPanel.minutes ?? "null"}</div>
+              <div>windowOk={String(debugClockPanel.windowOk)} label={debugClockPanel.windowLabel}</div>
+            </div>
           )}
 
           {/* Store selector - hidden when QR token locks the store */}
