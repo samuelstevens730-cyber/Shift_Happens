@@ -162,9 +162,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   if (toUpsert.length) {
+    const deduped = new Map<string, (typeof toUpsert)[number]>();
+    for (const row of toUpsert) {
+      const key = `${row.schedule_id}|${row.store_id}|${row.shift_date}|${row.shift_type}`;
+      deduped.set(key, row);
+    }
     const { error: upErr } = await supabaseServer
       .from("schedule_shifts")
-      .upsert(toUpsert, { onConflict: "schedule_id,store_id,shift_date,shift_type" });
+      .upsert(Array.from(deduped.values()), { onConflict: "schedule_id,store_id,shift_date,shift_type" });
     if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
   }
 
