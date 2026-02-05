@@ -209,6 +209,17 @@ export default function AdminIndex() {
               Build and publish schedules for each store.
             </p>
           </Link>
+
+          {/* Employee Schedules - view individual schedules */}
+          <Link href="/admin/employee-schedules" className="tile">
+            <div className="flex items-center gap-2">
+              <span className="tile-dot" />
+              <div className="text-lg font-medium">Employee Schedules</div>
+            </div>
+            <p className="mt-2 text-sm muted">
+              View individual schedules by employee, store, and pay period.
+            </p>
+          </Link>
         </section>
       </div>
     </div>
