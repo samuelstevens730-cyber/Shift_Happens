@@ -531,20 +531,24 @@ export default function ClockPageClient() {
   }, [profileId]);
 
   // Check for an existing open shift when employee selection changes
-  useEffect(() => {
-    const key = profileId;
-    if (!profileId || key === openShiftKey) return;
+    useEffect(() => {
+      const key = profileId;
+      if (!profileId || key === openShiftKey) return;
+      const authToken = managerSession ? managerAccessToken : pinToken;
+      if (!authToken) return;
 
-    let alive = true;
-    (async () => {
-      try {
-        const params = new URLSearchParams();
-        params.set("profileId", profileId);
-        // Always check by employee only (global rule: one open shift per person)
+      let alive = true;
+      (async () => {
+        try {
+          const params = new URLSearchParams();
+          params.set("profileId", profileId);
+          // Always check by employee only (global rule: one open shift per person)
 
-        const res = await fetch(`/api/shift/open?${params.toString()}`);
-        const json = await res.json();
-        if (!alive) return;
+          const res = await fetch(`/api/shift/open?${params.toString()}`, {
+            headers: { Authorization: `Bearer ${authToken}` },
+          });
+          const json = await res.json();
+          if (!alive) return;
 
         if (!res.ok || !json?.shiftId) {
           setOpenShiftInfo(null);
@@ -574,10 +578,10 @@ export default function ClockPageClient() {
       }
     })();
 
-    return () => {
-      alive = false;
-    };
-  }, [profileId, openShiftKey]);
+      return () => {
+        alive = false;
+      };
+    }, [profileId, openShiftKey, managerSession, managerAccessToken, pinToken]);
 
   // Reset confirmation state when form fields change
   useEffect(() => {
@@ -677,10 +681,12 @@ export default function ClockPageClient() {
           return;
         }
         if (res.status === 409 && json?.shiftId) {
-          try {
-            const params = new URLSearchParams({ profileId });
-            const openRes = await fetch(`/api/shift/open?${params.toString()}`);
-            const openJson = await openRes.json();
+            try {
+              const params = new URLSearchParams({ profileId });
+              const openRes = await fetch(`/api/shift/open?${params.toString()}`, {
+                headers: { Authorization: `Bearer ${authToken}` },
+              });
+              const openJson = await openRes.json();
             if (openRes.ok && openJson?.shiftId) {
               setOpenShiftInfo({
                 id: openJson.shiftId,

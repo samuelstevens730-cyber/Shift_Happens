@@ -45,7 +45,8 @@ export async function GET(req: Request) {
       targetStoreIds = auth.storeIds;
     } else {
       // Manager: access shifts in stores they manage
-      targetStoreIds = await getManagerStoreIds(auth.profileId);
+      const managerUserId = auth.authUserId ?? auth.profileId;
+      targetStoreIds = await getManagerStoreIds(managerUserId);
       if (targetStoreIds.length === 0) {
         return NextResponse.json({ error: "No managed stores." }, { status: 403 });
       }
