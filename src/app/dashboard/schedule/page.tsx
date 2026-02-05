@@ -10,7 +10,6 @@ import PinGate from "@/components/PinGate";
 import HomeHeader from "@/components/HomeHeader";
 
 type Store = { id: string; name: string };
-type Profile = { id: string; name: string; active: boolean | null };
 
 type ScheduleRow = {
   period_start: string;
@@ -286,7 +285,6 @@ function WeekCard({
 export default function EmployeeSchedulePage() {
   const [loading, setLoading] = useState(true);
   const [stores, setStores] = useState<Store[]>([]);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [storeId, setStoreId] = useState("");
   const [profileId, setProfileId] = useState("");
   const [managerProfileId, setManagerProfileId] = useState("");
@@ -347,18 +345,9 @@ export default function EmployeeSchedulePage() {
           .order("name", { ascending: true })
           .returns<Store[]>();
 
-        const { data: profileData } = await supabase
-          .from("profiles")
-          .select("id, name, active")
-          .order("name", { ascending: true })
-          .returns<Profile[]>();
-
         if (!alive) return;
-        const filteredProfiles = (profileData ?? []).filter(p => p.active !== false);
         setStores(storeData ?? []);
-        setProfiles(filteredProfiles);
         if (!storeId) setStoreId(storeData?.[0]?.id ?? "");
-        if (!profileId) setProfileId(filteredProfiles?.[0]?.id ?? "");
       } finally {
         if (alive) setLoading(false);
       }
@@ -644,7 +633,6 @@ export default function EmployeeSchedulePage() {
       <PinGate
         loading={loading}
         stores={stores}
-        profiles={profiles}
         qrToken=""
         tokenStore={null}
         storeId={storeId}

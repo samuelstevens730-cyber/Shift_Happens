@@ -26,7 +26,6 @@ const PIN_STORE_KEY = "sh_pin_store_id";
 const PIN_PROFILE_KEY = "sh_pin_profile_id";
 
 type Store = { id: string; name: string };
-type Profile = { id: string; name: string; active: boolean | null };
 type EmployeeMessage = { id: string; content: string; created_at: string };
 
 type ScheduleShift = {
@@ -161,7 +160,6 @@ function HomePageInner() {
   const [showPinGate, setShowPinGate] = useState(false);
   const [pinLoading, setPinLoading] = useState(true);
   const [stores, setStores] = useState<Store[]>([]);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
   const [storeId, setStoreId] = useState("");
   const [profileId, setProfileId] = useState("");
 
@@ -370,7 +368,7 @@ function HomePageInner() {
     };
   }, []);
 
-  // Fetch stores/profiles when showing PIN gate
+  // Fetch stores when showing PIN gate (NO profiles for security)
   useEffect(() => {
     if (!showPinGate) return;
 
@@ -379,29 +377,21 @@ function HomePageInner() {
 
     async function loadData() {
       try {
-        const [storesRes, profilesRes] = await Promise.all([
-          supabase.from("stores").select("id, name").order("name"),
-          supabase.from("profiles").select("id, name, active").order("name"),
-        ]);
+        const { data: storesData } = await supabase
+          .from("stores")
+          .select("id, name")
+          .order("name");
 
         if (!alive) return;
 
-        const storesData = storesRes.data || [];
-        const profilesData = (profilesRes.data || []).filter(
-          (p) => p.active !== false
-        );
-
-        setStores(storesData);
-        setProfiles(profilesData);
+        const storesList = storesData || [];
+        setStores(storesList);
 
         // Set defaults - use preselected store from QR if available
-        if (preselectedStore && storesData.find((s: Store) => s.id === preselectedStore)) {
+        if (preselectedStore && storesList.find((s: Store) => s.id === preselectedStore)) {
           setStoreId(preselectedStore);
-        } else if (storesData.length > 0 && !storeId) {
-          setStoreId(storesData[0].id);
-        }
-        if (profilesData.length > 0 && !profileId) {
-          setProfileId(profilesData[0].id);
+        } else if (storesList.length > 0 && !storeId) {
+          setStoreId(storesList[0].id);
         }
       } finally {
         if (alive) setPinLoading(false);
@@ -410,7 +400,7 @@ function HomePageInner() {
 
     loadData();
     return () => { alive = false; };
-  }, [showPinGate, preselectedStore, storeId, profileId]);
+  }, [showPinGate, preselectedStore, storeId]);
 
   // Handle PIN authorization success
   const handlePinAuthorized = () => {
@@ -756,7 +746,6 @@ function HomePageInner() {
         <PinGate
           loading={pinLoading}
           stores={stores}
-          profiles={profiles}
           qrToken=""
           tokenStore={null}
           storeId={storeId}
