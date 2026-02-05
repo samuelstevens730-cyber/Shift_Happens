@@ -164,10 +164,12 @@ export default function ClockPageClient() {
   const [error, setError] = useState<string | null>(null);
 
   const [stores, setStores] = useState<Store[]>([]);
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-
   const [storeId, setStoreId] = useState("");
+  
+  // Employee code auth (replaces profile dropdown)
+  const [employeeCode, setEmployeeCode] = useState("");
   const [profileId, setProfileId] = useState("");
+  const [authenticatedProfileName, setAuthenticatedProfileName] = useState<string | null>(null);
   const [shiftKind, setShiftKind] = useState<ShiftKind>("open");
   const [unscheduledPrompt, setUnscheduledPrompt] = useState<{
     plannedLabel: string;
@@ -275,8 +277,8 @@ export default function ClockPageClient() {
   }, [stores, storeId]);
 
   const selectedProfileName = useMemo(() => {
-    return profiles.find(p => p.id === profileId)?.name ?? "Unknown Employee";
-  }, [profiles, profileId]);
+    return authenticatedProfileName ?? "Unknown Employee";
+  }, [authenticatedProfileName]);
 
   const plannedStartLabel = useMemo(() => {
     if (!plannedStartLocal) return "Unknown time";
@@ -357,7 +359,7 @@ export default function ClockPageClient() {
     startNotifiedManager,
   ]);
 
-  // Load stores, profiles, and validate QR token on mount
+  // Load stores and validate QR token on mount (NO profiles fetch for security)
   useEffect(() => {
     let alive = true;
 
@@ -375,20 +377,7 @@ export default function ClockPageClient() {
         if (!alive) return;
         if (storeErr) throw storeErr;
 
-        const { data: profileData, error: profErr } = await supabase
-          .from("profiles")
-          .select("id, name, active")
-          .order("name", { ascending: true })
-          .returns<Profile[]>();
-
-        if (!alive) return;
-        if (profErr) throw profErr;
-
-        // Filter out inactive employees
-        const filteredProfiles = (profileData ?? []).filter(p => p.active !== false);
-
         setStores(storeData ?? []);
-        setProfiles(filteredProfiles);
 
         // Validate QR token and lock store if valid
         if (qrToken) {
@@ -409,20 +398,12 @@ export default function ClockPageClient() {
           }
         }
 
-        // Restore last selections if still valid (for faster repeat clock-ins)
+        // Restore last store selection
         const lastStore = localStorage.getItem("sh_store") || "";
-        const lastProfile = localStorage.getItem("sh_profile") || "";
-
         const storeOk = (storeData ?? []).some(s => s.id === lastStore);
-        const profileOk = (filteredProfiles ?? []).some(p => p.id === lastProfile);
-
-        const nextStoreId = storeOk ? lastStore : (storeData?.[0]?.id ?? "");
-        const nextProfileId = profileOk ? lastProfile : (filteredProfiles?.[0]?.id ?? "");
-
-        if (!qrToken) setStoreId(nextStoreId);
-        setProfileId(nextProfileId);
+        if (!qrToken) setStoreId(storeOk ? lastStore : (storeData?.[0]?.id ?? ""));
       } catch (e: unknown) {
-        setError(e instanceof Error ? e.message : "Failed to load stores/profiles.");
+        setError(e instanceof Error ? e.message : "Failed to load stores.");
       } finally {
         if (alive) setLoading(false);
       }
@@ -992,18 +973,9 @@ export default function ClockPageClient() {
 
           <div className="space-y-2">
             <label className="text-sm muted">Employee</label>
-            <select
-              className="select"
-              value={profileId}
-              onChange={e => setProfileId(e.target.value)}
-              disabled={submitting || pinLockedSelection}
-            >
-              {profiles.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
+            <div className="input bg-[var(--card)] border border-[var(--green)]/30 text-center py-2">
+              {authenticatedProfileName ?? "Not authenticated"}
+            </div>
           </div>
 
           <div className="text-xs muted">Shift type: {shiftKind.toUpperCase()}</div>
@@ -1145,24 +1117,20 @@ export default function ClockPageClient() {
                 )}
 
                 <div className="space-y-2">
-                  <label className="text-sm muted">Employee</label>
-                  <select
-                    className="select"
-                    value={profileId}
-                    onChange={e => setProfileId(e.target.value)}
+                  <label className="text-sm muted">Employee Code</label>
+                  <input
+                    type="text"
+                    placeholder="LV1-A7K"
+                    value={employeeCode}
+                    onChange={e => setEmployeeCode(e.target.value.toUpperCase())}
                     disabled={pinLoading || pinLockedSelection || loading}
-                  >
-                    {profiles.map(p => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
+                    className="input text-center uppercase tracking-widest"
+                    maxLength={10}
+                  />
+                  <div className="text-xs muted text-center">
+                    Enter your employee code (e.g., LV1-A7K)
+                  </div>
                 </div>
-
-                {loading && (
-                  <div className="text-xs muted text-center">Loading stores and employees…</div>
-                )}
 
                 <div className="space-y-3">
                   <button
@@ -1205,14 +1173,14 @@ export default function ClockPageClient() {
 
                 <button
                   className="btn-primary w-full py-2 text-sm disabled:opacity-50"
-                  disabled={pinLoading || pinValue.length !== 4 || !activeStoreId || !profileId || loading}
+                  disabled={pinLoading || pinValue.length !== 4 || !activeStoreId || !employeeCode || loading}
                   onClick={async () => {
                     if (!activeStoreId) {
                       setPinError("Select a store to continue.");
                       return;
                     }
-                    if (!profileId) {
-                      setPinError("Select your name to continue.");
+                    if (!employeeCode) {
+                      setPinError("Please enter your employee code.");
                       return;
                     }
                     setPinLoading(true);
@@ -1226,20 +1194,20 @@ export default function ClockPageClient() {
                             "Content-Type": "application/json",
                           apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
                         },
-                          body: JSON.stringify({ store_id: activeStoreId, profile_id: profileId, pin: pinValue }),
+                          body: JSON.stringify({ store_id: activeStoreId, employee_code: employeeCode, pin: pinValue }),
                         }
                       );
                       const json = await res.json();
                       if (!res.ok) {
-                        if (res.status === 403 && json?.error) {
-                          setPinError("PIN auth not enabled for this store.");
-                        } else if (res.status === 429) {
+                        if (res.status === 429) {
+                          // Account locked - show specific lockout message
                           const mins = json?.retry_after_minutes || json?.locked_for_minutes || 5;
-                          setPinError(`Account locked. Try in ${mins} minutes.`);
-                        } else if (res.status === 401 && json?.attempts_remaining === 1) {
-                          setPinError("Invalid PIN. You have 1 more try before lockout.");
+                          setPinError(`Account temporarily locked. Try again in ${mins} minutes.`);
+                        } else if (res.status === 403) {
+                          setPinError("PIN auth not enabled for this store.");
                         } else {
-                          setPinError("Invalid PIN.");
+                          // Generic error for all other failures (401, etc.)
+                          setPinError("Invalid employee code or PIN");
                         }
                         setPinValue("");
                         setPinShake(true);
@@ -1247,7 +1215,9 @@ export default function ClockPageClient() {
                         return;
                       }
                       const token = json?.token as string | undefined;
-                      if (!token) {
+                      const profileName = json?.profile?.name as string | undefined;
+                      const authProfileId = json?.profile?.id as string | undefined;
+                      if (!token || !authProfileId) {
                         setPinError("Authentication failed.");
                         setPinValue("");
                         setPinShake(true);
@@ -1256,18 +1226,19 @@ export default function ClockPageClient() {
                       }
                       setPinToken(token);
                       setPinStoreId(activeStoreId);
-                      setPinProfileId(profileId);
+                      setPinProfileId(authProfileId);
+                      setProfileId(authProfileId);
+                      setAuthenticatedProfileName(profileName || null);
                       setPinLockedSelection(true);
                       if (typeof window !== "undefined") {
                         sessionStorage.setItem(PIN_TOKEN_KEY, token);
                         sessionStorage.setItem(PIN_STORE_KEY, activeStoreId);
-                        sessionStorage.setItem(PIN_PROFILE_KEY, profileId);
+                        sessionStorage.setItem(PIN_PROFILE_KEY, authProfileId);
                       }
                       setStoreId(activeStoreId);
-                      setProfileId(profileId);
                       setPinModalOpen(false);
                     } catch {
-                      setPinError("Authentication failed.");
+                      setPinError("Unable to connect. Please try again.");
                       setPinValue("");
                       setPinShake(true);
                       setTimeout(() => setPinShake(false), 400);

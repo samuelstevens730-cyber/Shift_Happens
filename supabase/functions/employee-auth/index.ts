@@ -112,6 +112,11 @@ async function signJwt(payload: Record<string, unknown>, jwkJson: string): Promi
   return await create(header, payload, key);
 }
 
+// Normalize employee code: uppercase and strip hyphens
+function normalizeEmployeeCode(code: string): string {
+  return code.toUpperCase().replace(/-/g, "");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -124,11 +129,16 @@ serve(async (req) => {
     if (!JWT_SECRET || !PIN_HMAC_SECRET) {
       throw new Error("Missing JWT_SECRET or PIN_HMAC_SECRET in edge function secrets.");
     }
-    const { store_id, profile_id, pin }: { store_id: string; profile_id: string; pin: string } = await req.json();
+    
+    const { store_id, employee_code, pin }: { store_id: string; employee_code: string; pin: string } = await req.json();
 
-    if (!store_id || !profile_id || !pin || !/^\d{4}$/.test(pin)) {
-      return Response.json({ error: "Invalid store_id, profile_id or PIN format" }, { status: 400, headers: corsHeaders });
+    // Validate input format
+    if (!store_id || !employee_code || !pin || !/^\d{4}$/.test(pin)) {
+      return Response.json({ error: "Invalid employee code or PIN" }, { status: 400, headers: corsHeaders });
     }
+
+    // Normalize employee code
+    const normalizedCode = normalizeEmployeeCode(employee_code);
 
     const { data: settings, error: settingsError } = await supabase
       .from("store_settings")
@@ -140,47 +150,78 @@ serve(async (req) => {
       return Response.json({ error: "PIN auth not enabled for this store" }, { status: 403, headers: corsHeaders });
     }
 
+    // Find profile by normalized employee code
+    // Query using case-insensitive comparison with hyphen stripping
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("id, pin_hash, pin_locked_until, pin_failed_attempts")
-      .eq("id", profile_id)
+      .select("id, name, pin_hash, pin_locked_until, pin_failed_attempts, employee_code")
       .eq("active", true)
+      .filter("employee_code", "not.eq", null)
       .single();
+    
+    // Check if profile exists and code matches (case-insensitive, hyphen-insensitive)
+    let matchedProfile = null;
+    if (profile && profile.employee_code) {
+      const storedCode = normalizeEmployeeCode(profile.employee_code);
+      if (storedCode === normalizedCode) {
+        matchedProfile = profile;
+      }
+    }
 
-    if (profileError || !profile || !profile.pin_hash) {
-      return Response.json({ error: "Invalid credentials" }, { status: 401, headers: corsHeaders });
+    // If no match, try a more explicit query
+    if (!matchedProfile) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, name, pin_hash, pin_locked_until, pin_failed_attempts, employee_code")
+        .eq("active", true)
+        .filter("employee_code", "not.eq", null);
+      
+      if (profiles) {
+        for (const p of profiles) {
+          if (p.employee_code && normalizeEmployeeCode(p.employee_code) === normalizedCode) {
+            matchedProfile = p;
+            break;
+          }
+        }
+      }
+    }
+
+    if (!matchedProfile || !matchedProfile.pin_hash) {
+      // Generic error - do not reveal if code is wrong
+      return Response.json({ error: "Invalid employee code or PIN" }, { status: 401, headers: corsHeaders });
     }
 
     const { data: membership, error: membershipError } = await supabase
       .from("store_memberships")
       .select("store_id")
-      .eq("profile_id", profile.id)
+      .eq("profile_id", matchedProfile.id)
       .eq("store_id", store_id)
       .single();
 
     if (membershipError || !membership) {
-      return Response.json({ error: "Invalid credentials" }, { status: 401, headers: corsHeaders });
+      // Generic error - do not reveal if not member of store
+      return Response.json({ error: "Invalid employee code or PIN" }, { status: 401, headers: corsHeaders });
     }
 
-    if (profile.pin_locked_until && new Date(profile.pin_locked_until) > new Date()) {
+    if (matchedProfile.pin_locked_until && new Date(matchedProfile.pin_locked_until) > new Date()) {
       const minutesLeft = Math.ceil(
-        (new Date(profile.pin_locked_until).getTime() - Date.now()) / 60000
+        (new Date(matchedProfile.pin_locked_until).getTime() - Date.now()) / 60000
       );
       return Response.json(
-        { error: "Account locked", retry_after_minutes: minutesLeft },
+        { error: "Account temporarily locked. Try again in [X] minutes.", retry_after_minutes: minutesLeft },
         { status: 429, headers: corsHeaders }
       );
     }
 
-    const validPin = await verifyPin(pin, profile.pin_hash);
+    const validPin = await verifyPin(pin, matchedProfile.pin_hash);
 
     if (!validPin) {
       const { data: updated } = await supabase
         .from("profiles")
         .update({
-          pin_failed_attempts: (profile.pin_failed_attempts || 0) + 1
+          pin_failed_attempts: (matchedProfile.pin_failed_attempts || 0) + 1
         })
-        .eq("id", profile.id)
+        .eq("id", matchedProfile.id)
         .select("pin_failed_attempts")
         .single();
 
@@ -194,16 +235,17 @@ serve(async (req) => {
         await supabase
           .from("profiles")
           .update({ pin_locked_until: lockedUntil })
-          .eq("id", profile.id);
+          .eq("id", matchedProfile.id);
 
         return Response.json(
-          { error: "Too many failed attempts", locked_for_minutes: lockoutMinutes },
+          { error: "Account temporarily locked. Try again in [X] minutes.", locked_for_minutes: lockoutMinutes },
           { status: 429, headers: corsHeaders }
         );
       }
 
+      // Generic error - do not reveal PIN is wrong
       return Response.json(
-        { error: "Invalid credentials", attempts_remaining: maxAttempts - attempts },
+        { error: "Invalid employee code or PIN" },
         { status: 401, headers: corsHeaders }
       );
     }
@@ -214,20 +256,20 @@ serve(async (req) => {
         pin_failed_attempts: 0,
         pin_locked_until: null
       })
-      .eq("id", profile.id);
+      .eq("id", matchedProfile.id);
 
     const { data: memberships } = await supabase
       .from("store_memberships")
       .select("store_id")
-      .eq("profile_id", profile.id);
+      .eq("profile_id", matchedProfile.id);
 
     const storeIds = memberships?.map(m => m.store_id) || [store_id];
 
     const now = Math.floor(Date.now() / 1000);
     const payload = {
-      sub: profile.id,
+      sub: matchedProfile.id,
       role: "authenticated",
-      profile_id: profile.id,
+      profile_id: matchedProfile.id,
       store_id: store_id,
       store_ids: storeIds,
       iat: now,
@@ -240,7 +282,8 @@ serve(async (req) => {
       token: jwt,
       expires_in: 14400,
       profile: {
-        id: profile.id,
+        id: matchedProfile.id,
+        name: matchedProfile.name,
         store_id: store_id,
         stores: storeIds
       }
@@ -248,6 +291,6 @@ serve(async (req) => {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("Auth error:", err);
-    return Response.json({ error: "Authentication failed", detail: message }, { status: 500, headers: corsHeaders });
+    return Response.json({ error: "Unable to connect. Please try again.", detail: message }, { status: 500, headers: corsHeaders });
   }
 });
