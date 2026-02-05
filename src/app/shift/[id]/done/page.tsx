@@ -122,7 +122,13 @@ export default function ShiftPage() {
 
   async function refreshShift() {
     const query = qrToken ? `?t=${encodeURIComponent(qrToken)}` : "";
-    const res = await fetch(`/api/shift/${shiftId}${query}`);
+    const authToken = managerSession ? managerAccessToken : pinToken;
+    if (!authToken) {
+      throw new Error(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
+    }
+    const res = await fetch(`/api/shift/${shiftId}${query}`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
     const json = await res.json();
     if (!res.ok) throw new Error(json?.error || "Failed to load shift.");
     setState(json);

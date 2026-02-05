@@ -206,7 +206,13 @@ export default function ShiftPage() {
 
   const reloadShift = useCallback(async () => {
     const query = qrToken ? `?t=${encodeURIComponent(qrToken)}` : "";
-    const res = await fetch(`/api/shift/${shiftId}${query}`);
+    const authToken = managerSession ? managerAccessToken : pinToken;
+    if (!authToken) {
+      throw new Error(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
+    }
+    const res = await fetch(`/api/shift/${shiftId}${query}`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+    });
     const json = await res.json();
     if (!res.ok) throw new Error(json?.error || "Failed to load shift.");
 
@@ -280,9 +286,14 @@ export default function ShiftPage() {
    */
   async function updateAssignment(assignmentId: string, action: "ack" | "complete") {
     setErr(null);
+    const authToken = managerSession ? managerAccessToken : pinToken;
+    if (!authToken) {
+      setErr(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
+      return;
+    }
     const res = await fetch(`/api/shift/${shiftId}/assignments/${assignmentId}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
       body: JSON.stringify({ action }),
     });
     const json = await res.json();
