@@ -27,8 +27,13 @@ export async function verifyEmployeeJWT(token: string): Promise<EmployeeJWTPaylo
     throw new Error("Invalid JWT_SECRET format - must be JSON JWK");
   }
 
-  // Remove private key component 'd' to create public key
-  const { d, ...publicJwk } = jwk;
+  // Remove private key component and fields that can break importJWK
+  const { d, key_ops: _keyOps, use: _use, alg: _alg, ...publicJwk } = jwk as JWK & {
+    d?: string;
+    key_ops?: string[];
+    use?: string;
+    alg?: string;
+  };
 
   // Import the public key using jose's importJWK
   const publicKey = await importJWK(publicJwk, "ES256");
