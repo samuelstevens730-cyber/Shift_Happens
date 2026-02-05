@@ -86,39 +86,14 @@ export async function POST(req: Request) {
     const token = extractBearerToken(authHeader);
     
     if (!token) {
-      return NextResponse.json({ error: "Authentication required", debug: { hasAuthHeader: Boolean(authHeader) } }, { status: 401 });
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
     let jwtPayload;
     try {
       jwtPayload = await verifyEmployeeJWT(token);
     } catch {
-      const [headerPart, payloadPart] = token.split(".");
-      const header = headerPart ? decodeJwtPart(headerPart) : null;
-      const payload = payloadPart ? decodeJwtPart(payloadPart) : null;
-      let parsedKid: string | null = null;
-      let parsedHasD = false;
-      try {
-        const parsed = JSON.parse(process.env.JWT_SECRET || "{}");
-        parsedKid = parsed?.kid ?? null;
-        parsedHasD = Boolean(parsed?.d);
-      } catch {
-        parsedKid = "parse_error";
-      }
-      return NextResponse.json(
-        {
-          error: "Invalid or expired token",
-          debug: {
-            envHasJwtSecret: Boolean(process.env.JWT_SECRET),
-            envJwtLength: process.env.JWT_SECRET?.length ?? 0,
-            envKid: parsedKid,
-            envHasD: parsedHasD,
-            tokenHeader: header,
-            tokenPayload: payload,
-          },
-        },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Invalid or expired token" }, { status: 401 });
     }
 
     const body = (await req.json()) as Body;
