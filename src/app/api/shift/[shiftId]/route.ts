@@ -124,7 +124,8 @@ export async function GET(
     }
   } else {
     // Manager can access shifts in stores they manage
-    const managerStoreIds = await getManagerStoreIds(auth.profileId);
+    const managerUserId = auth.authUserId ?? auth.profileId;
+    const managerStoreIds = await getManagerStoreIds(managerUserId);
     if (!managerStoreIds.includes(shift.store_id)) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
