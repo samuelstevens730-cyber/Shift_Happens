@@ -833,10 +833,16 @@ export default function ClockPageClient() {
 
           <div className="space-y-2">
             <label className="text-sm muted">Employee</label>
-            {managerSession && managerProfile ? (
-              <div className="input bg-white/5 cursor-not-allowed">
-                {managerProfile.name} <span className="text-xs muted">(you)</span>
-              </div>
+            {managerSession ? (
+              managerProfile ? (
+                <div className="input bg-white/5 cursor-not-allowed">
+                  {managerProfile.name} <span className="text-xs muted">(you)</span>
+                </div>
+              ) : (
+                <div className="input bg-[var(--card)] border border-[var(--green)]/30 text-center py-2">
+                  {managerProfileError ? "Manager profile missing" : "Loading profile..."}
+                </div>
+              )
             ) : (
               <div className="input bg-[var(--card)] border border-[var(--green)]/30 text-center py-2">
                 {authenticatedProfileName ?? "Not authenticated"}
@@ -949,59 +955,63 @@ export default function ClockPageClient() {
         </div>
       </div>
 
-      {openShiftPrompt && openShiftInfo && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="card card-pad w-full max-w-md space-y-4 pointer-events-auto">
-            <div className="text-lg font-semibold">Open shift detected</div>
-            <div className="text-sm muted">
-              {selectedProfileName} already has an open shift at{" "}
-              <b>{openShiftInfo.store_name ?? "another store"}</b> started at{" "}
-              <b>{formatDateTime(new Date(openShiftInfo.started_at))}</b>.
-            </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <button
-                className="btn-secondary px-4 py-2"
-                onClick={() => {
-                  const base =
-                    openShiftInfo.shift_type === "open" || openShiftInfo.shift_type === "double"
-                      ? `/run/${openShiftInfo.id}`
-                      : `/shift/${openShiftInfo.id}`;
-                  const params = new URLSearchParams();
-                  if (qrToken) params.set("t", qrToken);
-                  params.set("reused", "1");
-                  params.set("startedAt", openShiftInfo.started_at);
-                  const qs = params.toString();
-                  router.replace(qs ? `${base}?${qs}` : base);
-                }}
-              >
-                Return to open shift
-              </button>
-              <button
-                className="btn-primary px-4 py-2"
-                onClick={() => setStaleShiftPrompt(true)}
-              >
-                End previous shift
-              </button>
-              <button
-                className="btn-secondary px-4 py-2"
-                onClick={() => setOpenShiftPrompt(false)}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {openShiftPrompt && openShiftInfo && typeof document !== "undefined"
+        ? createPortal(
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+              <div className="card card-pad w-full max-w-md space-y-4 pointer-events-auto">
+                <div className="text-lg font-semibold">Open shift detected</div>
+                <div className="text-sm muted">
+                  {selectedProfileName} already has an open shift at{" "}
+                  <b>{openShiftInfo.store_name ?? "another store"}</b> started at{" "}
+                  <b>{formatDateTime(new Date(openShiftInfo.started_at))}</b>.
+                </div>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    className="btn-secondary px-4 py-2"
+                    onClick={() => {
+                      const base =
+                        openShiftInfo.shift_type === "open" || openShiftInfo.shift_type === "double"
+                          ? `/run/${openShiftInfo.id}`
+                          : `/shift/${openShiftInfo.id}`;
+                      const params = new URLSearchParams();
+                      if (qrToken) params.set("t", qrToken);
+                      params.set("reused", "1");
+                      params.set("startedAt", openShiftInfo.started_at);
+                      const qs = params.toString();
+                      router.replace(qs ? `${base}?${qs}` : base);
+                    }}
+                  >
+                    Return to open shift
+                  </button>
+                  <button
+                    className="btn-primary px-4 py-2"
+                    onClick={() => setStaleShiftPrompt(true)}
+                  >
+                    End previous shift
+                  </button>
+                  <button
+                    className="btn-secondary px-4 py-2"
+                    onClick={() => setOpenShiftPrompt(false)}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
 
-      {staleShiftPrompt && openShiftInfo && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="card card-pad w-full max-w-md space-y-4 pointer-events-auto">
-            <div className="text-lg font-semibold">Close stale shift?</div>
-            <div className="text-sm muted">
-              {selectedProfileName} already has an open shift at{" "}
-              <b>{openShiftInfo.store_name ?? "another store"}</b> started at{" "}
-              <b>{formatDateTime(new Date(openShiftInfo.started_at))}</b>.
-            </div>
+      {staleShiftPrompt && openShiftInfo && typeof document !== "undefined"
+        ? createPortal(
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+              <div className="card card-pad w-full max-w-md space-y-4 pointer-events-auto">
+                <div className="text-lg font-semibold">Close stale shift?</div>
+                <div className="text-sm muted">
+                  {selectedProfileName} already has an open shift at{" "}
+                  <b>{openShiftInfo.store_name ?? "another store"}</b> started at{" "}
+                  <b>{formatDateTime(new Date(openShiftInfo.started_at))}</b>.
+                </div>
 
             <div className="space-y-2">
               <label className="text-sm muted">End time</label>
@@ -1177,9 +1187,11 @@ export default function ClockPageClient() {
                 End & Start New Shift
               </button>
             </div>
-          </div>
-        </div>
-      )}
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
 
       {pinModalOpen && !pinToken && !managerSession && typeof document !== "undefined"
         ? createPortal(
