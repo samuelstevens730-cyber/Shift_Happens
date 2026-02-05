@@ -150,32 +150,37 @@ serve(async (req) => {
       return Response.json({ error: "PIN auth not enabled for this store" }, { status: 403, headers: corsHeaders });
     }
 
-    // Find profile by normalized employee code
-    // Query using case-insensitive comparison with hyphen stripping
+    // Find profile by employee code (case-insensitive, hyphen-insensitive)
+    const rawCode = employee_code.trim();
+    const candidateCodes = Array.from(new Set([rawCode, normalizedCode]));
+
+    let matchedProfile = null;
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("id, name, pin_hash, pin_locked_until, pin_failed_attempts, employee_code")
       .eq("active", true)
-      .filter("employee_code", "not.eq", null)
-      .single();
-    
-    // Check if profile exists and code matches (case-insensitive, hyphen-insensitive)
-    let matchedProfile = null;
-    if (profile && profile.employee_code) {
+      .or(
+        candidateCodes
+          .map(code => `employee_code.ilike.${code.replace(/%/g, "\\%").replace(/_/g, "\\_")}`)
+          .join(",")
+      )
+      .maybeSingle();
+
+    if (!profileError && profile?.employee_code) {
       const storedCode = normalizeEmployeeCode(profile.employee_code);
       if (storedCode === normalizedCode) {
         matchedProfile = profile;
       }
     }
 
-    // If no match, try a more explicit query
+    // Fallback: scan active profiles with non-null codes and match normalized
     if (!matchedProfile) {
       const { data: profiles } = await supabase
         .from("profiles")
         .select("id, name, pin_hash, pin_locked_until, pin_failed_attempts, employee_code")
         .eq("active", true)
         .filter("employee_code", "not.eq", null);
-      
+
       if (profiles) {
         for (const p of profiles) {
           if (p.employee_code && normalizeEmployeeCode(p.employee_code) === normalizedCode) {
