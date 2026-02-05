@@ -346,12 +346,6 @@ export default function AdminEmployeeSchedulesPage() {
   }, [employees, storeId]);
 
   useEffect(() => {
-    if (!storeId && profileId) {
-      setProfileId("");
-    }
-  }, [storeId, profileId]);
-
-  useEffect(() => {
     if (!profileId) return;
     const exists = filteredEmployees.some(e => e.id === profileId);
     if (!exists) setProfileId("");
@@ -415,6 +409,75 @@ export default function AdminEmployeeSchedulesPage() {
     return Array.from(groups.values()).sort((a, b) => a.localeCompare(b));
   }, [futureShiftDates]);
 
+  const employeeNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    employees.forEach(e => {
+      map.set(e.id, e.name ?? "Unknown");
+    });
+    return map;
+  }, [employees]);
+
+  const showAllEmployees = !profileId;
+
+  function renderAllEmployeesDay(dateKey: string, shifts: ScheduleShiftRow[]) {
+    const dt = new Date(`${dateKey}T00:00:00`);
+    if (!shifts.length) {
+      return (
+        <div className="card card-pad space-y-2" key={dateKey}>
+          <div>
+            <div className="text-lg font-semibold">{formatCstLongDate(dt)}</div>
+            <div className="text-sm muted">{formatCstWeekday(dt)}</div>
+          </div>
+          <div className="text-sm muted">No scheduled shifts.</div>
+        </div>
+      );
+    }
+
+    const storeMap = new Map<string, ScheduleShiftRow[]>();
+    shifts.forEach(s => {
+      const key = s.stores?.name ?? s.store_id;
+      const list = storeMap.get(key) ?? [];
+      list.push(s);
+      storeMap.set(key, list);
+    });
+
+    const orderedStores = Array.from(storeMap.keys()).sort((a, b) => a.localeCompare(b));
+
+    return (
+      <div className="card card-pad space-y-3" key={dateKey}>
+        <div>
+          <div className="text-lg font-semibold">{formatCstLongDate(dt)}</div>
+          <div className="text-sm muted">{formatCstWeekday(dt)}</div>
+        </div>
+        <div className="space-y-3">
+          {orderedStores.map(storeName => {
+            const storeShifts = (storeMap.get(storeName) ?? []).sort(
+              (a, b) => toMinutes(a.scheduled_start) - toMinutes(b.scheduled_start)
+            );
+            return (
+              <div key={storeName} className="space-y-2">
+                <StoreBadge name={storeName} />
+                <div className="space-y-1 text-sm">
+                  {storeShifts.map(shift => (
+                    <div key={shift.id} className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold">
+                        {formatTimeLabel(shift.scheduled_start)} - {formatTimeLabel(shift.scheduled_end)}
+                      </span>
+                      <span className="muted">-</span>
+                      <span className="text-white/90">
+                        {employeeNameById.get(shift.profile_id) ?? "Unknown"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   if (loading) return <div className="app-shell">Loading...</div>;
 
   return (
@@ -469,8 +532,11 @@ export default function AdminEmployeeSchedulesPage() {
         {error && <div className="banner banner-error text-sm">{error}</div>}
 
         <>
-            <section className="space-y-3">
-              <div className="text-sm uppercase tracking-widest text-white/40">Today</div>
+          <section className="space-y-3">
+            <div className="text-sm uppercase tracking-widest text-white/40">Today</div>
+            {showAllEmployees ? (
+              renderAllEmployeesDay(todayKey, todayShifts)
+            ) : (
               <div className="card card-pad space-y-4">
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <div>
@@ -500,52 +566,55 @@ export default function AdminEmployeeSchedulesPage() {
                   </span>
                 </div>
               </div>
-            </section>
+            )}
+          </section>
 
-            <section className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="text-sm uppercase tracking-widest text-white/40">This Week</div>
-                <span className="text-xs muted">Next 6 days</span>
-              </div>
-              <div className="space-y-3">
-                {weekDays.map(dateKey => (
-                  <WeekCard key={dateKey} dateKey={dateKey} shifts={shiftsByDate.get(dateKey) ?? []} />
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-sm uppercase tracking-widest text-white/40">This Week</div>
+              <span className="text-xs muted">Next 6 days</span>
+            </div>
+            <div className="space-y-3">
+              {weekDays.map(dateKey =>
+                showAllEmployees
+                  ? renderAllEmployeesDay(dateKey, shiftsByDate.get(dateKey) ?? [])
+                  : <WeekCard key={dateKey} dateKey={dateKey} shifts={shiftsByDate.get(dateKey) ?? []} />
+              )}
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <details className="card card-pad">
+              <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold">
+                <span>Future Weeks</span>
+                <span className="text-xs muted">{futureWeeks.length} week{futureWeeks.length === 1 ? "" : "s"}</span>
+              </summary>
+              <div className="mt-4 space-y-4">
+                {futureWeeks.length === 0 && (
+                  <div className="text-sm muted">No future shifts beyond this week.</div>
+                )}
+                {futureWeeks.map(weekKey => (
+                  <div key={weekKey} className="space-y-2">
+                    <div className="text-xs uppercase tracking-widest text-white/40">
+                      Week of {formatCstCompactLabel(new Date(`${weekKey}T00:00:00`))}
+                    </div>
+                    <div className="space-y-2">
+                      {Array.from({ length: 7 }).map((_, idx) => {
+                        const dateKey = addDays(weekKey, idx);
+                        return showAllEmployees
+                          ? renderAllEmployeesDay(dateKey, shiftsByDate.get(dateKey) ?? [])
+                          : <WeekCard key={dateKey} dateKey={dateKey} shifts={shiftsByDate.get(dateKey) ?? []} />;
+                      })}
+                    </div>
+                  </div>
                 ))}
               </div>
-            </section>
+            </details>
+          </section>
 
-            <section className="space-y-3">
-              <details className="card card-pad">
-                <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold">
-                  <span>Future Weeks</span>
-                  <span className="text-xs muted">{futureWeeks.length} week{futureWeeks.length === 1 ? "" : "s"}</span>
-                </summary>
-                <div className="mt-4 space-y-4">
-                  {futureWeeks.length === 0 && (
-                    <div className="text-sm muted">No future shifts beyond this week.</div>
-                  )}
-                  {futureWeeks.map(weekKey => (
-                    <div key={weekKey} className="space-y-2">
-                      <div className="text-xs uppercase tracking-widest text-white/40">
-                        Week of {formatCstCompactLabel(new Date(`${weekKey}T00:00:00`))}
-                      </div>
-                      <div className="space-y-2">
-                        {Array.from({ length: 7 }).map((_, idx) => {
-                          const dateKey = addDays(weekKey, idx);
-                          return (
-                            <WeekCard key={dateKey} dateKey={dateKey} shifts={shiftsByDate.get(dateKey) ?? []} />
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </details>
-            </section>
-
-            {!filteredShifts.length && (
-              <div className="card card-pad text-sm muted">No scheduled shifts found.</div>
-            )}
+          {!filteredShifts.length && (
+            <div className="card card-pad text-sm muted">No scheduled shifts found.</div>
+          )}
         </>
       </div>
     </div>
