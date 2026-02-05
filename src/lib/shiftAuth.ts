@@ -178,7 +178,15 @@ export async function authenticateShiftRequest(req: Request): Promise<AuthResult
   }
 
   // Employee JWT failed, try Supabase manager auth
-  return verifyManagerAuth(token);
+  const managerResult = await verifyManagerAuth(token);
+  if (!managerResult.ok && DEBUG_AUTH) {
+    return {
+      ok: false,
+      status: managerResult.status,
+      error: `${managerResult.error} (employeeJWT: ${employeeResult.error})`,
+    };
+  }
+  return managerResult;
 }
 
 /**
