@@ -3,6 +3,10 @@
  *
  * Ends an active shift, records the ending drawer count, and validates all requirements are met.
  *
+ * Authentication: Bearer token required (employee PIN JWT or manager Supabase session)
+ * - Employee PIN JWT: issued by employee-auth edge function after PIN verification
+ * - Manager Supabase: manager can clock out for themselves only (profile linked via auth_user_id)
+ *
  * Request body:
  * - qrToken?: string - QR token to validate store ownership (optional)
  * - shiftId: string - Shift ID to end (required)
@@ -18,6 +22,8 @@
  * - Error: { error: string, requiresConfirm?: boolean, missingItemCount?: number, missing?: string[] }
  *
  * Business logic:
+ * - Authenticates via employee PIN JWT or manager Supabase session
+ * - Validates shift belongs to authenticated user (no impersonation)
  * - Validates shift exists and is not already ended
  * - Validates QR token matches shift's store if provided
  * - Blocks clock-out if there are pending messages (unacknowledged) or tasks (incomplete)
@@ -32,6 +38,7 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { isOutOfThreshold, roundTo30Minutes, ShiftType } from "@/lib/kioskRules";
 import { getCstDowMinutes, isTimeWithinWindow, toStoreKey } from "@/lib/clockWindows";
+import { authenticateShiftRequest } from "@/lib/shiftAuth";
 
 type Body = {
   qrToken?: string;
@@ -83,6 +90,13 @@ async function fetchTemplatesForStore(storeId: string, shiftTypes: string[]) {
 
 export async function POST(req: Request) {
   try {
+    // 0) Authenticate request (employee PIN JWT or manager Supabase session)
+    const authResult = await authenticateShiftRequest(req);
+    if (!authResult.ok) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
+    }
+    const auth = authResult.auth;
+
     const body = (await req.json()) as Body;
 
     if (!body.shiftId) return NextResponse.json({ error: "Missing shiftId." }, { status: 400 });
@@ -97,6 +111,14 @@ export async function POST(req: Request) {
     if (shiftErr) return NextResponse.json({ error: shiftErr.message }, { status: 500 });
     if (!shift) return NextResponse.json({ error: "Shift not found." }, { status: 404 });
     if (shift.ended_at) return NextResponse.json({ error: "Shift already ended." }, { status: 400 });
+
+    // Validate shift belongs to authenticated user (no impersonation)
+    if (shift.profile_id !== auth.profileId) {
+      return NextResponse.json(
+        { error: "You can only end your own shifts" },
+        { status: 403 }
+      );
+    }
 
     let store: { id: string; name: string; expected_drawer_cents: number } | null = null;
 

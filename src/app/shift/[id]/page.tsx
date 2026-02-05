@@ -24,6 +24,9 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { isOutOfThreshold, roundTo30Minutes, thresholdMessage } from "@/lib/kioskRules";
 import { getCstDowMinutes, isTimeWithinWindow, toStoreKey, WindowShiftType } from "@/lib/clockWindows";
 import { playAlarm, stopAlarm } from "@/lib/alarm";
+import { supabase } from "@/lib/supabaseClient";
+
+const PIN_TOKEN_KEY = "sh_pin_token";
 
 type ShiftType = "open" | "close" | "double" | "other";
 
@@ -148,6 +151,47 @@ export default function ShiftPage() {
   const [err, setErr] = useState<string | null>(null);
   const [showClockOut, setShowClockOut] = useState(false);
   const [showReuseBanner, setShowReuseBanner] = useState(reused);
+
+  // Auth state for API calls
+  const [pinToken, setPinToken] = useState<string | null>(null);
+  const [managerAccessToken, setManagerAccessToken] = useState<string | null>(null);
+  const [managerSession, setManagerSession] = useState(false);
+
+  // Load auth tokens on mount
+  useEffect(() => {
+    // Load PIN token from session storage
+    const storedToken = sessionStorage.getItem(PIN_TOKEN_KEY);
+    if (storedToken) {
+      setPinToken(storedToken);
+    }
+
+    // Check for Supabase manager session
+    let alive = true;
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!alive) return;
+      const hasSession = Boolean(data?.session?.user);
+      setManagerSession(hasSession);
+      if (hasSession && data?.session?.access_token) {
+        setManagerAccessToken(data.session.access_token);
+      }
+    })();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      const hasSession = Boolean(session?.user);
+      setManagerSession(hasSession);
+      if (hasSession && session?.access_token) {
+        setManagerAccessToken(session.access_token);
+      } else {
+        setManagerAccessToken(null);
+      }
+    });
+
+    return () => {
+      alive = false;
+      sub?.subscription.unsubscribe();
+    };
+  }, []);
 
   // Convert backend "checkedGroupLabels" -> frontend Set of group.norm keys
   const seedDoneFromState = useCallback((json: ShiftState) => {
@@ -454,6 +498,9 @@ export default function ShiftPage() {
             onSuccess={() => {
               router.replace("/");
             }}
+            pinToken={pinToken}
+            managerAccessToken={managerAccessToken}
+            managerSession={managerSession}
           />
         )}
       </div>
@@ -599,6 +646,9 @@ function ClockOutModal({
   isOther,
   onClose,
   onSuccess,
+  pinToken,
+  managerAccessToken,
+  managerSession,
 }: {
   shiftId: string;
   qrToken: string;
@@ -606,6 +656,9 @@ function ClockOutModal({
   storeName: string;
   shiftType: ShiftType;
   isOther: boolean;
+  pinToken: string | null;
+  managerAccessToken: string | null;
+  managerSession: boolean;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -756,11 +809,21 @@ function ClockOutModal({
                 }
               }
 
+              // Determine auth token
+              const authToken = managerSession ? managerAccessToken : pinToken;
+              if (!authToken) {
+                setErr(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
+                return;
+              }
+
               setSaving(true);
               try {
                 const res = await fetch("/api/end-shift", {
                   method: "POST",
-                  headers: { "Content-Type": "application/json" },
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${authToken}`,
+                  },
                   body: JSON.stringify({
                     qrToken,
                     shiftId,

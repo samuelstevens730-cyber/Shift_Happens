@@ -8,12 +8,15 @@
  * Redirects to shift detail page if shift isn't actually ended yet.
  */
 
-// src/app/shift/[id]/page.tsx
+// src/app/shift/[id]/done/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { isOutOfThreshold, thresholdMessage } from "@/lib/kioskRules";
+import { supabase } from "@/lib/supabaseClient";
+
+const PIN_TOKEN_KEY = "sh_pin_token";
 
 type ShiftType = "open" | "close" | "double" | "other";
 
@@ -75,6 +78,47 @@ export default function ShiftPage() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [showClockOut, setShowClockOut] = useState(false);
+
+  // Auth state for API calls
+  const [pinToken, setPinToken] = useState<string | null>(null);
+  const [managerAccessToken, setManagerAccessToken] = useState<string | null>(null);
+  const [managerSession, setManagerSession] = useState(false);
+
+  // Load auth tokens on mount
+  useEffect(() => {
+    // Load PIN token from session storage
+    const storedToken = sessionStorage.getItem(PIN_TOKEN_KEY);
+    if (storedToken) {
+      setPinToken(storedToken);
+    }
+
+    // Check for Supabase manager session
+    let alive = true;
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      if (!alive) return;
+      const hasSession = Boolean(data?.session?.user);
+      setManagerSession(hasSession);
+      if (hasSession && data?.session?.access_token) {
+        setManagerAccessToken(data.session.access_token);
+      }
+    })();
+
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      const hasSession = Boolean(session?.user);
+      setManagerSession(hasSession);
+      if (hasSession && session?.access_token) {
+        setManagerAccessToken(session.access_token);
+      } else {
+        setManagerAccessToken(null);
+      }
+    });
+
+    return () => {
+      alive = false;
+      sub?.subscription.unsubscribe();
+    };
+  }, []);
 
   async function refreshShift() {
     const query = qrToken ? `?t=${encodeURIComponent(qrToken)}` : "";
@@ -320,6 +364,9 @@ export default function ShiftPage() {
             onSuccess={() => {
               router.replace("/");
             }}
+            pinToken={pinToken}
+            managerAccessToken={managerAccessToken}
+            managerSession={managerSession}
           />
         )}
       </div>
@@ -437,6 +484,9 @@ function ClockOutModal({
   isOther,
   onClose,
   onSuccess,
+  pinToken,
+  managerAccessToken,
+  managerSession,
 }: {
   shiftId: string;
   qrToken: string;
@@ -444,6 +494,9 @@ function ClockOutModal({
   isOther: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  pinToken: string | null;
+  managerAccessToken: string | null;
+  managerSession: boolean;
 }) {
   const [endLocal, setEndLocal] = useState(toLocalInputValue());
   const [drawer, setDrawer] = useState("200");
@@ -524,11 +577,21 @@ function ClockOutModal({
                 return;
               }
 
+              // Determine auth token
+              const authToken = managerSession ? managerAccessToken : pinToken;
+              if (!authToken) {
+                setErr(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
+                return;
+              }
+
               setSaving(true);
               try {
                 const res = await fetch("/api/end-shift", {
                   method: "POST",
-                  headers: { "Content-Type": "application/json" },
+                  headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${authToken}`,
+                  },
                   body: JSON.stringify({
                     qrToken,
                     shiftId,

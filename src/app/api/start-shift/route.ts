@@ -3,10 +3,14 @@
  *
  * Creates a new shift record and records the starting drawer count for an employee.
  *
+ * Authentication: Bearer token required (employee PIN JWT or manager Supabase session)
+ * - Employee PIN JWT: issued by employee-auth edge function after PIN verification
+ * - Manager Supabase: manager can clock in for themselves only (profile linked via auth_user_id)
+ *
  * Request body:
  * - qrToken?: string - QR token to identify the store (alternative to storeId)
  * - storeId?: string - Store ID (alternative to qrToken; one of qrToken or storeId required)
- * - profileId: string - Employee profile ID (required)
+ * - profileId: string - Employee profile ID (must match authenticated user)
  * - shiftTypeHint?: "open" | "close" | "double" | "other" - Optional hint (server derives shift_type)
  * - plannedStartAt: string - ISO timestamp of planned start time (required)
  * - startDrawerCents?: number | null - Starting drawer count in cents (required for non-"other" shifts)
@@ -20,6 +24,8 @@
  * - Error: { error: string, requiresConfirm?: boolean, shiftId?: string }
  *
  * Business logic:
+ * - Authenticates via employee PIN JWT or manager Supabase session
+ * - Validates profileId matches authenticated user (no impersonation)
  * - Resolves store by QR token or store ID
  * - Validates employee exists, is active, and is assigned to the store
  * - Rounds planned start time to nearest 30 minutes for payroll consistency
@@ -34,6 +40,7 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { isOutOfThreshold, roundTo30Minutes, ShiftType } from "@/lib/kioskRules";
 import { getCstDowMinutes, isTimeWithinWindow, toStoreKey } from "@/lib/clockWindows";
+import { authenticateShiftRequest, validateProfileAccess } from "@/lib/shiftAuth";
 
 type Body = {
   qrToken?: string;
@@ -60,6 +67,13 @@ function parseClockWindowError(message: string) {
 
 export async function POST(req: Request) {
   try {
+    // 0) Authenticate request (employee PIN JWT or manager Supabase session)
+    const authResult = await authenticateShiftRequest(req);
+    if (!authResult.ok) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
+    }
+    const auth = authResult.auth;
+
     const body = (await req.json()) as Body;
 
     // Basic validation
@@ -67,6 +81,13 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing qrToken or storeId." }, { status: 400 });
     }
     if (!body.profileId) return NextResponse.json({ error: "Missing profileId." }, { status: 400 });
+
+    // Validate profileId matches authenticated user (no impersonation)
+    const profileCheck = validateProfileAccess(auth, body.profileId);
+    if (!profileCheck.ok) {
+      return NextResponse.json({ error: profileCheck.error }, { status: 403 });
+    }
+
     if (body.shiftTypeHint && !ALLOWED_SHIFT_TYPES.includes(body.shiftTypeHint))
       return NextResponse.json({ error: "Invalid shiftTypeHint." }, { status: 400 });
 
