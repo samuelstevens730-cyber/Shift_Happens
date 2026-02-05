@@ -709,8 +709,8 @@ function HomePageInner() {
 
       {/* Auth Choice Modal */}
       {showAuthModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 p-4">
-          <div className="card card-pad w-full max-w-sm space-y-6">
+        <div className="auth-modal-overlay">
+          <div className="card card-pad w-full max-w-sm space-y-6 shadow-2xl">
             <div className="text-center space-y-2">
               <h2 className="text-xl font-semibold">Welcome</h2>
               <p className="text-sm muted">Choose how you&apos;d like to sign in</p>
