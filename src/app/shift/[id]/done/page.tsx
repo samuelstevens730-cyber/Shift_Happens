@@ -11,7 +11,7 @@
 // src/app/shift/[id]/done/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { isOutOfThreshold, thresholdMessage } from "@/lib/kioskRules";
 import { supabase } from "@/lib/supabaseClient";
@@ -120,11 +120,24 @@ export default function ShiftPage() {
     };
   }, []);
 
+  const resolveAuthToken = useCallback(async () => {
+    if (managerAccessToken) return managerAccessToken;
+    if (pinToken) return pinToken;
+    const { data } = await supabase.auth.getSession();
+    const hasSession = Boolean(data?.session?.user);
+    setManagerSession(hasSession);
+    if (hasSession && data?.session?.access_token) {
+      setManagerAccessToken(data.session.access_token);
+      return data.session.access_token;
+    }
+    return null;
+  }, [managerAccessToken, pinToken]);
+
   async function refreshShift() {
     const query = qrToken ? `?t=${encodeURIComponent(qrToken)}` : "";
-    const authToken = managerSession ? managerAccessToken : pinToken;
+    const authToken = await resolveAuthToken();
     if (!authToken) {
-      throw new Error(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
+      return;
     }
     const res = await fetch(`/api/shift/${shiftId}${query}`, {
       headers: { Authorization: `Bearer ${authToken}` },
@@ -154,28 +167,30 @@ export default function ShiftPage() {
     }
   }
 
-  useEffect(() => {
-    let alive = true;
+    useEffect(() => {
+      let alive = true;
 
-    (async () => {
-      try {
-        setErr(null);
-        setLoading(true);
-        if (!alive) return;
-        await refreshShift();
-      } catch (e: unknown) {
-        if (!alive) return;
-        setErr(e instanceof Error ? e.message : "Failed to load shift.");
-      } finally {
-        if (alive) setLoading(false);
-      }
-    })();
+      (async () => {
+        try {
+          setErr(null);
+          setLoading(true);
+          const token = await resolveAuthToken();
+          if (!token) return;
+          if (!alive) return;
+          await refreshShift();
+        } catch (e: unknown) {
+          if (!alive) return;
+          setErr(e instanceof Error ? e.message : "Failed to load shift.");
+        } finally {
+          if (alive) setLoading(false);
+        }
+      })();
 
-    return () => {
-      alive = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shiftId, qrToken]);
+      return () => {
+        alive = false;
+      };
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [shiftId, qrToken, resolveAuthToken]);
 
   const shiftType = state?.shift.shift_type;
 

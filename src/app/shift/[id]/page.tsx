@@ -204,11 +204,24 @@ export default function ShiftPage() {
     setDone(new Set(norms));
   }, []);
 
+  const resolveAuthToken = useCallback(async () => {
+    if (managerAccessToken) return managerAccessToken;
+    if (pinToken) return pinToken;
+    const { data } = await supabase.auth.getSession();
+    const hasSession = Boolean(data?.session?.user);
+    setManagerSession(hasSession);
+    if (hasSession && data?.session?.access_token) {
+      setManagerAccessToken(data.session.access_token);
+      return data.session.access_token;
+    }
+    return null;
+  }, [managerAccessToken, pinToken]);
+
   const reloadShift = useCallback(async () => {
     const query = qrToken ? `?t=${encodeURIComponent(qrToken)}` : "";
-    const authToken = managerSession ? managerAccessToken : pinToken;
+    const authToken = await resolveAuthToken();
     if (!authToken) {
-      throw new Error(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
+      return;
     }
     const res = await fetch(`/api/shift/${shiftId}${query}`, {
       headers: { Authorization: `Bearer ${authToken}` },
@@ -224,7 +237,7 @@ export default function ShiftPage() {
       const doneQuery = qrToken ? `?t=${encodeURIComponent(qrToken)}` : "";
       router.replace(`/shift/${shiftId}/done${doneQuery}`);
     }
-  }, [qrToken, shiftId, router, seedDoneFromState]);
+  }, [resolveAuthToken, qrToken, shiftId, router, seedDoneFromState]);
 
   useEffect(() => {
     let alive = true;
@@ -286,7 +299,7 @@ export default function ShiftPage() {
    */
   async function updateAssignment(assignmentId: string, action: "ack" | "complete") {
     setErr(null);
-    const authToken = managerSession ? managerAccessToken : pinToken;
+    const authToken = await resolveAuthToken();
     if (!authToken) {
       setErr(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
       return;
