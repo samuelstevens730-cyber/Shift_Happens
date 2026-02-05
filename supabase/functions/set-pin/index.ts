@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.94.0";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -80,10 +80,58 @@ serve(async (req) => {
   }
 
   try {
+    const authHeader = req.headers.get("authorization") || "";
+    const token = authHeader.toLowerCase().startsWith("bearer ")
+      ? authHeader.slice(7).trim()
+      : null;
+    if (!token) {
+      return Response.json({ error: "Authentication required" }, { status: 401, headers: corsHeaders });
+    }
+
+    const { data: authData, error: authErr } = await supabase.auth.getUser(token);
+    if (authErr || !authData?.user) {
+      return Response.json({ error: "Invalid session" }, { status: 401, headers: corsHeaders });
+    }
+
+    const { data: managerRow, error: managerErr } = await supabase
+      .from("app_users")
+      .select("role")
+      .eq("id", authData.user.id)
+      .maybeSingle();
+    if (managerErr) {
+      return Response.json({ error: managerErr.message }, { status: 500, headers: corsHeaders });
+    }
+    if (!managerRow || managerRow.role !== "manager") {
+      return Response.json({ error: "Not authorized" }, { status: 403, headers: corsHeaders });
+    }
+
     const { profile_id, pin }: { profile_id: string; pin: string } = await req.json();
 
     if (!profile_id || !pin || !/^\d{4}$/.test(pin)) {
       return Response.json({ error: "Invalid profile_id or PIN format" }, { status: 400, headers: corsHeaders });
+    }
+
+    const { data: profileStores, error: profileStoreErr } = await supabase
+      .from("store_memberships")
+      .select("store_id")
+      .eq("profile_id", profile_id);
+    if (profileStoreErr) {
+      return Response.json({ error: profileStoreErr.message }, { status: 500, headers: corsHeaders });
+    }
+
+    const { data: managerStores, error: managerStoreErr } = await supabase
+      .from("store_managers")
+      .select("store_id")
+      .eq("user_id", authData.user.id);
+    if (managerStoreErr) {
+      return Response.json({ error: managerStoreErr.message }, { status: 500, headers: corsHeaders });
+    }
+
+    const profileStoreIds = new Set((profileStores ?? []).map(s => s.store_id));
+    const managerStoreIds = (managerStores ?? []).map(s => s.store_id);
+    const hasAccess = managerStoreIds.some(id => profileStoreIds.has(id));
+    if (!hasAccess) {
+      return Response.json({ error: "Not authorized" }, { status: 403, headers: corsHeaders });
     }
 
     const pinFingerprint = await getPinFingerprint(pin);
