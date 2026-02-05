@@ -268,6 +268,7 @@ export default function PinGate({
               }
               const token = json?.token as string | undefined;
               const authProfileId = json?.profile?.id as string | undefined;
+              const profileName = json?.profile?.name as string | undefined;
               if (!token || !authProfileId) {
                 setPinError("Authentication failed.");
                 setPinValue("");
@@ -283,6 +284,7 @@ export default function PinGate({
                 sessionStorage.setItem(PIN_TOKEN_KEY, token);
                 sessionStorage.setItem(PIN_STORE_KEY, activeStoreId);
                 sessionStorage.setItem(PIN_PROFILE_KEY, authProfileId);
+                if (profileName) sessionStorage.setItem("sh_profile_name", profileName);
               }
               setStoreId(activeStoreId);
               setProfileId(authProfileId);

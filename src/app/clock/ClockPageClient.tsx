@@ -419,6 +419,7 @@ export default function ClockPageClient() {
     const storedToken = sessionStorage.getItem(PIN_TOKEN_KEY);
     const storedStore = sessionStorage.getItem(PIN_STORE_KEY);
     const storedProfile = sessionStorage.getItem(PIN_PROFILE_KEY);
+    const storedProfileName = sessionStorage.getItem("sh_profile_name");
     if (storedToken && storedStore && storedProfile) {
       setPinToken(storedToken);
       setPinStoreId(storedStore);
@@ -426,7 +427,7 @@ export default function ClockPageClient() {
       setPinLockedSelection(true);
       setStoreId(storedStore);
       setProfileId(storedProfile);
-      setAuthenticatedProfileName(null); // Will be set on successful auth callback if needed
+      setAuthenticatedProfileName(storedProfileName);
       setPinModalOpen(false);
     } else {
       // No stored auth - show the auth modal
