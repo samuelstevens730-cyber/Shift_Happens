@@ -3,7 +3,7 @@
  * 
  * Verifies ES256 JWT tokens using the public key from JWT_SECRET env var.
  */
-import { jwtVerify, JWTPayload } from "jose";
+import { jwtVerify, JWTPayload, importJWK, JWK } from "jose";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -20,15 +20,18 @@ export async function verifyEmployeeJWT(token: string): Promise<EmployeeJWTPaylo
   }
 
   // Parse the JWK from JWT_SECRET (it's a JSON string containing the key)
-  let jwk: Record<string, unknown>;
+  let jwk: JWK;
   try {
-    jwk = JSON.parse(JWT_SECRET);
+    jwk = JSON.parse(JWT_SECRET) as JWK;
   } catch {
     throw new Error("Invalid JWT_SECRET format - must be JSON JWK");
   }
 
-  // Import the public key
-  const publicKey = await importJWK(jwk);
+  // Remove private key component 'd' to create public key
+  const { d, ...publicJwk } = jwk;
+
+  // Import the public key using jose's importJWK
+  const publicKey = await importJWK(publicJwk, "ES256");
 
   // Verify the token
   const { payload } = await jwtVerify(token, publicKey, {
@@ -41,19 +44,6 @@ export async function verifyEmployeeJWT(token: string): Promise<EmployeeJWTPaylo
   }
 
   return payload as EmployeeJWTPayload;
-}
-
-async function importJWK(jwk: Record<string, unknown>): Promise<CryptoKey> {
-  // Remove private key components if present (shouldn't be in public key, but just in case)
-  const { d, ...publicJwk } = jwk;
-  
-  return await crypto.subtle.importKey(
-    "jwk",
-    publicJwk,
-    { name: "ECDSA", namedCurve: "P-256" },
-    false,
-    ["verify"]
-  );
 }
 
 export function extractBearerToken(authHeader: string | null): string | null {
