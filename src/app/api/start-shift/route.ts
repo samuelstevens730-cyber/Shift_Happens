@@ -69,6 +69,16 @@ async function resolveStoreIdFromQR(qrToken?: string): Promise<string | null> {
   return data?.id ?? null;
 }
 
+function decodeJwtPart(part: string) {
+  try {
+    const padded = part.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((part.length + 3) % 4);
+    const json = Buffer.from(padded, "base64").toString("utf-8");
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(req: Request) {
   try {
     // 0) Verify JWT Authentication
@@ -76,14 +86,27 @@ export async function POST(req: Request) {
     const token = extractBearerToken(authHeader);
     
     if (!token) {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+      return NextResponse.json({ error: "Authentication required", debug: { hasAuthHeader: Boolean(authHeader) } }, { status: 401 });
     }
 
     let jwtPayload;
     try {
       jwtPayload = await verifyEmployeeJWT(token);
     } catch {
-      return NextResponse.json({ error: "Invalid or expired token" }, { status: 401 });
+      const [headerPart, payloadPart] = token.split(".");
+      const header = headerPart ? decodeJwtPart(headerPart) : null;
+      const payload = payloadPart ? decodeJwtPart(payloadPart) : null;
+      return NextResponse.json(
+        {
+          error: "Invalid or expired token",
+          debug: {
+            envHasJwtSecret: Boolean(process.env.JWT_SECRET),
+            tokenHeader: header,
+            tokenPayload: payload,
+          },
+        },
+        { status: 401 }
+      );
     }
 
     const body = (await req.json()) as Body;
