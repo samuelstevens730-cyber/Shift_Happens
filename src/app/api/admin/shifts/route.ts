@@ -46,6 +46,7 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { ShiftType } from "@/lib/kioskRules";
+import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
 
 type StoreRow = { id: string; name: string };
 type ProfileRow = { id: string; name: string | null; active: boolean | null };
@@ -79,22 +80,6 @@ type CountRow = {
 };
 
 type CountSummary = { start: number | null; end: number | null; endNote: string | null };
-
-function getBearerToken(req: Request) {
-  const auth = req.headers.get("authorization") || "";
-  if (!auth.toLowerCase().startsWith("bearer ")) return null;
-  return auth.slice(7);
-}
-
-async function getManagerStoreIds(userId: string) {
-  const { data, error } = await supabaseServer
-    .from("store_managers")
-    .select("store_id")
-    .eq("user_id", userId)
-    .returns<{ store_id: string }[]>();
-  if (error) throw new Error(error.message);
-  return (data ?? []).map(r => r.store_id);
-}
 
 export async function GET(req: Request) {
   try {
