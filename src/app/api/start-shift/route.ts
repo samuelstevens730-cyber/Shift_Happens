@@ -51,6 +51,14 @@ type Body = {
 };
 
 const ALLOWED_SHIFT_TYPES: ShiftType[] = ["open", "close", "double", "other"];
+const DEBUG_AUTH = process.env.DEBUG_AUTH === "1";
+
+function debugAuth(payload: Record<string, unknown>) {
+  if (!DEBUG_AUTH) return undefined;
+  return {
+    debug: payload,
+  };
+}
 
 function parseClockWindowError(message: string) {
   const token = "CLOCK_WINDOW_VIOLATION:";
@@ -86,14 +94,40 @@ export async function POST(req: Request) {
     const token = extractBearerToken(authHeader);
     
     if (!token) {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+      return NextResponse.json(
+        { error: "Authentication required", ...debugAuth({ verifyStage: "missing_auth" }) },
+        { status: 401 }
+      );
     }
 
     let jwtPayload;
     try {
       jwtPayload = await verifyEmployeeJWT(token);
     } catch {
-      return NextResponse.json({ error: "Invalid or expired token" }, { status: 401 });
+      const [headerPart, payloadPart] = token.split(".");
+      const tokenHeader = headerPart ? decodeJwtPart(headerPart) : null;
+      const tokenPayload = payloadPart ? decodeJwtPart(payloadPart) : null;
+      return NextResponse.json(
+        {
+          error: "Invalid or expired token",
+          ...debugAuth({
+            verifyStage: "jwt_verify",
+            envHasJwtSecret: Boolean(process.env.JWT_SECRET),
+            envJwtLength: process.env.JWT_SECRET?.length ?? 0,
+            envKid: (() => {
+              try {
+                const parsed = JSON.parse(process.env.JWT_SECRET ?? "{}");
+                return parsed?.kid ?? null;
+              } catch {
+                return null;
+              }
+            })(),
+            tokenHeader,
+            tokenPayload,
+          }),
+        },
+        { status: 401 }
+      );
     }
 
     const body = (await req.json()) as Body;
@@ -106,13 +140,33 @@ export async function POST(req: Request) {
 
     // Verify JWT profile matches request body (prevent tampering)
     if (jwtPayload.profile_id !== body.profileId) {
-      return NextResponse.json({ error: "Unauthorized - profile mismatch" }, { status: 403 });
+      return NextResponse.json(
+        {
+          error: "Unauthorized - profile mismatch",
+          ...debugAuth({
+            verifyStage: "profile_mismatch",
+            tokenProfile: jwtPayload.profile_id,
+            bodyProfile: body.profileId,
+          }),
+        },
+        { status: 403 }
+      );
     }
 
     // Verify store access
     const requestedStoreId = body.storeId || (await resolveStoreIdFromQR(body.qrToken));
     if (requestedStoreId && !jwtPayload.store_ids.includes(requestedStoreId)) {
-      return NextResponse.json({ error: "Not authorized for this store" }, { status: 403 });
+      return NextResponse.json(
+        {
+          error: "Not authorized for this store",
+          ...debugAuth({
+            verifyStage: "store_mismatch",
+            requestedStoreId,
+            tokenStores: jwtPayload.store_ids,
+          }),
+        },
+        { status: 403 }
+      );
     }
     if (body.shiftTypeHint && !ALLOWED_SHIFT_TYPES.includes(body.shiftTypeHint))
       return NextResponse.json({ error: "Invalid shiftTypeHint." }, { status: 400 });
