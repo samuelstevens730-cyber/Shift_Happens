@@ -301,61 +301,48 @@ export async function POST(req: Request) {
       }
     }
 
-    // 6) Prevent duplicate active shifts (employee taps twice, phone refreshes, life happens)
-    const { data: existing, error: existingErr } = await supabaseServer
-      .from("shifts")
-      .select("id, store_id, started_at, shift_type")
-      .eq("profile_id", body.profileId)
-      .is("ended_at", null)
-      .maybeSingle();
+    // 6) Create shift (database enforces one active shift per employee via unique index)
+    let shift: { id: string } | null = null;
+    try {
+      const result = await supabaseServer
+        .from("shifts")
+        .insert({
+          store_id: store.id,
+          profile_id: body.profileId,
+          shift_type: resolvedShiftType,
+          schedule_shift_id: matchedSchedule?.id ?? null,
+          shift_source: isScheduled ? "scheduled" : "manual",
+          requires_override: !isScheduled,
+          override_note: !isScheduled ? "Unscheduled clock-in" : null,
+          planned_start_at: plannedRounded.toISOString(),
+          started_at: new Date().toISOString(),
+        })
+        .select("id")
+        .maybeSingle();
 
-    if (existingErr) return NextResponse.json({ error: existingErr.message }, { status: 500 });
+      shift = result.data;
+      const shiftErr = result.error;
 
-    if (existing?.id) {
-      // If they already have an active shift in another store, block it.
-      if (existing.store_id !== store.id) {
-        return NextResponse.json(
-          { error: "Employee already has an active shift at another store.", shiftId: existing.id },
-          { status: 409 }
-        );
+      if (shiftErr) {
+        const parsed = parseClockWindowError(shiftErr.message);
+        if (parsed) {
+          return NextResponse.json(
+            { error: "CLOCK_WINDOW_VIOLATION", code: parsed.code, windowLabel: parsed.windowLabel },
+            { status: 400 }
+          );
+        }
+        return NextResponse.json({ error: shiftErr.message }, { status: 500 });
       }
-
-      // Same store: return existing shift as idempotent behavior
-      return NextResponse.json({
-        shiftId: existing.id,
-        reused: true,
-        startedAt: existing.started_at ?? null,
-        shiftType: existing.shift_type ?? null,
-      });
+    } catch (err: unknown) {
+      // Check for unique violation (23505) - active shift already exists
+      const errorCode = (err as { code?: string }).code;
+      if (errorCode === "23505") {
+        return NextResponse.json({ error: "Active shift already exists" }, { status: 409 });
+      }
+      // Re-throw other errors to be caught by outer catch
+      throw err;
     }
 
-    // 7) Create shift
-    const { data: shift, error: shiftErr } = await supabaseServer
-      .from("shifts")
-      .insert({
-        store_id: store.id,
-        profile_id: body.profileId,
-        shift_type: resolvedShiftType,
-        schedule_shift_id: matchedSchedule?.id ?? null,
-        shift_source: isScheduled ? "scheduled" : "manual",
-        requires_override: !isScheduled,
-        override_note: !isScheduled ? "Unscheduled clock-in" : null,
-        planned_start_at: plannedRounded.toISOString(),
-        started_at: new Date().toISOString(),
-      })
-      .select("id")
-      .maybeSingle();
-
-    if (shiftErr) {
-      const parsed = parseClockWindowError(shiftErr.message);
-      if (parsed) {
-        return NextResponse.json(
-          { error: "CLOCK_WINDOW_VIOLATION", code: parsed.code, windowLabel: parsed.windowLabel },
-          { status: 400 }
-        );
-      }
-      return NextResponse.json({ error: shiftErr.message }, { status: 500 });
-    }
     if (!shift) return NextResponse.json({ error: "Failed to create shift." }, { status: 500 });
 
     // 8) Insert start drawer count for non-other; optional for other if provided
