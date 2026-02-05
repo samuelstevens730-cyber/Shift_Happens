@@ -216,7 +216,7 @@ export default function ClockPageClient() {
 
   const [pinToken, setPinToken] = useState<string | null>(null);
   const [pinStoreId, setPinStoreId] = useState<string | null>(null);
-  const [pinModalOpen, setPinModalOpen] = useState(true);
+  const [pinModalOpen, setPinModalOpen] = useState(false); // Start false, check storage first
   const [managerSession, setManagerSession] = useState(false);
   const [pinProfileId, setPinProfileId] = useState<string | null>(null);
   const [pinLockedSelection, setPinLockedSelection] = useState(false);
@@ -426,7 +426,11 @@ export default function ClockPageClient() {
       setPinLockedSelection(true);
       setStoreId(storedStore);
       setProfileId(storedProfile);
+      setAuthenticatedProfileName(null); // Will be set on successful auth callback if needed
       setPinModalOpen(false);
+    } else {
+      // No stored auth - show the auth modal
+      setPinModalOpen(true);
     }
   }, []);
 
@@ -1083,7 +1087,7 @@ export default function ClockPageClient() {
         </div>
       </div>
 
-      {pinModalOpen && !managerSession && typeof document !== "undefined"
+      {pinModalOpen && !pinToken && !managerSession && typeof document !== "undefined"
         ? createPortal(
             <div className="fixed inset-0 z-[9998] flex items-center justify-center bg-black/70 p-4">
               <div className={`card card-pad w-full max-w-md space-y-4 ${pinShake ? "shake" : ""}`}>
