@@ -152,6 +152,7 @@ function HomePageInner() {
   const [hasAdminAuth, setHasAdminAuth] = useState(false);
   const [hasPinAuth, setHasPinAuth] = useState(false);
   const [authChecked, setAuthChecked] = useState(false);
+  const [navProfileId, setNavProfileId] = useState<string | null>(null);
 
   // Modal state
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -183,11 +184,13 @@ function HomePageInner() {
 
       // Check for PIN session
       let pinAuthed = false;
+      let pinProfileId: string | null = null;
       if (typeof window !== "undefined") {
         const pinToken = sessionStorage.getItem(PIN_TOKEN_KEY);
         const pinStore = sessionStorage.getItem(PIN_STORE_KEY);
         const pinProfile = sessionStorage.getItem(PIN_PROFILE_KEY);
         pinAuthed = !!(pinToken && pinStore && pinProfile);
+        pinProfileId = pinProfile;
       }
 
       if (!alive) return;
@@ -195,6 +198,19 @@ function HomePageInner() {
       setHasAdminAuth(adminAuthed);
       setHasPinAuth(pinAuthed);
       setAuthChecked(true);
+      if (pinProfileId) {
+        setNavProfileId(pinProfileId);
+      } else if (adminAuthed && session?.access_token) {
+        const res = await fetch("/api/me/profile", {
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data?.profileId) setNavProfileId(data.profileId);
+        }
+      } else {
+        setNavProfileId(null);
+      }
 
       // If no auth at all, show the auth choice modal
       if (!adminAuthed && !pinAuthed) {
@@ -445,10 +461,18 @@ function HomePageInner() {
   const [showNextWeek, setShowNextWeek] = useState(false);
 
   // Nav items: HOME | ADMIN | LOGOUT
-  const navItems = [
-    { href: "/", label: "HOME", active: pathname === "/" },
-    ...(hasAdminAuth ? [{ href: "/admin", label: "ADMIN", active: pathname === "/admin" }] : []),
-  ];
+    const scheduleHref = navProfileId ? `/schedule?profileId=${encodeURIComponent(navProfileId)}` : "/schedule";
+    const shiftsHref = navProfileId ? `/shifts?profileId=${encodeURIComponent(navProfileId)}` : "/shifts";
+    const navItems = [
+      { href: "/", label: "HOME", active: pathname === "/" },
+      ...(hasAdminAuth || hasPinAuth
+        ? [
+            { href: scheduleHref, label: "MY SCHEDULE", active: pathname === "/schedule" },
+            { href: shiftsHref, label: "MY SHIFTS", active: pathname === "/shifts" },
+          ]
+        : []),
+      ...(hasAdminAuth ? [{ href: "/admin", label: "ADMIN", active: pathname === "/admin" }] : []),
+    ];
 
   if (!authChecked) {
     return (
@@ -480,22 +504,32 @@ function HomePageInner() {
               {item.label}
             </Link>
           ))}
-          <button
-            onClick={async () => {
-              await supabase.auth.signOut();
-              sessionStorage.removeItem(PIN_TOKEN_KEY);
-              sessionStorage.removeItem(PIN_STORE_KEY);
-              sessionStorage.removeItem(PIN_PROFILE_KEY);
-              setHasAdminAuth(false);
-              setHasPinAuth(false);
-              router.push("/");
-            }}
-            className="bento-nav-link bento-nav-inactive"
-          >
-            LOGOUT
-          </button>
-        </nav>
-      </div>
+            {hasAdminAuth || hasPinAuth ? (
+              <button
+                onClick={async () => {
+                  await supabase.auth.signOut();
+                  sessionStorage.removeItem(PIN_TOKEN_KEY);
+                  sessionStorage.removeItem(PIN_STORE_KEY);
+                  sessionStorage.removeItem(PIN_PROFILE_KEY);
+                  setHasAdminAuth(false);
+                  setHasPinAuth(false);
+                  setNavProfileId(null);
+                  router.push("/");
+                }}
+                className="bento-nav-link bento-nav-inactive"
+              >
+                LOGOUT
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowAuthModal(true)}
+                className="bento-nav-link bento-nav-inactive"
+              >
+                LOGIN
+              </button>
+            )}
+          </nav>
+        </div>
 
       {/* Employee Messages Banner */}
       {employeeMessages.length > 0 && (

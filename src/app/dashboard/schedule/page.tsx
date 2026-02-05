@@ -495,7 +495,11 @@ export default function EmployeeSchedulePage() {
 
   return (
     <div className="bento-shell">
-      <HomeHeader isManager={isManager} />
+      <HomeHeader
+        isManager={isManager}
+        isAuthenticated={Boolean(pinToken) || Boolean(managerProfileId)}
+        profileId={managerProfileId || profileId || null}
+      />
       <div className="max-w-4xl mx-auto space-y-4 px-4 py-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>

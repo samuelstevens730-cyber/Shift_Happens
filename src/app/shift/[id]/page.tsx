@@ -25,6 +25,7 @@ import { isOutOfThreshold, roundTo30Minutes, thresholdMessage } from "@/lib/kios
 import { getCstDowMinutes, isTimeWithinWindow, toStoreKey, WindowShiftType } from "@/lib/clockWindows";
 import { playAlarm, stopAlarm } from "@/lib/alarm";
 import { supabase } from "@/lib/supabaseClient";
+import HomeHeader from "@/components/HomeHeader";
 
 const PIN_TOKEN_KEY = "sh_pin_token";
 
@@ -368,9 +369,15 @@ export default function ShiftPage() {
     : "an earlier time";
 
   return (
-    <div className="min-h-screen p-6 pb-24">
-      <div className="max-w-md mx-auto space-y-4">
-        <h1 className="text-2xl font-semibold">Shift</h1>
+    <div className="min-h-screen">
+      <HomeHeader
+        isManager={managerSession}
+        isAuthenticated={managerSession || Boolean(pinToken)}
+        profileId={state?.shift?.profile_id ?? null}
+      />
+      <div className="p-6 pb-24">
+        <div className="max-w-md mx-auto space-y-4">
+          <h1 className="text-2xl font-semibold">Shift</h1>
 
         {/* Banner shown when redirected to existing open shift */}
         {showReuseBanner && (

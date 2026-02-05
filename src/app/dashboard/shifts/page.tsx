@@ -247,7 +247,11 @@ export default function EmployeeShiftsPage() {
 
   return (
     <div className="bento-shell">
-      <HomeHeader isManager={isManager} />
+      <HomeHeader
+        isManager={isManager}
+        isAuthenticated={Boolean(pinToken) || Boolean(managerProfileId)}
+        profileId={managerProfileId || profileId || null}
+      />
       <div className="max-w-4xl mx-auto space-y-4 px-4 py-4">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">My Shifts</h1>

@@ -7,9 +7,17 @@ import { supabase } from "@/lib/supabaseClient";
 
 interface HomeHeaderProps {
   isManager?: boolean;
+  isAuthenticated?: boolean;
+  profileId?: string | null;
+  onLogin?: () => void;
 }
 
-export default function HomeHeader({ isManager = false }: HomeHeaderProps) {
+export default function HomeHeader({
+  isManager = false,
+  isAuthenticated = false,
+  profileId = null,
+  onLogin,
+}: HomeHeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -23,6 +31,9 @@ export default function HomeHeader({ isManager = false }: HomeHeaderProps) {
     }
     router.push("/");
   };
+
+  const scheduleHref = profileId ? `/schedule?profileId=${encodeURIComponent(profileId)}` : "/schedule";
+  const shiftsHref = profileId ? `/shifts?profileId=${encodeURIComponent(profileId)}` : "/shifts";
 
   return (
     <div className="bento-top-bar">
@@ -41,6 +52,22 @@ export default function HomeHeader({ isManager = false }: HomeHeaderProps) {
         >
           HOME
         </Link>
+        {(isAuthenticated || profileId) && (
+          <>
+            <Link
+              href={scheduleHref}
+              className={`bento-nav-link ${pathname === "/schedule" ? "bento-nav-active" : "bento-nav-inactive"}`}
+            >
+              MY SCHEDULE
+            </Link>
+            <Link
+              href={shiftsHref}
+              className={`bento-nav-link ${pathname === "/shifts" ? "bento-nav-active" : "bento-nav-inactive"}`}
+            >
+              MY SHIFTS
+            </Link>
+          </>
+        )}
         {isManager && (
           <Link
             href="/admin"
@@ -49,9 +76,18 @@ export default function HomeHeader({ isManager = false }: HomeHeaderProps) {
             ADMIN
           </Link>
         )}
-        <button onClick={handleLogout} className="bento-nav-link bento-nav-inactive">
-          LOGOUT
-        </button>
+        {isAuthenticated ? (
+          <button onClick={handleLogout} className="bento-nav-link bento-nav-inactive">
+            LOGOUT
+          </button>
+        ) : (
+          <button
+            onClick={() => (onLogin ? onLogin() : router.push(`/login?next=${encodeURIComponent(pathname || "/")}`))}
+            className="bento-nav-link bento-nav-inactive"
+          >
+            LOGIN
+          </button>
+        )}
       </nav>
     </div>
   );

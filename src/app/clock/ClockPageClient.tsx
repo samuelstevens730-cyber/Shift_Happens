@@ -27,6 +27,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { isOutOfThreshold, thresholdMessage } from "@/lib/kioskRules";
 import { getCstDowMinutes, isTimeWithinWindow, toStoreKey, WindowShiftType } from "@/lib/clockWindows";
 import { playAlarm, stopAlarm } from "@/lib/alarm";
+import HomeHeader from "@/components/HomeHeader";
 
 type Store = { id: string; name: string; expected_drawer_cents: number };
 type Profile = { id: string; name: string; active: boolean | null };
@@ -732,53 +733,16 @@ export default function ClockPageClient() {
 
   if (loading) return <div className="app-shell">Loading...</div>;
 
+  const modalOpen = openShiftPrompt || staleShiftPrompt;
+
   return (
     <div className="app-shell">
-      <div className="max-w-md mx-auto space-y-4">
-        {openShiftPrompt && openShiftInfo && (
-          <div className="card card-pad space-y-3">
-            <div className="text-lg font-semibold">Open shift detected</div>
-            <div className="text-sm muted">
-            {selectedProfileName} already has an open shift at{" "}
-            <b>{openShiftInfo.store_name ?? "another store"}</b> started at{" "}
-            <b>{formatDateTime(new Date(openShiftInfo.started_at))}</b>.
-          </div>
-            <div className="flex flex-col sm:flex-row gap-2">
-              <button
-                className="btn-secondary px-4 py-2"
-                onClick={() => {
-                  const base =
-                    openShiftInfo.shift_type === "open" || openShiftInfo.shift_type === "double"
-                      ? `/run/${openShiftInfo.id}`
-                      : `/shift/${openShiftInfo.id}`;
-                  const params = new URLSearchParams();
-                  if (qrToken) params.set("t", qrToken);
-                  params.set("reused", "1");
-                  params.set("startedAt", openShiftInfo.started_at);
-                  const qs = params.toString();
-                  router.replace(qs ? `${base}?${qs}` : base);
-                }}
-              >
-                Return to open shift
-              </button>
-              <button
-                className="btn-primary px-4 py-2"
-                onClick={() => setStaleShiftPrompt(true)}
-              >
-                End previous shift
-              </button>
-            </div>
-          </div>
-        )}
-
-        {staleShiftPrompt && openShiftInfo && (
-          <div className="card card-pad space-y-4">
-            <div className="text-lg font-semibold">Close stale shift?</div>
-            <div className="text-sm muted">
-            {selectedProfileName} already has an open shift at{" "}
-            <b>{openShiftInfo.store_name ?? "another store"}</b> started at{" "}
-            <b>{formatDateTime(new Date(openShiftInfo.started_at))}</b>.
-          </div>
+      <HomeHeader
+        isManager={managerSession}
+        isAuthenticated={managerSession || Boolean(pinToken)}
+        profileId={profileId || null}
+      />
+      <div className={`max-w-md mx-auto space-y-4 ${modalOpen ? "pointer-events-none select-none" : ""}`}>
 
             <div className="space-y-2">
               <label className="text-sm muted">End time</label>
@@ -1168,6 +1132,238 @@ export default function ClockPageClient() {
           </div>
         </div>
       </div>
+
+      {openShiftPrompt && openShiftInfo && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="card card-pad w-full max-w-md space-y-4 pointer-events-auto">
+            <div className="text-lg font-semibold">Open shift detected</div>
+            <div className="text-sm muted">
+              {selectedProfileName} already has an open shift at{" "}
+              <b>{openShiftInfo.store_name ?? "another store"}</b> started at{" "}
+              <b>{formatDateTime(new Date(openShiftInfo.started_at))}</b>.
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                className="btn-secondary px-4 py-2"
+                onClick={() => {
+                  const base =
+                    openShiftInfo.shift_type === "open" || openShiftInfo.shift_type === "double"
+                      ? `/run/${openShiftInfo.id}`
+                      : `/shift/${openShiftInfo.id}`;
+                  const params = new URLSearchParams();
+                  if (qrToken) params.set("t", qrToken);
+                  params.set("reused", "1");
+                  params.set("startedAt", openShiftInfo.started_at);
+                  const qs = params.toString();
+                  router.replace(qs ? `${base}?${qs}` : base);
+                }}
+              >
+                Return to open shift
+              </button>
+              <button
+                className="btn-primary px-4 py-2"
+                onClick={() => setStaleShiftPrompt(true)}
+              >
+                End previous shift
+              </button>
+              <button
+                className="btn-secondary px-4 py-2"
+                onClick={() => setOpenShiftPrompt(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {staleShiftPrompt && openShiftInfo && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="card card-pad w-full max-w-md space-y-4 pointer-events-auto">
+            <div className="text-lg font-semibold">Close stale shift?</div>
+            <div className="text-sm muted">
+              {selectedProfileName} already has an open shift at{" "}
+              <b>{openShiftInfo.store_name ?? "another store"}</b> started at{" "}
+              <b>{formatDateTime(new Date(openShiftInfo.started_at))}</b>.
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm muted">End time</label>
+              <input
+                type="datetime-local"
+                className="input"
+                value={staleEndLocal}
+                onChange={e => setStaleEndLocal(e.target.value)}
+                disabled={staleSaving}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm muted">Ending drawer count ($)</label>
+              <input
+                className="input"
+                inputMode="decimal"
+                value={staleDrawer}
+                onChange={e => setStaleDrawer(e.target.value)}
+                disabled={staleSaving}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm muted">Change drawer count ($)</label>
+              <input
+                className="input"
+                inputMode="decimal"
+                value={staleChangeDrawer}
+                onChange={e => setStaleChangeDrawer(e.target.value)}
+                disabled={staleSaving}
+              />
+            </div>
+
+            <StaleShiftConfirmations
+              isOther={openShiftInfo.shift_type === "other"}
+              expectedCents={openShiftInfo.expected_drawer_cents ?? 20000}
+              drawerValue={staleDrawer}
+              changeDrawerValue={staleChangeDrawer}
+              confirm={staleConfirm}
+              notify={staleNotify}
+              setConfirm={setStaleConfirm}
+              setNotify={setStaleNotify}
+            />
+
+            <div className="space-y-2">
+              <label className="text-sm muted">Note (optional)</label>
+              <input
+                className="input"
+                value={staleNote}
+                onChange={e => setStaleNote(e.target.value)}
+                disabled={staleSaving}
+              />
+            </div>
+
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={staleDoubleCheck}
+                onChange={e => setStaleDoubleCheck(e.target.checked)}
+                disabled={staleSaving}
+              />
+              I understand I'm ending a previous shift.
+            </label>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                className="btn-secondary px-4 py-2"
+                onClick={() => setStaleShiftPrompt(false)}
+                disabled={staleSaving}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn-secondary px-4 py-2"
+                onClick={() => {
+                  const base =
+                    openShiftInfo.shift_type === "open" || openShiftInfo.shift_type === "double"
+                      ? `/run/${openShiftInfo.id}`
+                      : `/shift/${openShiftInfo.id}`;
+                  router.replace(base);
+                }}
+                disabled={staleSaving}
+              >
+                Return to open shift
+              </button>
+              <button
+                className="btn-primary px-4 py-2 disabled:opacity-50"
+                disabled={staleSaving}
+                onClick={async () => {
+                  const endDate = toCstDateFromLocalInput(staleEndLocal);
+                  if (!endDate || Number.isNaN(endDate.getTime())) {
+                    setError("Invalid end time.");
+                    return;
+                  }
+                  if (openShiftInfo.shift_type === "close") {
+                    const windowCheck = checkClockWindow("close", roundTo30Minutes(endDate));
+                    if (!windowCheck.ok) {
+                      triggerClockWindowModal(windowCheck.label);
+                      return;
+                    }
+                  }
+                  const drawerCents = Math.round(Number(staleDrawer) * 100);
+                  const changeCents = Math.round(Number(staleChangeDrawer) * 100);
+                  const hasValidDrawer = Number.isFinite(drawerCents);
+                  const hasValidChange = Number.isFinite(changeCents);
+                  const expected = openShiftInfo.expected_drawer_cents ?? 20000;
+                  const isOtherShift = openShiftInfo.shift_type === "other";
+                  const outOfThreshold = !isOtherShift && hasValidDrawer
+                    ? isOutOfThreshold(drawerCents, expected)
+                    : false;
+                  const changeNot200 = !isOtherShift && hasValidChange ? changeCents !== 20000 : false;
+                  if (!isOtherShift && (!hasValidDrawer || !hasValidChange)) {
+                    setError("Enter valid drawer and change drawer amounts.");
+                    return;
+                  }
+                  if (outOfThreshold && !staleConfirm) {
+                    setError("Confirm the drawer count to proceed.");
+                    return;
+                  }
+                  if ((outOfThreshold || changeNot200) && !staleNotify) {
+                    setError("Notify manager to proceed.");
+                    return;
+                  }
+                  if (!staleDoubleCheck) {
+                    setError("Confirm you're ending the previous shift.");
+                    return;
+                  }
+
+                  const endAuthToken = managerSession ? managerAccessToken : pinToken;
+                  if (!endAuthToken) {
+                    setError(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
+                    return;
+                  }
+
+                  setStaleSaving(true);
+                  setError(null);
+                  try {
+                    const res = await fetch("/api/end-shift", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${endAuthToken}`,
+                      },
+                      body: JSON.stringify({
+                        shiftId: openShiftInfo.id,
+                        endAt: endDate.toISOString(),
+                        endDrawerCents: isOtherShift ? (hasValidDrawer ? drawerCents : null) : drawerCents,
+                        changeDrawerCents: isOtherShift ? (hasValidChange ? changeCents : null) : changeCents,
+                        confirmed: outOfThreshold ? staleConfirm : false,
+                        notifiedManager: (outOfThreshold || changeNot200) ? staleNotify : false,
+                        note: staleNote || null,
+                        manualClose: true,
+                      }),
+                    });
+                    const json = await res.json();
+                    if (!res.ok) {
+                      throw new Error(json?.error || "Failed to end shift.");
+                    }
+                    setStaleShiftPrompt(false);
+                    setOpenShiftPrompt(false);
+                    setOpenShiftInfo(null);
+                    setOpenShiftKey("");
+                    stopAlarm();
+                    await startShift();
+                  } catch (e: unknown) {
+                    setError(e instanceof Error ? e.message : "Failed to end shift.");
+                  } finally {
+                    setStaleSaving(false);
+                  }
+                }}
+              >
+                End & Start New Shift
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {pinModalOpen && !pinToken && !managerSession && typeof document !== "undefined"
         ? createPortal(

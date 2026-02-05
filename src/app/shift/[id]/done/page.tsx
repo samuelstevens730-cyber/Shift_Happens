@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { isOutOfThreshold, thresholdMessage } from "@/lib/kioskRules";
 import { supabase } from "@/lib/supabaseClient";
+import HomeHeader from "@/components/HomeHeader";
 
 const PIN_TOKEN_KEY = "sh_pin_token";
 
@@ -294,9 +295,15 @@ export default function ShiftPage() {
   if (!state) return <div className="p-6">No data.</div>;
 
   return (
-    <div className="min-h-screen p-6 pb-24">
-      <div className="max-w-md mx-auto space-y-4">
-        <h1 className="text-2xl font-semibold">Shift</h1>
+    <div className="min-h-screen">
+      <HomeHeader
+        isManager={managerSession}
+        isAuthenticated={managerSession || Boolean(pinToken)}
+        profileId={state?.shift?.profile_id ?? null}
+      />
+      <div className="p-6 pb-24">
+        <div className="max-w-md mx-auto space-y-4">
+          <h1 className="text-2xl font-semibold">Shift</h1>
 
         <div className="text-sm text-gray-600">
           Store: <b>{state.store.name}</b> · Employee: <b>{state.employee || "Unknown"}</b> · Type:{" "}
