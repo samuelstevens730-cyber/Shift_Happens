@@ -281,8 +281,9 @@ export default function ClockPageClient() {
   }, [stores, storeId]);
 
   const selectedProfileName = useMemo(() => {
+    if (managerSession && managerProfile?.name) return managerProfile.name;
     return authenticatedProfileName ?? "Unknown Employee";
-  }, [authenticatedProfileName]);
+  }, [authenticatedProfileName, managerProfile, managerSession]);
 
   const plannedStartLabel = useMemo(() => {
     if (!plannedStartLocal) return "Unknown time";
