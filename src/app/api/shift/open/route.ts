@@ -37,13 +37,24 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const qrToken = searchParams.get("t") || "";
     const storeIdParam = searchParams.get("storeId") || "";
+    const profileIdParam = searchParams.get("profileId") || "";
+
+    if (!profileIdParam) {
+      return NextResponse.json({ error: "Missing profileId." }, { status: 400 });
+    }
 
     let targetStoreIds: string[];
 
     if (auth.authType === "employee") {
+      if (profileIdParam !== auth.profileId) {
+        return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+      }
       // Employee: only access their own shifts in their authorized stores
       targetStoreIds = auth.storeIds;
     } else {
+      if (auth.profileId && profileIdParam !== auth.profileId) {
+        return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+      }
       // Manager: access shifts in stores they manage
       const managerUserId = auth.authUserId ?? auth.profileId;
       targetStoreIds = await getManagerStoreIds(managerUserId);
@@ -68,13 +79,9 @@ export async function GET(req: Request) {
       .in("store_id", targetStoreIds)
       .is("ended_at", null)
       .neq("last_action", "removed")
+      .eq("profile_id", profileIdParam)
       .order("started_at", { ascending: false })
       .limit(1);
-
-    // For employees, restrict to their own profile
-    if (auth.authType === "employee") {
-      shiftQuery = shiftQuery.eq("profile_id", auth.profileId);
-    }
 
     const { data: shift, error: shiftErr } = await shiftQuery.maybeSingle().returns<ShiftRow>();
 
