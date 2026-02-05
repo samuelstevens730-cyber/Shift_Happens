@@ -26,6 +26,7 @@ import { getCstDowMinutes, isTimeWithinWindow, toStoreKey, WindowShiftType } fro
 import { playAlarm, stopAlarm } from "@/lib/alarm";
 
 type ShiftType = "open" | "close" | "double" | "other";
+const PIN_TOKEN_KEY = "sh_pin_token";
 
 type ShiftState = {
   store: { id: string; name: string; expected_drawer_cents: number };
@@ -758,9 +759,13 @@ function ClockOutModal({
 
               setSaving(true);
               try {
+                const pinToken = typeof window !== "undefined" ? sessionStorage.getItem(PIN_TOKEN_KEY) : null;
                 const res = await fetch("/api/end-shift", {
                   method: "POST",
-                  headers: { "Content-Type": "application/json" },
+                  headers: {
+                    "Content-Type": "application/json",
+                    ...(pinToken ? { Authorization: `Bearer ${pinToken}` } : {}),
+                  },
                   body: JSON.stringify({
                     qrToken,
                     shiftId,
