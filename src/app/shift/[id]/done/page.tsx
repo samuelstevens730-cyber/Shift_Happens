@@ -399,6 +399,7 @@ export default function ShiftPage() {
         )}
       </div>
     </div>
+    </div>
   );
 }
 
