@@ -4,6 +4,7 @@
  */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { getBearerToken } from "@/lib/adminAuth";
 
 type ScheduleRow = { id: string; store_id: string };
 type TemplateRow = { day_of_week: number; shift_type: string; start_time: string; end_time: string };
@@ -15,12 +16,6 @@ type Assignment = {
   scheduledStart?: string | null;
   scheduledEnd?: string | null;
 };
-
-function getBearerToken(req: Request) {
-  const auth = req.headers.get("authorization") || "";
-  if (!auth.toLowerCase().startsWith("bearer ")) return null;
-  return auth.slice(7);
-}
 
 function getDow(dateStr: string) {
   const d = new Date(`${dateStr}T00:00:00`);

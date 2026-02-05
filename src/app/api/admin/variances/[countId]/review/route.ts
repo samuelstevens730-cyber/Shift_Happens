@@ -28,18 +28,13 @@
  */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { getBearerToken } from "@/lib/adminAuth";
 
 type ReviewBody = {
   reviewNote?: string;
 };
 
 type ColumnRow = { column_name: string };
-
-function getBearerToken(req: Request) {
-  const auth = req.headers.get("authorization") || "";
-  if (!auth.toLowerCase().startsWith("bearer ")) return null;
-  return auth.slice(7);
-}
 
 function parseBody(value: unknown): ReviewBody {
   if (!value || typeof value !== "object") return {};

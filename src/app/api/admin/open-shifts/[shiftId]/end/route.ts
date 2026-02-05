@@ -31,6 +31,7 @@
  */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { getBearerToken } from "@/lib/adminAuth";
 
 type EndBody = { endAt?: string };
 
@@ -41,12 +42,6 @@ type ShiftRow = {
   started_at: string | null;
   store: { id: string; expected_drawer_cents: number } | null;
 };
-
-function getBearerToken(req: Request) {
-  const auth = req.headers.get("authorization") || "";
-  if (!auth.toLowerCase().startsWith("bearer ")) return null;
-  return auth.slice(7);
-}
 
 function parseBody(value: unknown): EndBody {
   if (!value || typeof value !== "object") return {};

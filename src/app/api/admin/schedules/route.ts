@@ -6,6 +6,7 @@
  */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { getBearerToken } from "@/lib/adminAuth";
 
 type StoreRow = { id: string; name: string };
 type TemplateRow = {
@@ -28,12 +29,6 @@ type ScheduleRow = {
   period_end: string;
   status: string;
 };
-
-function getBearerToken(req: Request) {
-  const auth = req.headers.get("authorization") || "";
-  if (!auth.toLowerCase().startsWith("bearer ")) return null;
-  return auth.slice(7);
-}
 
 export async function GET(req: Request) {
   const token = getBearerToken(req);

@@ -4,6 +4,7 @@
  */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { getBearerToken } from "@/lib/adminAuth";
 
 type ShiftRow = {
   profile_id: string;
@@ -11,12 +12,6 @@ type ShiftRow = {
   scheduled_start: string;
   scheduled_end: string;
 };
-
-function getBearerToken(req: Request) {
-  const auth = req.headers.get("authorization") || "";
-  if (!auth.toLowerCase().startsWith("bearer ")) return null;
-  return auth.slice(7);
-}
 
 function toMinutes(t: string) {
   const [h, m] = t.split(":").map(n => Number(n));

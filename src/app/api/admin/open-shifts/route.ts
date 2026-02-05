@@ -29,6 +29,7 @@
  */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { getBearerToken } from "@/lib/adminAuth";
 
 type ShiftJoinRow = {
   id: string;
@@ -63,12 +64,6 @@ type OpenShiftRow = {
   endDrawerCents: number | null;
   endNote: string | null;
 };
-
-function getBearerToken(req: Request) {
-  const auth = req.headers.get("authorization") || "";
-  if (!auth.toLowerCase().startsWith("bearer ")) return null;
-  return auth.slice(7);
-}
 
 export async function GET(req: Request) {
   const token = getBearerToken(req);

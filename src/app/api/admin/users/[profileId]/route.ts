@@ -34,24 +34,9 @@
  */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
 
 type MembershipRow = { store_id: string };
-
-function getBearerToken(req: Request) {
-  const auth = req.headers.get("authorization") || "";
-  if (!auth.toLowerCase().startsWith("bearer ")) return null;
-  return auth.slice(7);
-}
-
-async function getManagerStoreIds(userId: string) {
-  const { data, error } = await supabaseServer
-    .from("store_managers")
-    .select("store_id")
-    .eq("user_id", userId)
-    .returns<{ store_id: string }[]>();
-  if (error) throw new Error(error.message);
-  return (data ?? []).map(r => r.store_id);
-}
 
 async function getProfileStoreIds(profileId: string) {
   const { data, error } = await supabaseServer

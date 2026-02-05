@@ -4,6 +4,7 @@
  */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { getBearerToken } from "@/lib/adminAuth";
 
 type ScheduleRow = { id: string; store_id: string; period_start: string; period_end: string; status: string };
 type ShiftRow = {
@@ -30,12 +31,6 @@ type MembershipRow = {
   store_id: string;
   profile: { id: string; name: string | null; active: boolean | null } | null;
 };
-
-function getBearerToken(req: Request) {
-  const auth = req.headers.get("authorization") || "";
-  if (!auth.toLowerCase().startsWith("bearer ")) return null;
-  return auth.slice(7);
-}
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

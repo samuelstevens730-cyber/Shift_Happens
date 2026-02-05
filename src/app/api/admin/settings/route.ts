@@ -37,6 +37,7 @@
  */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
 
 type StoreRow = { id: string; name: string; expected_drawer_cents: number };
 type TemplateRow = { id: string; store_id: string | null; shift_type: string; name: string };
@@ -48,22 +49,6 @@ type ChecklistTemplateResponse = {
   shift_type: "open" | "close";
   items: { id: string; label: string; sort_order: number; required: boolean }[];
 };
-
-function getBearerToken(req: Request) {
-  const auth = req.headers.get("authorization") || "";
-  if (!auth.toLowerCase().startsWith("bearer ")) return null;
-  return auth.slice(7);
-}
-
-async function getManagerStoreIds(userId: string) {
-  const { data, error } = await supabaseServer
-    .from("store_managers")
-    .select("store_id")
-    .eq("user_id", userId)
-    .returns<{ store_id: string }[]>();
-  if (error) throw new Error(error.message);
-  return (data ?? []).map(r => r.store_id);
-}
 
 const DEFAULT_CHECKLISTS: Record<
   "open" | "close",
