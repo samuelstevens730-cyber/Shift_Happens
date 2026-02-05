@@ -593,7 +593,10 @@ export default function ClockPageClient() {
     try {
       const res = await fetch("/api/start-shift", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${pinToken}`,
+        },
         body: JSON.stringify({
           qrToken,
           storeId,
@@ -854,7 +857,10 @@ export default function ClockPageClient() {
                   try {
                     const res = await fetch("/api/end-shift", {
                       method: "POST",
-                      headers: { "Content-Type": "application/json" },
+                      headers: { 
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${pinToken}`,
+                      },
                       body: JSON.stringify({
                         shiftId: openShiftInfo.id,
                         endAt: endDate.toISOString(),

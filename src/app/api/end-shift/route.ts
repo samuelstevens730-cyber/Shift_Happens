@@ -32,6 +32,7 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { isOutOfThreshold, roundTo30Minutes, ShiftType } from "@/lib/kioskRules";
 import { getCstDowMinutes, isTimeWithinWindow, toStoreKey } from "@/lib/clockWindows";
+import { verifyEmployeeJWT, extractBearerToken } from "@/lib/jwtVerify";
 
 type Body = {
   qrToken?: string;
@@ -83,6 +84,21 @@ async function fetchTemplatesForStore(storeId: string, shiftTypes: string[]) {
 
 export async function POST(req: Request) {
   try {
+    // 0) Verify JWT Authentication
+    const authHeader = req.headers.get("authorization");
+    const token = extractBearerToken(authHeader);
+    
+    if (!token) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    let jwtPayload;
+    try {
+      jwtPayload = await verifyEmployeeJWT(token);
+    } catch {
+      return NextResponse.json({ error: "Invalid or expired token" }, { status: 401 });
+    }
+
     const body = (await req.json()) as Body;
 
     if (!body.shiftId) return NextResponse.json({ error: "Missing shiftId." }, { status: 400 });
@@ -97,6 +113,16 @@ export async function POST(req: Request) {
     if (shiftErr) return NextResponse.json({ error: shiftErr.message }, { status: 500 });
     if (!shift) return NextResponse.json({ error: "Shift not found." }, { status: 404 });
     if (shift.ended_at) return NextResponse.json({ error: "Shift already ended." }, { status: 400 });
+
+    // Verify JWT profile matches shift profile (prevent tampering)
+    if (jwtPayload.profile_id !== shift.profile_id) {
+      return NextResponse.json({ error: "Unauthorized - profile mismatch" }, { status: 403 });
+    }
+
+    // Verify store access
+    if (!jwtPayload.store_ids.includes(shift.store_id)) {
+      return NextResponse.json({ error: "Not authorized for this store" }, { status: 403 });
+    }
 
     let store: { id: string; name: string; expected_drawer_cents: number } | null = null;
 

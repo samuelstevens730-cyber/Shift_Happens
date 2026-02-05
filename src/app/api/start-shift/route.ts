@@ -34,6 +34,7 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { isOutOfThreshold, roundTo30Minutes, ShiftType } from "@/lib/kioskRules";
 import { getCstDowMinutes, isTimeWithinWindow, toStoreKey } from "@/lib/clockWindows";
+import { verifyEmployeeJWT, extractBearerToken } from "@/lib/jwtVerify";
 
 type Body = {
   qrToken?: string;
@@ -58,8 +59,33 @@ function parseClockWindowError(message: string) {
   return { code: "CLOCK_WINDOW_VIOLATION", windowLabel: label };
 }
 
+async function resolveStoreIdFromQR(qrToken?: string): Promise<string | null> {
+  if (!qrToken) return null;
+  const { data } = await supabaseServer
+    .from("stores")
+    .select("id")
+    .eq("qr_token", qrToken)
+    .maybeSingle();
+  return data?.id ?? null;
+}
+
 export async function POST(req: Request) {
   try {
+    // 0) Verify JWT Authentication
+    const authHeader = req.headers.get("authorization");
+    const token = extractBearerToken(authHeader);
+    
+    if (!token) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    }
+
+    let jwtPayload;
+    try {
+      jwtPayload = await verifyEmployeeJWT(token);
+    } catch {
+      return NextResponse.json({ error: "Invalid or expired token" }, { status: 401 });
+    }
+
     const body = (await req.json()) as Body;
 
     // Basic validation
@@ -67,6 +93,17 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing qrToken or storeId." }, { status: 400 });
     }
     if (!body.profileId) return NextResponse.json({ error: "Missing profileId." }, { status: 400 });
+
+    // Verify JWT profile matches request body (prevent tampering)
+    if (jwtPayload.profile_id !== body.profileId) {
+      return NextResponse.json({ error: "Unauthorized - profile mismatch" }, { status: 403 });
+    }
+
+    // Verify store access
+    const requestedStoreId = body.storeId || (await resolveStoreIdFromQR(body.qrToken));
+    if (requestedStoreId && !jwtPayload.store_ids.includes(requestedStoreId)) {
+      return NextResponse.json({ error: "Not authorized for this store" }, { status: 403 });
+    }
     if (body.shiftTypeHint && !ALLOWED_SHIFT_TYPES.includes(body.shiftTypeHint))
       return NextResponse.json({ error: "Invalid shiftTypeHint." }, { status: 400 });
 
