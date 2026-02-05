@@ -15,7 +15,7 @@ import { supabaseServer } from "@/lib/supabaseServer";
 import { getBearerToken } from "@/lib/adminAuth";
 
 type StoreRow = { id: string; name: string };
-type EmployeeRow = { id: string; name: string | null; active: boolean | null; store_id: string };
+type EmployeeRow = { id: string; name: string | null; active: boolean | null; store_ids: string[] };
 type ScheduleShiftRow = {
   id: string;
   store_id: string;
@@ -71,14 +71,24 @@ export async function GET(req: Request) {
     .in("store_id", storeScope)
     .returns<Array<{ store_id: string; profile: { id: string; name: string | null; active: boolean | null } | null }>>();
 
-  const employees: EmployeeRow[] = (memberships ?? [])
-    .filter(m => m.profile)
-    .map(m => ({
-      id: m.profile!.id,
-      name: m.profile!.name,
-      active: m.profile!.active,
-      store_id: m.store_id,
-    }));
+  const employeeMap = new Map<string, EmployeeRow>();
+  (memberships ?? []).forEach(m => {
+    if (!m.profile) return;
+    const existing = employeeMap.get(m.profile.id);
+    if (existing) {
+      if (!existing.store_ids.includes(m.store_id)) {
+        existing.store_ids.push(m.store_id);
+      }
+      return;
+    }
+    employeeMap.set(m.profile.id, {
+      id: m.profile.id,
+      name: m.profile.name,
+      active: m.profile.active,
+      store_ids: [m.store_id],
+    });
+  });
+  const employees = Array.from(employeeMap.values());
 
   if (profileId) {
     const hasAccess = employees.some(e => e.id === profileId);

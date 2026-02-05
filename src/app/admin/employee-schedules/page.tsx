@@ -10,7 +10,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 type Store = { id: string; name: string };
-type Employee = { id: string; name: string | null; active: boolean | null; store_id: string };
+type Employee = { id: string; name: string | null; active: boolean | null; store_ids: string[] };
 type ScheduleRow = {
   period_start: string;
   period_end: string;
@@ -342,7 +342,7 @@ export default function AdminEmployeeSchedulesPage() {
 
   const filteredEmployees = useMemo(() => {
     if (!storeId) return employees;
-    return employees.filter(e => e.store_id === storeId);
+    return employees.filter(e => e.store_ids.includes(storeId));
   }, [employees, storeId]);
 
   useEffect(() => {
@@ -468,14 +468,7 @@ export default function AdminEmployeeSchedulesPage() {
 
         {error && <div className="banner banner-error text-sm">{error}</div>}
 
-        {!profileId && (
-          <div className="card card-pad text-sm muted">
-            Select an employee to view their schedule.
-          </div>
-        )}
-
-        {profileId && (
-          <>
+        <>
             <section className="space-y-3">
               <div className="text-sm uppercase tracking-widest text-white/40">Today</div>
               <div className="card card-pad space-y-4">
@@ -553,8 +546,7 @@ export default function AdminEmployeeSchedulesPage() {
             {!filteredShifts.length && (
               <div className="card card-pad text-sm muted">No scheduled shifts found.</div>
             )}
-          </>
-        )}
+        </>
       </div>
     </div>
   );
