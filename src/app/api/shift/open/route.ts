@@ -14,6 +14,8 @@
  */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { authenticateShiftRequest } from "@/lib/shiftAuth";
+import { getManagerStoreIds } from "@/lib/adminAuth";
 
 type StoreRow = { id: string; name: string; expected_drawer_cents: number };
 type ShiftRow = {
@@ -25,23 +27,53 @@ type ShiftRow = {
 
 export async function GET(req: Request) {
   try {
+    // Authenticate request
+    const authResult = await authenticateShiftRequest(req);
+    if (!authResult.ok) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
+    }
+    const auth = authResult.auth;
+
     const { searchParams } = new URL(req.url);
-    const profileId = searchParams.get("profileId") || "";
     const qrToken = searchParams.get("t") || "";
     const storeIdParam = searchParams.get("storeId") || "";
 
-    if (!profileId) {
-      return NextResponse.json({ error: "Missing profileId." }, { status: 400 });
+    let targetStoreIds: string[];
+
+    if (auth.authType === "employee") {
+      // Employee: only access their own shifts in their authorized stores
+      targetStoreIds = auth.storeIds;
+    } else {
+      // Manager: access shifts in stores they manage
+      targetStoreIds = await getManagerStoreIds(auth.profileId);
+      if (targetStoreIds.length === 0) {
+        return NextResponse.json({ error: "No managed stores." }, { status: 403 });
+      }
     }
 
+    // Apply store filter if provided via query param
+    if (storeIdParam) {
+      if (!targetStoreIds.includes(storeIdParam)) {
+        return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+      }
+      targetStoreIds = [storeIdParam];
+    }
+
+    // Build query - filter by authorized stores
+    // Employee: only their own shifts, Manager: all shifts in managed stores
     let shiftQuery = supabaseServer
       .from("shifts")
-      .select("id, started_at, shift_type, store:store_id(id, name, expected_drawer_cents)")
-      .eq("profile_id", profileId)
+      .select("id, started_at, shift_type, store:store_id(id, name, expected_drawer_cents), profile_id")
+      .in("store_id", targetStoreIds)
       .is("ended_at", null)
       .neq("last_action", "removed")
       .order("started_at", { ascending: false })
       .limit(1);
+
+    // For employees, restrict to their own profile
+    if (auth.authType === "employee") {
+      shiftQuery = shiftQuery.eq("profile_id", auth.profileId);
+    }
 
     const { data: shift, error: shiftErr } = await shiftQuery.maybeSingle().returns<ShiftRow>();
 

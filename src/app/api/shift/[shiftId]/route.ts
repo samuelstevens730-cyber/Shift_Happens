@@ -37,6 +37,8 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { ShiftType } from "@/lib/kioskRules";
+import { authenticateShiftRequest } from "@/lib/shiftAuth";
+import { getManagerStoreIds } from "@/lib/adminAuth";
 
 type ChecklistItemRow = {
   id: string;
@@ -89,6 +91,13 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ shiftId: string }> }
 ) {
+  // Authenticate request
+  const authResult = await authenticateShiftRequest(_req);
+  if (!authResult.ok) {
+    return NextResponse.json({ error: authResult.error }, { status: authResult.status });
+  }
+  const auth = authResult.auth;
+
   const { shiftId } = await params;
 
   const url = new URL(_req.url);
@@ -105,6 +114,20 @@ export async function GET(
   if (!shift) return NextResponse.json({ error: "Shift not found." }, { status: 404 });
   if (shift.last_action === "removed") {
     return NextResponse.json({ error: "Shift was removed." }, { status: 404 });
+  }
+
+  // Authorization check
+  if (auth.authType === "employee") {
+    // Employee can only access their own shifts
+    if (shift.profile_id !== auth.profileId) {
+      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    }
+  } else {
+    // Manager can access shifts in stores they manage
+    const managerStoreIds = await getManagerStoreIds(auth.profileId);
+    if (!managerStoreIds.includes(shift.store_id)) {
+      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    }
   }
 
   let store: { id: string; name: string; expected_drawer_cents: number } | null = null;
