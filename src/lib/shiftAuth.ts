@@ -16,7 +16,6 @@ import { supabaseServer } from "./supabaseServer";
 // Public key for verifying employee PIN JWTs (ES256)
 // This should match the private key in JWT_SECRET env var on edge functions
 const JWT_PUBLIC_KEY = process.env.JWT_PUBLIC_KEY;
-const DEBUG_AUTH = process.env.DEBUG_AUTH === "1";
 
 export type AuthType = "employee" | "manager";
 
@@ -61,11 +60,6 @@ async function verifyEmployeeJwt(
     return { ok: true, payload };
   } catch (err) {
     console.error("Employee JWT verification failed:", err);
-    if (DEBUG_AUTH) {
-      const name = err instanceof Error ? err.name : "Error";
-      const message = err instanceof Error ? err.message : String(err);
-      return { ok: false, error: `Invalid or expired token (${name}: ${message})` };
-    }
     return { ok: false, error: "Invalid or expired token" };
   }
 }
@@ -178,15 +172,7 @@ export async function authenticateShiftRequest(req: Request): Promise<AuthResult
   }
 
   // Employee JWT failed, try Supabase manager auth
-  const managerResult = await verifyManagerAuth(token);
-  if (!managerResult.ok && DEBUG_AUTH) {
-    return {
-      ok: false,
-      status: managerResult.status,
-      error: `${managerResult.error} (employeeJWT: ${employeeResult.error})`,
-    };
-  }
-  return managerResult;
+  return verifyManagerAuth(token);
 }
 
 /**

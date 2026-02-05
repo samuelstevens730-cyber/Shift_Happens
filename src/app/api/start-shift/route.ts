@@ -57,14 +57,6 @@ type Body = {
 };
 
 const ALLOWED_SHIFT_TYPES: ShiftType[] = ["open", "close", "double", "other"];
-const DEBUG_AUTH = process.env.DEBUG_AUTH === "1";
-
-function debugAuth(payload: Record<string, unknown>) {
-  if (!DEBUG_AUTH) return undefined;
-  return {
-    debug: payload,
-  };
-}
 
 function parseClockWindowError(message: string) {
   const token = "CLOCK_WINDOW_VIOLATION:";
@@ -83,16 +75,6 @@ async function resolveStoreIdFromQR(qrToken?: string): Promise<string | null> {
   return data?.id ?? null;
 }
 
-function decodeJwtPart(part: string) {
-  try {
-    const padded = part.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((part.length + 3) % 4);
-    const json = Buffer.from(padded, "base64").toString("utf-8");
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
-
 export async function POST(req: Request) {
   try {
     // 0) Authenticate request (employee PIN JWT or manager Supabase session)
@@ -102,38 +84,12 @@ export async function POST(req: Request) {
       : null;
 
     if (!token) {
-      return NextResponse.json(
-        { error: "Authentication required", ...debugAuth({ verifyStage: "missing_auth" }) },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
     }
 
     const authResult = await authenticateShiftRequest(req);
     if (!authResult.ok) {
-      const [headerPart, payloadPart] = token.split(".");
-      const tokenHeader = headerPart ? decodeJwtPart(headerPart) : null;
-      const tokenPayload = payloadPart ? decodeJwtPart(payloadPart) : null;
-      return NextResponse.json(
-        {
-          error: authResult.error,
-          ...debugAuth({
-            verifyStage: "auth_failed",
-            envHasPublicKey: Boolean(process.env.JWT_PUBLIC_KEY),
-            envPublicKeyLength: process.env.JWT_PUBLIC_KEY?.length ?? 0,
-            envKid: (() => {
-              try {
-                const parsed = JSON.parse(process.env.JWT_PUBLIC_KEY ?? "{}");
-                return parsed?.kid ?? null;
-              } catch {
-                return null;
-              }
-            })(),
-            tokenHeader,
-            tokenPayload,
-          }),
-        },
-        { status: authResult.status }
-      );
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
     }
 
     const auth = authResult.auth;
@@ -149,18 +105,7 @@ export async function POST(req: Request) {
     // Validate profileId matches authenticated user (no impersonation)
     const profileCheck = validateProfileAccess(auth, body.profileId);
     if (!profileCheck.ok) {
-      return NextResponse.json(
-        {
-          error: profileCheck.error,
-          ...debugAuth({
-            verifyStage: "profile_mismatch",
-            authProfile: auth.profileId,
-            bodyProfile: body.profileId,
-            authType: auth.authType,
-          }),
-        },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: profileCheck.error }, { status: 403 });
     }
     if (body.shiftTypeHint && !ALLOWED_SHIFT_TYPES.includes(body.shiftTypeHint))
       return NextResponse.json({ error: "Invalid shiftTypeHint." }, { status: 400 });
