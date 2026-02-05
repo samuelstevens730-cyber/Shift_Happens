@@ -152,6 +152,7 @@ export default function ShiftPage() {
   const [err, setErr] = useState<string | null>(null);
   const [showClockOut, setShowClockOut] = useState(false);
   const [showReuseBanner, setShowReuseBanner] = useState(reused);
+  const [profileId, setProfileId] = useState<string | null>(null);
 
   // Auth state for API calls
   const [pinToken, setPinToken] = useState<string | null>(null);
@@ -164,6 +165,8 @@ export default function ShiftPage() {
     const storedToken = sessionStorage.getItem(PIN_TOKEN_KEY);
     if (storedToken) {
       setPinToken(storedToken);
+      const storedProfile = sessionStorage.getItem("sh_pin_profile_id");
+      if (storedProfile) setProfileId(storedProfile);
     }
 
     // Check for Supabase manager session
@@ -185,6 +188,7 @@ export default function ShiftPage() {
         setManagerAccessToken(session.access_token);
       } else {
         setManagerAccessToken(null);
+        if (!pinToken) setProfileId(null);
       }
     });
 
@@ -213,10 +217,19 @@ export default function ShiftPage() {
     setManagerSession(hasSession);
     if (hasSession && data?.session?.access_token) {
       setManagerAccessToken(data.session.access_token);
+      if (!profileId) {
+        const res = await fetch("/api/me/profile", {
+          headers: { Authorization: `Bearer ${data.session.access_token}` },
+        });
+        if (res.ok) {
+          const profile = await res.json();
+          setProfileId(profile?.profileId ?? null);
+        }
+      }
       return data.session.access_token;
     }
     return null;
-  }, [managerAccessToken, pinToken]);
+  }, [managerAccessToken, pinToken, profileId]);
 
   const reloadShift = useCallback(async () => {
     const query = qrToken ? `?t=${encodeURIComponent(qrToken)}` : "";
@@ -373,7 +386,7 @@ export default function ShiftPage() {
       <HomeHeader
         isManager={managerSession}
         isAuthenticated={managerSession || Boolean(pinToken)}
-        profileId={state?.shift?.profile_id ?? null}
+        profileId={profileId ?? null}
       />
       <div className="p-6 pb-24">
         <div className="max-w-md mx-auto space-y-4">
