@@ -218,6 +218,9 @@ export default function ClockPageClient() {
   const [pinStoreId, setPinStoreId] = useState<string | null>(null);
   const [pinModalOpen, setPinModalOpen] = useState(false); // Start false, check storage first
   const [managerSession, setManagerSession] = useState(false);
+  const [managerAccessToken, setManagerAccessToken] = useState<string | null>(null);
+  const [managerProfile, setManagerProfile] = useState<{ profileId: string; name: string; storeIds: string[] } | null>(null);
+  const [managerProfileError, setManagerProfileError] = useState<string | null>(null);
   const [pinProfileId, setPinProfileId] = useState<string | null>(null);
   const [pinLockedSelection, setPinLockedSelection] = useState(false);
   const [pinValue, setPinValue] = useState("");
@@ -437,14 +440,55 @@ export default function ClockPageClient() {
 
   useEffect(() => {
     let alive = true;
+
+    async function loadManagerProfile(accessToken: string) {
+      try {
+        const res = await fetch("/api/me/profile", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        if (!alive) return;
+        if (res.ok) {
+          const data = await res.json();
+          setManagerProfile({ profileId: data.profileId, name: data.name, storeIds: data.storeIds });
+          setManagerProfileError(null);
+          // Auto-select manager's profile
+          setProfileId(data.profileId);
+        } else {
+          const err = await res.json().catch(() => ({}));
+          setManagerProfileError(err.error || "Failed to load your profile");
+          setManagerProfile(null);
+        }
+      } catch {
+        if (!alive) return;
+        setManagerProfileError("Failed to load your profile");
+        setManagerProfile(null);
+      }
+    }
+
     (async () => {
       const { data } = await supabase.auth.getSession();
       if (!alive) return;
-      setManagerSession(Boolean(data?.session?.user));
+      const hasSession = Boolean(data?.session?.user);
+      setManagerSession(hasSession);
+      if (hasSession && data?.session?.access_token) {
+        setManagerAccessToken(data.session.access_token);
+        await loadManagerProfile(data.session.access_token);
+      } else {
+        setManagerAccessToken(null);
+        setManagerProfile(null);
+      }
     })();
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      setManagerSession(Boolean(session?.user));
+    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      const hasSession = Boolean(session?.user);
+      setManagerSession(hasSession);
+      if (hasSession && session?.access_token) {
+        setManagerAccessToken(session.access_token);
+        await loadManagerProfile(session.access_token);
+      } else {
+        setManagerAccessToken(null);
+        setManagerProfile(null);
+      }
     });
 
     return () => {
@@ -589,13 +633,20 @@ export default function ClockPageClient() {
       }
     }
 
+    // Determine auth token - manager uses Supabase access token, employee uses PIN token
+    const authToken = managerSession ? managerAccessToken : pinToken;
+    if (!authToken) {
+      setError(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
+      return;
+    }
+
     setSubmitting(true);
     try {
       const res = await fetch("/api/start-shift", {
         method: "POST",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${pinToken}`,
+          Authorization: `Bearer ${authToken}`,
         },
         body: JSON.stringify({
           qrToken,
@@ -852,14 +903,21 @@ export default function ClockPageClient() {
                     return;
                   }
 
+                  // Determine auth token for end-shift
+                  const endAuthToken = managerSession ? managerAccessToken : pinToken;
+                  if (!endAuthToken) {
+                    setError(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
+                    return;
+                  }
+
                   setStaleSaving(true);
                   setError(null);
                   try {
                     const res = await fetch("/api/end-shift", {
                       method: "POST",
-                      headers: { 
+                      headers: {
                         "Content-Type": "application/json",
-                        "Authorization": `Bearer ${pinToken}`,
+                        Authorization: `Bearer ${endAuthToken}`,
                       },
                       body: JSON.stringify({
                         shiftId: openShiftInfo.id,
@@ -959,6 +1017,11 @@ export default function ClockPageClient() {
             <div className="banner banner-error text-sm">{tokenError}</div>
           )}
 
+          {/* Manager profile error */}
+          {managerSession && managerProfileError && (
+            <div className="banner banner-error text-sm">{managerProfileError}</div>
+          )}
+
           {error && (
             <div className="banner banner-error text-sm">{error}</div>
           )}
@@ -984,9 +1047,15 @@ export default function ClockPageClient() {
 
           <div className="space-y-2">
             <label className="text-sm muted">Employee</label>
-            <div className="input bg-[var(--card)] border border-[var(--green)]/30 text-center py-2">
-              {authenticatedProfileName ?? "Not authenticated"}
-            </div>
+            {managerSession && managerProfile ? (
+              <div className="input bg-white/5 cursor-not-allowed">
+                {managerProfile.name} <span className="text-xs muted">(you)</span>
+              </div>
+            ) : (
+              <div className="input bg-[var(--card)] border border-[var(--green)]/30 text-center py-2">
+                {authenticatedProfileName ?? "Not authenticated"}
+              </div>
+            )}
           </div>
 
           <div className="text-xs muted">Shift type: {shiftKind.toUpperCase()}</div>
