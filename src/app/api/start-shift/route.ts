@@ -3,10 +3,14 @@
  *
  * Creates a new shift record and records the starting drawer count for an employee.
  *
+ * Authentication: Bearer token required (employee PIN JWT or manager Supabase session)
+ * - Employee PIN JWT: issued by employee-auth edge function after PIN verification
+ * - Manager Supabase: manager can clock in for themselves only (profile linked via auth_user_id)
+ *
  * Request body:
  * - qrToken?: string - QR token to identify the store (alternative to storeId)
  * - storeId?: string - Store ID (alternative to qrToken; one of qrToken or storeId required)
- * - profileId: string - Employee profile ID (required)
+ * - profileId: string - Employee profile ID (must match authenticated user)
  * - shiftTypeHint?: "open" | "close" | "double" | "other" - Optional hint (server derives shift_type)
  * - plannedStartAt: string - ISO timestamp of planned start time (required)
  * - startDrawerCents?: number | null - Starting drawer count in cents (required for non-"other" shifts)
@@ -20,6 +24,8 @@
  * - Error: { error: string, requiresConfirm?: boolean, shiftId?: string }
  *
  * Business logic:
+ * - Authenticates via employee PIN JWT or manager Supabase session
+ * - Validates profileId matches authenticated user (no impersonation)
  * - Resolves store by QR token or store ID
  * - Validates employee exists, is active, and is assigned to the store
  * - Rounds planned start time to nearest 30 minutes for payroll consistency
@@ -34,7 +40,7 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { isOutOfThreshold, roundTo30Minutes, ShiftType } from "@/lib/kioskRules";
 import { getCstDowMinutes, isTimeWithinWindow, toStoreKey } from "@/lib/clockWindows";
-import { verifyEmployeeJWT, extractBearerToken } from "@/lib/jwtVerify";
+import { authenticateShiftRequest, validateProfileAccess } from "@/lib/shiftAuth";
 
 type Body = {
   qrToken?: string;
@@ -81,20 +87,12 @@ function decodeJwtPart(part: string) {
 
 export async function POST(req: Request) {
   try {
-    // 0) Verify JWT Authentication
-    const authHeader = req.headers.get("authorization");
-    const token = extractBearerToken(authHeader);
-    
-    if (!token) {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 });
+    // 0) Authenticate request (employee PIN JWT or manager Supabase session)
+    const authResult = await authenticateShiftRequest(req);
+    if (!authResult.ok) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
     }
-
-    let jwtPayload;
-    try {
-      jwtPayload = await verifyEmployeeJWT(token);
-    } catch {
-      return NextResponse.json({ error: "Invalid or expired token" }, { status: 401 });
-    }
+    const auth = authResult.auth;
 
     const body = (await req.json()) as Body;
 
@@ -104,16 +102,12 @@ export async function POST(req: Request) {
     }
     if (!body.profileId) return NextResponse.json({ error: "Missing profileId." }, { status: 400 });
 
-    // Verify JWT profile matches request body (prevent tampering)
-    if (jwtPayload.profile_id !== body.profileId) {
-      return NextResponse.json({ error: "Unauthorized - profile mismatch" }, { status: 403 });
+    // Validate profileId matches authenticated user (no impersonation)
+    const profileCheck = validateProfileAccess(auth, body.profileId);
+    if (!profileCheck.ok) {
+      return NextResponse.json({ error: profileCheck.error }, { status: 403 });
     }
 
-    // Verify store access
-    const requestedStoreId = body.storeId || (await resolveStoreIdFromQR(body.qrToken));
-    if (requestedStoreId && !jwtPayload.store_ids.includes(requestedStoreId)) {
-      return NextResponse.json({ error: "Not authorized for this store" }, { status: 403 });
-    }
     if (body.shiftTypeHint && !ALLOWED_SHIFT_TYPES.includes(body.shiftTypeHint))
       return NextResponse.json({ error: "Invalid shiftTypeHint." }, { status: 400 });
 

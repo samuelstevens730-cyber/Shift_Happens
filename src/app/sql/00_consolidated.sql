@@ -925,15 +925,15 @@ language plpgsql
 security definer
 as $$
 declare
-  store_key text;
+  v_store_key text;
   local_ts timestamp;
   local_dow int;
   local_min int;
   ok boolean := false;
   lbl text := null;
 begin
-  store_key := public.store_key_for_id(p_store_id);
-  if store_key is null then
+  v_store_key := public.store_key_for_id(p_store_id);
+  if v_store_key is null then
     raise exception 'CLOCK_WINDOW_VIOLATION: unknown store' using errcode = 'P0001';
   end if;
 
@@ -953,7 +953,7 @@ begin
          )
   into lbl, ok
   from public.clock_windows cw
-  where cw.store_key = store_key
+  where cw.store_key = v_store_key
     and cw.shift_type = p_shift_type
     and (
       cw.dow = local_dow
