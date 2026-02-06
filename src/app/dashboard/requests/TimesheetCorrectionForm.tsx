@@ -1,11 +1,28 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRequestMutations } from "@/hooks/useRequestMutations";
+import { supabase } from "@/lib/supabaseClient";
+import { createEmployeeSupabase } from "@/lib/employeeSupabase";
 
 type Props = {
   onRefresh: () => void;
 };
+
+type ShiftOption = {
+  id: string;
+  store_id: string | null;
+  stores?: { name: string }[] | null;
+  started_at: string;
+  ended_at: string | null;
+};
+
+function formatDateTime(value?: string | null) {
+  if (!value) return "--";
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return value;
+  return dt.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
 
 export default function TimesheetCorrectionForm({ onRefresh }: Props) {
   const { loading, submitTimesheetChange } = useRequestMutations();
@@ -15,6 +32,50 @@ export default function TimesheetCorrectionForm({ onRefresh }: Props) {
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [lockedError, setLockedError] = useState<string | null>(null);
+  const [shiftOptions, setShiftOptions] = useState<ShiftOption[]>([]);
+  const [shiftError, setShiftError] = useState<string | null>(null);
+
+  const shiftLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    shiftOptions.forEach(s => {
+      const store = s.stores?.[0]?.name ?? s.store_id ?? "Store";
+      map.set(
+        s.id,
+        `${formatDateTime(s.started_at)} → ${formatDateTime(s.ended_at)} · ${store}`
+      );
+    });
+    return map;
+  }, [shiftOptions]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setShiftError(null);
+      const pinToken = typeof window !== "undefined" ? sessionStorage.getItem("sh_pin_token") : null;
+      const profileId = typeof window !== "undefined" ? sessionStorage.getItem("sh_pin_profile_id") : null;
+      const client = pinToken ? createEmployeeSupabase(pinToken) : supabase;
+
+      if (!profileId) return;
+
+      const { data, error: shiftErr } = await client
+        .from("shifts")
+        .select("id, store_id, stores(name), started_at, ended_at")
+        .eq("profile_id", profileId)
+        .order("started_at", { ascending: false })
+        .limit(20);
+
+      if (!alive) return;
+      if (shiftErr) {
+        setShiftError(shiftErr.message);
+        return;
+      }
+      setShiftOptions((data ?? []) as ShiftOption[]);
+      if (data && data.length > 0) {
+        setShiftId((prev) => prev || data[0].id);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   const handleSubmit = async () => {
     setError(null);
@@ -52,13 +113,19 @@ export default function TimesheetCorrectionForm({ onRefresh }: Props) {
       {error && <div className="banner banner-error text-sm">{error}</div>}
 
       <div className="space-y-1">
-        <label className="text-sm muted">Shift ID</label>
-        <input
-          className="input"
+        <label className="text-sm muted">Shift</label>
+        <select
+          className="select"
           value={shiftId}
           onChange={(e) => setShiftId(e.target.value)}
-          placeholder="Shift UUID"
-        />
+        >
+          {shiftOptions.map(shift => (
+            <option key={shift.id} value={shift.id}>
+              {shiftLabelById.get(shift.id)}
+            </option>
+          ))}
+        </select>
+        {shiftError && <div className="text-xs text-red-300">{shiftError}</div>}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">

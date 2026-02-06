@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRequestMutations } from "@/hooks/useRequestMutations";
+import { supabase } from "@/lib/supabaseClient";
+import { createEmployeeSupabase } from "@/lib/employeeSupabase";
 
 type SwapRequest = {
   id: string;
@@ -17,10 +19,35 @@ type Props = {
   onRefresh: () => void;
 };
 
+type ScheduleShiftOption = {
+  id: string;
+  shift_date: string;
+  scheduled_start: string;
+  scheduled_end: string;
+  stores?: { name: string }[] | null;
+};
+
 function formatDate(value: string) {
   const dt = new Date(value);
   if (Number.isNaN(dt.getTime())) return value;
   return dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function formatDateKey(value: string) {
+  const dt = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(dt.getTime())) return value;
+  return dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function formatTime(value?: string) {
+  if (!value) return "--";
+  const [h, m] = value.split(":");
+  const hour = Number(h);
+  if (Number.isNaN(hour)) return value;
+  const minute = (m ?? "00").slice(0, 2);
+  const hour12 = ((hour + 11) % 12) + 1;
+  const suffix = hour >= 12 ? "PM" : "AM";
+  return `${hour12}:${minute} ${suffix}`;
 }
 
 export default function SwapRequestCard({ requests, onRefresh }: Props) {
@@ -30,8 +57,56 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
   const [reason, setReason] = useState("");
   const [expiresHours, setExpiresHours] = useState<string>("48");
   const [error, setError] = useState<string | null>(null);
+  const [shiftOptions, setShiftOptions] = useState<ScheduleShiftOption[]>([]);
+  const [shiftError, setShiftError] = useState<string | null>(null);
 
   const openRequests = requests.filter(r => r.status === "open" || r.status === "pending");
+
+  const shiftLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    shiftOptions.forEach(s => {
+      const store = s.stores?.[0]?.name ?? "Store";
+      const label = `${formatDateKey(s.shift_date)} · ${formatTime(s.scheduled_start)}-${formatTime(
+        s.scheduled_end
+      )} · ${store}`;
+      map.set(s.id, label);
+    });
+    return map;
+  }, [shiftOptions]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setShiftError(null);
+      const pinToken = typeof window !== "undefined" ? sessionStorage.getItem("sh_pin_token") : null;
+      const profileId = typeof window !== "undefined" ? sessionStorage.getItem("sh_pin_profile_id") : null;
+
+      const client = pinToken ? createEmployeeSupabase(pinToken) : supabase;
+      if (!profileId) return;
+
+      const today = new Date();
+      const todayKey = today.toISOString().slice(0, 10);
+
+      const { data, error: shiftErr } = await client
+        .from("schedule_shifts")
+        .select("id, shift_date, scheduled_start, scheduled_end, stores(name), schedules!inner(status)")
+        .eq("profile_id", profileId)
+        .eq("schedules.status", "published")
+        .gte("shift_date", todayKey)
+        .order("shift_date", { ascending: true });
+
+      if (!alive) return;
+      if (shiftErr) {
+        setShiftError(shiftErr.message);
+        return;
+      }
+      setShiftOptions((data ?? []) as ScheduleShiftOption[]);
+      if (!scheduleShiftId && data && data.length > 0) {
+        setScheduleShiftId(data[0].id);
+      }
+    })();
+    return () => { alive = false; };
+  }, []);
 
   const handleSubmit = async () => {
     setError(null);
@@ -67,13 +142,19 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
       {showForm && (
         <div className="card card-pad space-y-3 border border-white/10">
           <div className="space-y-1">
-            <label className="text-sm muted">Schedule Shift ID</label>
-            <input
-              className="input"
+            <label className="text-sm muted">Select Shift</label>
+            <select
+              className="select"
               value={scheduleShiftId}
               onChange={(e) => setScheduleShiftId(e.target.value)}
-              placeholder="UUID of the scheduled shift"
-            />
+            >
+              {shiftOptions.map((shift) => (
+                <option key={shift.id} value={shift.id}>
+                  {shiftLabelById.get(shift.id)}
+                </option>
+              ))}
+            </select>
+            {shiftError && <div className="text-xs text-red-300">{shiftError}</div>}
           </div>
           <div className="space-y-1">
             <label className="text-sm muted">Reason (optional)</label>
@@ -111,7 +192,7 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
               <div className="text-sm font-semibold">{req.status.toUpperCase()}</div>
               <div className="text-xs muted">Expires {formatDate(req.expires_at)}</div>
             </div>
-            <div className="text-xs muted">Shift: {req.schedule_shift_id}</div>
+            <div className="text-xs muted">Shift: {shiftLabelById.get(req.schedule_shift_id) ?? "Scheduled shift"}</div>
             {req.reason && <div className="text-sm">{req.reason}</div>}
             <div className="text-xs muted">Created {formatDate(req.created_at)}</div>
           </div>

@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRequestMutations } from "@/hooks/useRequestMutations";
+import { supabase } from "@/lib/supabaseClient";
+import { createEmployeeSupabase } from "@/lib/employeeSupabase";
 
 type TimeOffBlock = {
   id: string;
@@ -14,6 +16,8 @@ type Props = {
   blocks: TimeOffBlock[];
   onRefresh: () => void;
 };
+
+type StoreOption = { id: string; name: string };
 
 function formatDate(value: string) {
   const dt = new Date(`${value}T00:00:00`);
@@ -29,11 +33,58 @@ export default function TimeOffRequestForm({ blocks, onRefresh }: Props) {
   const [reason, setReason] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [conflictError, setConflictError] = useState<string | null>(null);
+  const [stores, setStores] = useState<StoreOption[]>([]);
+  const [storesError, setStoresError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const storedStoreId = sessionStorage.getItem("sh_pin_store_id") || "";
-    if (storedStoreId) setStoreId(storedStoreId);
+    let alive = true;
+    (async () => {
+      const pinToken = typeof window !== "undefined" ? sessionStorage.getItem("sh_pin_token") : null;
+      const profileId = typeof window !== "undefined" ? sessionStorage.getItem("sh_pin_profile_id") : null;
+      const client = pinToken ? createEmployeeSupabase(pinToken) : supabase;
+
+      if (!profileId) return;
+
+      const { data: memberships, error: memErr } = await client
+        .from("store_memberships")
+        .select("store_id")
+        .eq("profile_id", profileId);
+
+      if (!alive) return;
+      if (memErr) {
+        setStoresError(memErr.message);
+        return;
+      }
+
+      const storeIds = (memberships ?? []).map(m => m.store_id);
+      if (storeIds.length === 0) {
+        setStores([]);
+        return;
+      }
+
+      const { data: storeRows, error: storeErr } = await client
+        .from("stores")
+        .select("id, name")
+        .in("id", storeIds)
+        .order("name", { ascending: true });
+
+      if (!alive) return;
+      if (storeErr) {
+        setStoresError(storeErr.message);
+        return;
+      }
+
+      setStores(storeRows ?? []);
+      if (storeRows && storeRows.length > 0) {
+        const storedStoreId = typeof window !== "undefined" ? sessionStorage.getItem("sh_pin_store_id") : null;
+        if (storedStoreId && storeRows.find(s => s.id === storedStoreId)) {
+          setStoreId(storedStoreId);
+        } else if (!storeId) {
+          setStoreId(storeRows[0].id);
+        }
+      }
+    })();
+    return () => { alive = false; };
   }, []);
 
   const upcomingBlocks = useMemo(() => {
@@ -77,13 +128,19 @@ export default function TimeOffRequestForm({ blocks, onRefresh }: Props) {
         {error && <div className="banner banner-error text-sm">{error}</div>}
 
         <div className="space-y-1">
-          <label className="text-sm muted">Store ID</label>
-          <input
-            className="input"
+          <label className="text-sm muted">Store</label>
+          <select
+            className="select"
             value={storeId}
             onChange={(e) => setStoreId(e.target.value)}
-            placeholder="Store UUID"
-          />
+          >
+            {stores.map(store => (
+              <option key={store.id} value={store.id}>
+                {store.name}
+              </option>
+            ))}
+          </select>
+          {storesError && <div className="text-xs text-red-300">{storesError}</div>}
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1">
