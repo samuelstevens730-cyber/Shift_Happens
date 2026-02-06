@@ -1,291 +1,313 @@
-# Shift Happens - Agent Guide
+# Requests & Approvals Module - Agent Primer
 
-This document provides essential information for AI coding agents working on the Shift Happens project.
+## Critical Architecture Rules
 
-## Project Overview
+### Authentication Flow
+- Employees: `authenticateShiftRequest()` in `src/lib/shiftAuth.ts` → returns `AuthContext`
+- Managers: Supabase auth via `auth.getUser()` → lookup `store_managers`
+- **RPCs receive explicit actor IDs** - never use `auth.uid()` or `request.jwt.claims` in RPCs
 
-**Shift Happens** is a workforce management and time tracking application built for retail environments, specifically designed for smoke shop operations. It handles time clock functionality, drawer accountability, task management, shift checklists, and payroll export.
-
-### Key Features
-- **Time Tracking**: QR-code or manual clock-in/out with planned vs actual time tracking
-- **Drawer Accountability**: Start, changeover, and end drawer counts with variance detection
-- **Task Management**: Assign tasks and messages to employees for their next shift
-- **Shift Checklists**: Configurable per-store checklists for opening, closing, and double shifts
-- **Payroll Export**: CSV export with calculated hours and drawer deltas
-- **Manager Dashboard**: Variance review, override approvals, and employee management
-
-## Technology Stack
-
-| Technology | Version | Purpose |
-|------------|---------|---------|
-| Next.js | 16.1.6 | React framework with App Router |
-| React | 19.2.4 | UI components |
-| TypeScript | 5.9.3 | Type safety |
-| Tailwind CSS | 4.x | Utility-first styling |
-| Supabase | 2.x | PostgreSQL database + authentication |
-| Node.js | 18+ | Runtime |
-
-## Project Structure
-
+### RPC Pattern (MANDATORY)
+All RPCs accept actor identity as parameters:
+```sql
+CREATE FUNCTION submit_swap_request(
+  p_actor_profile_id UUID,  -- FROM authenticateShiftRequest()
+  p_schedule_shift_id UUID,
+  ...
+)
 ```
-src/
-├── app/                          # Next.js App Router
-│   ├── api/                      # Backend API routes
-│   │   ├── admin/                # Admin-only endpoints
-│   │   │   ├── assignments/      # Task/message CRUD
-│   │   │   ├── missing-counts/   # Missing drawer count reports
-│   │   │   ├── open-shifts/      # Stale shift management
-│   │   │   ├── overrides/        # Long shift approvals
-│   │   │   ├── payroll/          # Payroll data export
-│   │   │   ├── settings/         # Store configuration
-│   │   │   ├── shifts/           # Shift CRUD
-│   │   │   ├── users/            # Employee management
-│   │   │   └── variances/        # Drawer variance review
-│   │   ├── checklist/            # Checklist item completion
-│   │   ├── shift/                # Shift detail & assignment actions
-│   │   ├── start-shift/          # Clock-in endpoint
-│   │   ├── end-shift/            # Clock-out endpoint
-│   │   └── confirm-changeover/   # Double shift drawer count
-│   │
-│   ├── admin/                    # Admin dashboard pages
-│   ├── auth/reset/               # Password reset page
-│   ├── clock/                    # Employee clock-in flow
-│   ├── login/                    # Authentication page
-│   ├── run/                      # Shift redirect/resume
-│   ├── shift/[id]/               # Active shift detail & checklist
-│   └── sql/                      # Database migration scripts (01_schema.sql - 21_schedule_rls.sql)
-│
-├── components/                   # Shared React components
-│   └── PinGate.tsx               # Employee PIN authentication modal
-│
-├── lib/                          # Shared utilities
-│   ├── kioskRules.ts             # Drawer thresholds & time rounding
-│   ├── clockWindows.ts           # Store-specific clock window rules
-│   ├── supabaseClient.ts         # Browser Supabase client
-│   ├── supabaseServer.ts         # Server Supabase client
-│   ├── date.ts                   # Date formatting helpers
-│   ├── alarm.ts                  # Alarm utilities
-│   └── employeeSupabase.ts       # Employee auth utilities
-│
-└── globals.css                   # Tailwind & global styles
+API routes call: `supabaseServer.rpc('submit_swap_request', { p_actor_profile_id: auth.profileId, ... })`
 
-supabase/
-├── functions/                    # Supabase Edge Functions
-│   ├── employee-auth/            # PIN-based employee authentication
-│   └── set-pin/                  # PIN setup for employees
-└── config.toml                   # Supabase CLI configuration
+### Database Conventions
+- UUIDs everywhere
+- TIMESTAMPTZ for times (UTC stored, America/Chicago display)
+- DATE for date-only fields
+- Soft deletes via `deleted_at`
 
-tests/                            # Test files
-└── clockWindows.test.ts          # Clock window logic tests
+### Key Constraints
+1. **BILOCATION**: No overlapping shifts across stores (same employee)
+2. **SOLO COVERAGE**: No 2+ employees at same store/time/shift_type
+3. **TIME OFF GATE**: Block if ANY published schedule_shift overlaps (published only)
+4. **PAYROLL LOCK**: 1st-15th or 16th-EOM in America/Chicago (NOT schedules.period_start)
+5. **OVERNIGHT SHIFTS**: Check `is_overnight` flag or `end_time < start_time`
 
-public/                           # Static assets
-```
+### State Machines
+- Shift swap: open → pending → approved | cancelled | expired
+- Shift swap denial: pending → open (clears selection, NOT 'denied')
+- Time off: pending → approved | denied | cancelled
+- Timesheet: pending → approved | denied | cancelled
 
-## Build and Development Commands
+### File Locations
+- SQL: `src/app/sql/22_*.sql` through `34_*.sql`
+- API: `src/app/api/requests/[type]/...`
+- Frontend: `src/app/dashboard/requests/`, `src/app/admin/requests/`
 
-```bash
-# Development server (uses Turbopack)
-npm run dev
+### DO NOT
+- Use `auth.uid()` in RPCs (always NULL with service role)
+- Modify `shifts` table for swaps (only `schedule_shifts`)
+- Skip audit log writes
+- Use raw SQL in API routes (use RPCs via `supabaseServer.rpc()`)
+- Assume standard overlap logic works for overnight shifts
 
-# Production build
-npm run build
+---
 
-# Start production server
-npm run start
+PROMPT 5: Audit Logs Table
 
-# Run ESLint
-npm run lint
+PROMPT 6: Validation Functions
 
-# Run tests (Node.js native test runner with tsx)
-npm run test
-```
+PROMPT 7: Shift Swap RPCs
 
-## Environment Variables
+PROMPT 8: Time Off RPCs
+OBJECTIVE: Create SQL RPCs for time off operations
+FILE TO CREATE: src/app/sql/29_time_off_rpc.sql
+FUNCTIONS:
 
-Create a `.env.local` file in the project root:
+submit_time_off_request(p_actor_profile_id UUID, p_store_id UUID, p_start_date DATE, p_end_date DATE, p_reason TEXT) RETURNS UUID
 
-```env
-# Supabase Configuration
-NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+Validate end_date >= start_date
+Validate actor is member of store
+TIME OFF GATE: Call check_time_off_schedule_conflict - RAISE if published shifts overlap
+Insert time_off_requests with store_id
+Insert audit log
+Return request_id
 
-# JWT Secret (must match Supabase Functions JWT secret)
-JWT_SECRET=your-jwt-secret
 
-# Feature Flags
-NEXT_PUBLIC_ENABLE_CHECKLISTS=false
-```
+approve_time_off_request(p_actor_auth_user_id UUID, p_request_id UUID) RETURNS UUID
 
-**Security Note**: Never commit `.env.local` to version control. The service role key bypasses Row-Level Security.
+Lock request FOR UPDATE
+Validate status='pending'
+Validate manager has store access
+Insert time_off_blocks
+Update status='approved'
+Insert audit log
+Return block_id
 
-## Code Style Guidelines
 
-### File Organization
-- Use **kebab-case** for file and directory names (e.g., `start-shift/route.ts`)
-- Use **PascalCase** for React components (e.g., `PinGate.tsx`)
-- Use **camelCase** for utility files (e.g., `kioskRules.ts`)
-- Place page components in `page.tsx`, API routes in `route.ts`
+cancel_time_off_request(p_actor_profile_id UUID, p_request_id UUID) RETURNS BOOLEAN
 
-### TypeScript Conventions
-- Enable strict mode (configured in `tsconfig.json`)
-- Use explicit return types for API route handlers
-- Prefer `type` over `interface` for object shapes
-- Use nullable types (`string | null`) instead of optional (`string?`) for database fields
+Validate actor owns request
+Validate status='pending'
+Update status='cancelled'
+Insert audit log
 
-### Component Patterns
-- Use `"use client"` directive for client components (forms, interactive UI)
-- Keep server components as default (no directive)
-- Extract client logic to separate files when needed (e.g., `ClockPageClient.tsx`)
-- Use JSDoc comments for file-level documentation
 
-### Styling Conventions
-- Use Tailwind CSS utility classes
-- Custom CSS classes defined in `globals.css`:
-  - `.app-shell` - Main page wrapper with gradient background
-  - `.card` / `.card-pad` - Content containers
-  - `.btn-primary` / `.btn-secondary` / `.btn-danger` - Buttons
-  - `.input` / `.select` / `.textarea` - Form controls
-  - `.banner` / `.banner-error` - Alert containers
-  - `.tile` - Navigation cards
-  - `.muted` - Secondary text color
 
-### Import Order
-1. React/Next.js imports
-2. Third-party libraries
-3. Absolute imports (`@/lib/...`, `@/components/...`)
-4. Relative imports
+DONE WHEN:
 
-## Testing Instructions
+TIME OFF GATE enforced (published schedules only)
+store_id passed and stored
+Explicit actor parameters used
 
-### Running Tests
-```bash
-# Run all tests
-npm run test
 
-# Run specific test file
-node --test --import tsx tests/clockWindows.test.ts
-```
+PROMPT 9: Timesheet RPCs
+PROMPT 10: Deny RPC
+                                      
 
-### Test Structure
-- Uses Node.js native test runner (`node:test` and `node:assert/strict`)
-- Test files use `.test.ts` extension
-- Tests are in `/tests` directory
-- Import from `tsx` for TypeScript support
+PROMPT 11: Cron Functions
 
-### Writing Tests
-```typescript
-import test from "node:test";
-import assert from "node:assert/strict";
-import { myFunction } from "../src/lib/myModule";
 
-test("description of test", () => {
-  assert.equal(myFunction(input), expectedOutput);
+PROMPT 12: RLS Policies
+
+PROMPT 13: API Routes - Shift Swap
+OBJECTIVE: Create API routes for shift swap
+FILES TO CREATE:
+
+src/app/api/requests/shift-swap/route.ts (GET list, POST submit)
+src/app/api/requests/shift-swap/[id]/route.ts (GET single)
+src/app/api/requests/shift-swap/[id]/offers/route.ts (GET/POST offers)
+src/app/api/requests/shift-swap/[id]/select/route.ts (POST)
+src/app/api/requests/shift-swap/[id]/approve/route.ts (POST)
+src/app/api/requests/shift-swap/[id]/deny/route.ts (POST)
+src/app/api/requests/shift-swap/[id]/cancel/route.ts (POST)
+
+CRITICAL PATTERN:
+typescript// 1. Authenticate
+const auth = await authenticateShiftRequest(req);
+if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 });
+
+// 2. Call RPC with explicit actor
+const { data, error } = await supabaseServer.rpc('submit_shift_swap_request', {
+  p_actor_profile_id: auth.profileId,  // PASS VERIFIED IDENTITY
+  p_schedule_shift_id: body.scheduleShiftId,
+  ...
 });
-```
+REFERENCE: src/app/api/start-shift/route.ts for auth pattern
+DONE WHEN:
 
-## Database Schema
+All routes use authenticateShiftRequest() for employee routes
+All routes pass explicit actor to RPCs
+Managers use auth.getUser() + pass user.id to RPCs
 
-### Core Tables
-| Table | Purpose |
-|-------|---------|
-| `stores` | Physical store locations with QR tokens |
-| `profiles` | Employee records |
-| `store_memberships` | Employee-to-store assignments |
-| `shifts` | Individual shift records |
-| `shift_drawer_counts` | Drawer count events (START, CHANGEOVER, END) |
-| `checklist_templates` | Checklist definitions per store/shift type |
-| `checklist_items` | Individual checklist tasks |
-| `shift_checklist_checks` | Completed checklist items per shift |
-| `shift_assignments` | Tasks/messages assigned to employees |
-| `app_users` | Admin/manager accounts |
-| `store_managers` | Manager-to-store authorization |
-| `schedules` / `schedule_shifts` / `schedule_assignments` | Weekly scheduling |
 
-### Running Migrations
-Execute SQL files in order in Supabase SQL Editor:
-1. `01_schema.sql` - Core tables and types
-2. `02_variance_review.sql` - Variance tracking
-3. `03_app_users.sql` - Admin users
-4. `04_store_managers.sql` - Manager roles
-5. ... (continue through `21_schedule_rls.sql`)
+PROMPT 14: API Routes - Time Off
+OBJECTIVE: Create API routes for time off
+FILES TO CREATE:
 
-See `src/app/sql/README.md` for complete run order.
+src/app/api/requests/time-off/route.ts (GET list, POST submit)
+src/app/api/requests/time-off/[id]/route.ts (GET single)
+src/app/api/requests/time-off/[id]/approve/route.ts (POST)
+src/app/api/requests/time-off/[id]/deny/route.ts (POST)
+src/app/api/requests/time-off/[id]/cancel/route.ts (POST)
+src/app/api/time-off-blocks/route.ts (GET blocks)
 
-## Security Considerations
+PATTERN: Same as Prompt 13 - explicit actor parameters
+DONE WHEN:
 
-### Authentication
-- **Admin users**: Supabase Auth with email/password
-- **Employees**: PIN-based authentication via Edge Function
-- **PIN security**: PBKDF2 hashing with 150,000 iterations, account lockout after failed attempts
+TIME OFF GATE errors return helpful message with conflicting shift dates
+store_id passed to submit RPC
 
-### Row-Level Security (RLS)
-- RLS is enforced for admin and reporting data
-- Employee clock-in flows are API-gated during MVP
-- Server-side Supabase client uses service role key (bypasses RLS)
-- Client-side Supabase client uses anon key (respects RLS)
 
-### API Security
-- Admin API routes should validate authentication
-- Use `supabaseServer` for database operations in API routes
-- Never expose `SUPABASE_SERVICE_ROLE_KEY` to the client
+PROMPT 15: API Routes - Timesheet
+OBJECTIVE: Create API routes for timesheet corrections
+FILES TO CREATE:
 
-### Environment Security
-- Store sensitive keys in environment variables
-- Use `NEXT_PUBLIC_` prefix only for values safe to expose to browser
-- JWT secret must match between application and Supabase Functions
+src/app/api/requests/timesheet/route.ts (GET list, POST submit)
+src/app/api/requests/timesheet/[id]/route.ts (GET single)
+src/app/api/requests/timesheet/[id]/approve/route.ts (POST)
+src/app/api/requests/timesheet/[id]/deny/route.ts (POST)
+src/app/api/requests/timesheet/[id]/cancel/route.ts (POST)
 
-## Key Business Logic
+PATTERN: Same as Prompt 13 - explicit actor parameters
+DONE WHEN:
 
-### Drawer Variance Thresholds (kioskRules.ts)
-- Default expected drawer: $200.00
-- Alert if under by >$5 (possible theft/error)
-- Alert if over by >$15 (possible unreported deposit)
-- Times are rounded to 30-minute increments for payroll
+PAYROLL LOCK errors return period info
+Original vs requested times shown in GET response
 
-### Clock Windows (clockWindows.ts)
-- LV1/LV2 stores have specific clock-in windows
-- Open windows: Mon-Sat 8:55-9:05 AM, Sun 11:55-12:05 PM
-- Close windows vary by day (some cross midnight on Fri/Sat)
-- All times in America/Chicago timezone
 
-### Shift Types
-- `open` - Opening shift (requires drawer count)
-- `close` - Closing shift (requires drawer count)
-- `double` - Double shift (requires changeover count)
-- `other` - Miscellaneous (no drawer count required)
+PROMPT 16: Zod Schemas
+OBJECTIVE: Create validation schemas
+FILE TO CREATE: src/schemas/requests.ts
+SCHEMAS:
 
-## Development Workflow
+submitSwapRequestSchema - scheduleShiftId, reason?, expiresHours?
+submitSwapOfferSchema - requestId, offerType, swapScheduleShiftId?, note?
+selectOfferSchema - offerId
+submitTimeOffRequestSchema - storeId, startDate, endDate, reason?
+submitTimesheetChangeSchema - shiftId, requestedStartedAt?, requestedEndedAt?, reason
+denyRequestSchema - reason?
 
-### Before Starting Work
-1. Ensure `.env.local` is configured
-2. Run `npm install` to install dependencies
-3. Start dev server with `npm run dev`
-4. Verify database migrations are applied
+DONE WHEN:
 
-### Making Changes
-1. Follow TypeScript strict mode
-2. Add JSDoc comments to new files
-3. Run `npm run lint` before committing
-4. Test changes locally
+All schemas exported
+Refinements for conditional requirements (swap needs swapScheduleShiftId)
 
-### Deployment
-- Production hosted on Vercel
-- Database hosted on Supabase
-- Push to GitHub triggers Vercel deployment
-- Update Supabase redirect URLs for production domain
 
-## Troubleshooting
+PROMPT 17: Frontend - Employee Requests Page
+OBJECTIVE: Create employee requests dashboard
+FILES TO CREATE:
 
-### Common Issues
-- **Build fails**: Check Node.js version (requires 18+)
-- **Database connection errors**: Verify environment variables
-- **Type errors**: Run `npm run lint` to check for issues
-- **Test failures**: Ensure `tsx` is installed
+src/app/dashboard/requests/page.tsx
+src/app/dashboard/requests/SwapRequestCard.tsx
+src/app/dashboard/requests/TimeOffRequestForm.tsx
+src/app/dashboard/requests/TimesheetCorrectionForm.tsx
+src/hooks/useShiftSwapRequests.ts
+src/hooks/useTimeOffRequests.ts
+src/hooks/useTimesheetRequests.ts
+src/hooks/useRequestMutations.ts
 
-### Debug Endpoints
-- `GET /api/health` - Check environment configuration
+REFERENCE: src/app/dashboard/schedule/page.tsx for layout patterns
+DONE WHEN:
 
-## License
+Employee can view/create all request types
+Error states show TIME OFF GATE and PAYROLL LOCK messages clearly
+Tab navigation works
 
-Proprietary - No Cap Smoke Shop
+
+PROMPT 18: Frontend - Admin Requests Page
+OBJECTIVE: Create manager approval queue
+FILES TO CREATE:
+
+src/app/admin/requests/page.tsx
+src/app/admin/requests/SwapApprovalCard.tsx
+src/app/admin/requests/TimeOffApprovalCard.tsx
+src/app/admin/requests/TimesheetApprovalCard.tsx
+
+REFERENCE: src/app/admin/ for existing admin patterns
+DONE WHEN:
+
+Manager sees pending requests for their stores
+Approve/Deny with confirmation and optional reason
+Cards show relevant details (shift times, date ranges, before/after times)
+
+
+PROMPT 19: Schedule Integration
+OBJECTIVE: Add "Request Swap" to employee schedule view
+FILE TO MODIFY: src/app/dashboard/schedule/page.tsx
+CHANGES:
+
+Add "Request Swap" button on employee's published shifts
+Only show for future shifts without active swap request
+Modal for reason + submit
+Visual indicator for pending swap requests
+
+DONE WHEN:
+
+Button appears on appropriate shifts
+Modal submits to API correctly
+Pending requests show badge/indicator
+
+
+PROMPT 20: Cron Setup
+OBJECTIVE: Configure Vercel cron jobs
+FILES TO CREATE:
+
+src/app/api/cron/expire-requests/route.ts
+src/app/api/cron/send-nudges/route.ts
+
+FILE TO MODIFY: vercel.json
+CRON ROUTES:
+
+POST /api/cron/expire-requests - verify CRON_SECRET, call process_expired_requests()
+POST /api/cron/send-nudges - verify CRON_SECRET, call send_selection_nudges()
+
+VERCEL.JSON:
+json{
+  "crons": [
+    { "path": "/api/cron/expire-requests", "schedule": "*/15 * * * *" },
+    { "path": "/api/cron/send-nudges", "schedule": "0 */6 * * *" }
+  ]
+}
+DONE WHEN:
+
+Both routes secured with CRON_SECRET
+vercel.json configured correctly
+Nudges are idempotent (check nudge_sent_at before inserting)
+
+
+Execution Order
+Phase 1: Schema (SQL)
+
+Prompt 1: Enums
+Prompt 2: Swap tables (includes nudge_sent_at)
+Prompt 3: Time off tables (includes store_id)
+Prompt 4: Timesheet tables (includes store_id)
+Prompt 5: Audit logs
+
+Phase 2: Business Logic (SQL)
+6. Prompt 6: Validation functions (overnight handling)
+7. Prompt 7: Swap RPCs (explicit actors, solo coverage)
+8. Prompt 8: Time off RPCs (explicit actors, TIME OFF GATE)
+9. Prompt 9: Timesheet RPCs (explicit actors, stale guard)
+10. Prompt 10: Deny RPC
+11. Prompt 11: Cron functions (idempotent nudges)
+12. Prompt 12: RLS policies
+Phase 3: API
+13. Prompt 13: Swap routes
+14. Prompt 14: Time off routes
+15. Prompt 15: Timesheet routes
+Phase 4: Frontend
+16. Prompt 16: Zod schemas
+17. Prompt 17: Employee page
+18. Prompt 18: Admin page
+19. Prompt 19: Schedule integration
+Phase 5: Infrastructure
+20. Prompt 20: Cron setup
+
+Critical Files to Reference
+
+src/lib/shiftAuth.ts - Authentication pattern (authenticateShiftRequest)
+src/lib/supabaseServer.ts - Service role client
+src/app/api/start-shift/route.ts - API route pattern
+src/app/sql/07_shift_assignments.sql - Notification pattern
+src/app/sql/18_v2_workforce_migration.sql - schedule_shifts schema
+src/app/sql/21_schedule_rls.sql - RLS pattern
