@@ -55,6 +55,9 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
+# Cron (GitHub Actions)
+CRON_SECRET=your-long-random-secret
+
 # Cron (Vercel scheduled jobs)
 CRON_SECRET=your-long-random-secret
 ```
@@ -226,6 +229,16 @@ src/
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
 4. Deploy
+
+### Scheduled Jobs (GitHub Actions)
+
+Set these repository secrets:
+- `CRON_BASE_URL` (e.g., `https://your-domain.vercel.app`)
+- `CRON_SECRET` (must match `CRON_SECRET` in Vercel)
+
+The workflow in `.github/workflows/cron-requests.yml` calls:
+- `POST /api/cron/expire-requests` every 15 minutes
+- `POST /api/cron/send-nudges` every 6 hours
 
 ### Production Checklist
 

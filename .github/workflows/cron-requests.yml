@@ -1,0 +1,26 @@
+name: Cron - Requests
+
+on:
+  schedule:
+    - cron: "0 */12 * * *"
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  expire_requests:
+    if: github.event.schedule == '0 */12 * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call expire-requests
+        run: |
+          curl -sS -X POST "${{ secrets.CRON_BASE_URL }}/api/cron/expire-requests" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}"
+
+  send_nudges:
+    if: github.event.schedule == '0 */6 * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call send-nudges
+        run: |
+          curl -sS -X POST "${{ secrets.CRON_BASE_URL }}/api/cron/send-nudges" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}"

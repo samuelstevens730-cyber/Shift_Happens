@@ -241,7 +241,18 @@ function HomePageInner() {
 
     let alive = true;
     async function fetchMessages() {
-      const profileId = sessionStorage.getItem(PIN_PROFILE_KEY);
+      let profileId = sessionStorage.getItem(PIN_PROFILE_KEY);
+      if (!profileId && hasAdminAuth) {
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData.user) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("auth_user_id", userData.user.id)
+            .maybeSingle();
+          profileId = profile?.id ?? null;
+        }
+      }
       if (!profileId) return;
 
       const { data } = await supabase
