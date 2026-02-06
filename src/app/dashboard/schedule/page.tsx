@@ -29,6 +29,12 @@ type ScheduleShiftRow = {
   stores?: { name: string } | null;
 };
 
+type SwapRequestRow = {
+  id: string;
+  schedule_shift_id: string;
+  status: string;
+};
+
 const PIN_TOKEN_KEY = "sh_pin_token";
 const PIN_PROFILE_KEY = "sh_pin_profile_id";
 const CST_TZ = "America/Chicago";
@@ -104,6 +110,17 @@ function getCstDateParts(dt: Date) {
 function getCstDateKey(dt: Date) {
   const { year, month, day } = getCstDateParts(dt);
   return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function isFutureShift(shift: ScheduleShiftRow, now: Date) {
+  const nowKey = getCstDateKey(now);
+  if (shift.shift_date > nowKey) return true;
+  if (shift.shift_date < nowKey) return false;
+  const nowCst = new Date(now.toLocaleString("en-US", { timeZone: CST_TZ }));
+  const nowMinutes = nowCst.getHours() * 60 + nowCst.getMinutes();
+  const startMinutes = toMinutes(shift.scheduled_start);
+  if (Number.isNaN(startMinutes)) return false;
+  return startMinutes > nowMinutes;
 }
 
 function addDays(dateKey: string, days: number) {
@@ -226,9 +243,15 @@ function ShiftTypeBadge({ label }: { label: string }) {
 function WeekCard({
   dateKey,
   shifts,
+  swapStatusByShift,
+  onRequestSwap,
+  canRequestSwap,
 }: {
   dateKey: string;
   shifts: ScheduleShiftRow[];
+  swapStatusByShift: Record<string, string | undefined>;
+  onRequestSwap: (shift: ScheduleShiftRow) => void;
+  canRequestSwap: boolean;
 }) {
   const dt = new Date(`${dateKey}T00:00:00`);
   const orderedShifts = [...shifts].sort(
@@ -277,6 +300,40 @@ function WeekCard({
             <ShiftTypeBadge label={shiftLabel} />
           </div>
         )}
+        {hasShift && (
+          <div className="space-y-2">
+            {orderedShifts.map(shift => {
+              const status = swapStatusByShift[shift.id];
+              const showRequest = canRequestSwap && status == null && isFutureShift(shift, new Date());
+              return (
+                <div key={shift.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+                  <div className="text-xs muted">
+                    {formatTimeLabel(shift.scheduled_start)} - {formatTimeLabel(shift.scheduled_end)}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {status && (
+                      <span className="inline-flex items-center rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
+                        {status}
+                      </span>
+                    )}
+                    {showRequest && (
+                      <button
+                        type="button"
+                        className="btn-secondary px-3 py-1.5 text-xs"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          onRequestSwap(shift);
+                        }}
+                      >
+                        Request Swap
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </details>
   );
@@ -293,6 +350,14 @@ export default function EmployeeSchedulePage() {
   const [error, setError] = useState<string | null>(null);
   const [filterPeriod, setFilterPeriod] = useState<string>("all");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [swapRequests, setSwapRequests] = useState<SwapRequestRow[]>([]);
+  const [swapError, setSwapError] = useState<string | null>(null);
+  const [swapLoading, setSwapLoading] = useState(false);
+  const [showSwapModal, setShowSwapModal] = useState(false);
+  const [swapShift, setSwapShift] = useState<ScheduleShiftRow | null>(null);
+  const [swapReason, setSwapReason] = useState("");
+  const [swapExpiresHours, setSwapExpiresHours] = useState("48");
+  const [swapSubmitError, setSwapSubmitError] = useState<string | null>(null);
 
   // Check auth: Supabase session FIRST, then PIN token, then redirect
   useEffect(() => {
@@ -413,6 +478,39 @@ export default function EmployeeSchedulePage() {
     };
   }, [pinToken, refreshKey, managerProfileId, profileId]);
 
+  useEffect(() => {
+    if (!pinToken) return;
+    let alive = true;
+    (async () => {
+      setSwapLoading(true);
+      setSwapError(null);
+      const authToken =
+        pinToken === "manager"
+          ? (await supabase.auth.getSession()).data.session?.access_token ?? null
+          : pinToken;
+      if (!authToken) {
+        if (alive) {
+          setSwapError("Unauthorized.");
+          setSwapLoading(false);
+        }
+        return;
+      }
+      const res = await fetch("/api/requests/shift-swap", {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      const json = await res.json();
+      if (!alive) return;
+      if (!res.ok) {
+        setSwapError(json?.error ?? "Failed to load swap requests.");
+        setSwapLoading(false);
+        return;
+      }
+      setSwapRequests((json?.rows ?? []) as SwapRequestRow[]);
+      setSwapLoading(false);
+    })();
+    return () => { alive = false; };
+  }, [pinToken, refreshKey]);
+
   const periods = useMemo(() => {
     const set = new Set<string>();
     scheduleShifts.forEach(s => {
@@ -430,6 +528,16 @@ export default function EmployeeSchedulePage() {
       return true;
     });
   }, [scheduleShifts, filterPeriod]);
+
+  const swapStatusByShift = useMemo(() => {
+    const map: Record<string, string> = {};
+    swapRequests.forEach(req => {
+      if (req.status === "open" || req.status === "pending") {
+        map[req.schedule_shift_id] = req.status;
+      }
+    });
+    return map;
+  }, [swapRequests]);
 
   const periodTotals = useMemo(() => {
     const totals = new Map<string, number>();
@@ -485,6 +593,44 @@ export default function EmployeeSchedulePage() {
     return Array.from(groups.values()).sort((a, b) => a.localeCompare(b));
   }, [futureShiftDates]);
 
+  const handleRequestSwap = (shift: ScheduleShiftRow) => {
+    setSwapShift(shift);
+    setSwapReason("");
+    setSwapExpiresHours("48");
+    setSwapSubmitError(null);
+    setShowSwapModal(true);
+  };
+
+  const submitSwapRequest = async () => {
+    if (!swapShift) return;
+    setSwapSubmitError(null);
+    const authToken =
+      pinToken === "manager"
+        ? (await supabase.auth.getSession()).data.session?.access_token ?? null
+        : pinToken;
+    if (!authToken) {
+      setSwapSubmitError("Unauthorized.");
+      return;
+    }
+    const hours = swapExpiresHours ? Number(swapExpiresHours) : null;
+    const res = await fetch("/api/requests/shift-swap", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({
+        scheduleShiftId: swapShift.id,
+        reason: swapReason || null,
+        expiresHours: Number.isFinite(hours) ? hours : null,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      setSwapSubmitError(json?.error ?? "Failed to submit swap request.");
+      return;
+    }
+    setShowSwapModal(false);
+    setRefreshKey(prev => prev + 1);
+  };
+
   // Check if user is manager for HomeHeader
   const [isManager, setIsManager] = useState(false);
   useEffect(() => {
@@ -536,6 +682,7 @@ export default function EmployeeSchedulePage() {
         </div>
 
         {error && <div className="banner banner-error text-sm">{error}</div>}
+        {swapError && <div className="banner banner-error text-sm">{swapError}</div>}
 
         <section className="space-y-3">
           <div className="text-sm uppercase tracking-widest text-white/40">Today</div>
@@ -581,6 +728,9 @@ export default function EmployeeSchedulePage() {
                 key={dateKey}
                 dateKey={dateKey}
                 shifts={shiftsByDate.get(dateKey) ?? []}
+                swapStatusByShift={swapStatusByShift}
+                onRequestSwap={handleRequestSwap}
+                canRequestSwap={pinToken !== "manager"}
               />
             ))}
           </div>
@@ -605,7 +755,14 @@ export default function EmployeeSchedulePage() {
                     {Array.from({ length: 7 }).map((_, idx) => {
                       const dateKey = addDays(weekKey, idx);
                       return (
-                        <WeekCard key={dateKey} dateKey={dateKey} shifts={shiftsByDate.get(dateKey) ?? []} />
+                        <WeekCard
+                          key={dateKey}
+                          dateKey={dateKey}
+                          shifts={shiftsByDate.get(dateKey) ?? []}
+                          swapStatusByShift={swapStatusByShift}
+                          onRequestSwap={handleRequestSwap}
+                          canRequestSwap={pinToken !== "manager"}
+                        />
                       );
                     })}
                   </div>
@@ -645,6 +802,51 @@ export default function EmployeeSchedulePage() {
         setProfileId={setProfileId}
         onAuthorized={setPinToken}
       />
+
+      {showSwapModal && swapShift && (
+        <div className="auth-modal-overlay">
+          <div className="card card-pad w-full max-w-md space-y-4 shadow-2xl">
+            <div className="space-y-1">
+              <h2 className="text-xl font-semibold">Request Swap</h2>
+              <p className="text-sm muted">
+                {swapShift.shift_date} · {formatTimeLabel(swapShift.scheduled_start)} - {formatTimeLabel(swapShift.scheduled_end)}
+              </p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm muted">Reason (optional)</label>
+              <textarea
+                className="textarea"
+                rows={3}
+                value={swapReason}
+                onChange={(e) => setSwapReason(e.target.value)}
+                placeholder="Provide context for the swap"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-sm muted">Expires In (hours)</label>
+              <input
+                className="input"
+                value={swapExpiresHours}
+                onChange={(e) => setSwapExpiresHours(e.target.value)}
+                placeholder="48"
+              />
+            </div>
+            {swapSubmitError && <div className="banner banner-error text-sm">{swapSubmitError}</div>}
+            <div className="flex gap-2">
+              <button className="btn-secondary w-full" onClick={() => setShowSwapModal(false)}>
+                Cancel
+              </button>
+              <button
+                className="btn-primary w-full"
+                onClick={submitSwapRequest}
+                disabled={swapLoading}
+              >
+                Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
