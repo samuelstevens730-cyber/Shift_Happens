@@ -1,26 +1,26 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { useState } from "react";
 
 type SwapRequest = {
   id: string;
   schedule_shift_id: string;
   store_id: string;
   requester_profile_id: string;
+  requester?: { id: string; name: string | null } | null;
+  schedule_shift?: {
+    id: string;
+    shift_date: string;
+    scheduled_start: string;
+    scheduled_end: string;
+    shift_type: string;
+    store_id: string;
+    stores?: { name: string } | null;
+  } | null;
   reason: string | null;
   status: string;
   created_at: string;
   expires_at: string;
-};
-
-type ScheduleShift = {
-  id: string;
-  shift_date: string;
-  scheduled_start: string;
-  scheduled_end: string;
-  shift_type: string;
-  store_id: string;
 };
 
 type Props = {
@@ -48,33 +48,7 @@ function formatTime(value?: string) {
 
 export default function SwapApprovalCard({ requests, token, onRefresh }: Props) {
   const pending = requests.filter(r => r.status === "pending");
-  const [shiftMap, setShiftMap] = useState<Record<string, ScheduleShift>>({});
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    const ids = Array.from(new Set(requests.filter(r => r.status === "pending").map(r => r.schedule_shift_id)));
-    if (ids.length === 0) {
-      setShiftMap({});
-      return;
-    }
-    (async () => {
-      const { data, error: shiftErr } = await supabase
-        .from("schedule_shifts")
-        .select("id, shift_date, scheduled_start, scheduled_end, shift_type, store_id")
-        .in("id", ids)
-        .returns<ScheduleShift[]>();
-      if (!alive) return;
-      if (shiftErr) {
-        setError(shiftErr.message);
-        return;
-      }
-      const map: Record<string, ScheduleShift> = {};
-      (data ?? []).forEach(s => { map[s.id] = s; });
-      setShiftMap(map);
-    })();
-    return () => { alive = false; };
-  }, [requests]);
 
   const handleApprove = async (id: string) => {
     if (!window.confirm("Approve this swap request?")) return;
@@ -128,14 +102,17 @@ export default function SwapApprovalCard({ requests, token, onRefresh }: Props) 
       {pending.length === 0 && <div className="text-sm muted">No pending swap requests.</div>}
       <div className="space-y-3">
         {pending.map(req => {
-          const shift = shiftMap[req.schedule_shift_id];
+          const shift = req.schedule_shift ?? null;
+          const requesterName = req.requester?.name ?? req.requester_profile_id;
+          const storeName = shift?.stores?.name ?? shift?.store_id ?? req.store_id;
           return (
             <div key={req.id} className="rounded-lg border border-white/10 bg-white/5 p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <div className="text-sm font-semibold">Request {req.id}</div>
                 <div className="text-xs muted">Expires {formatDate(req.expires_at)}</div>
               </div>
-              <div className="text-xs muted">Requester: {req.requester_profile_id}</div>
+              <div className="text-xs muted">Requester: {requesterName}</div>
+              <div className="text-xs muted">Store: {storeName}</div>
               <div className="text-sm">
                 {shift
                   ? `${formatDate(shift.shift_date)} · ${formatTime(shift.scheduled_start)} - ${formatTime(shift.scheduled_end)}`

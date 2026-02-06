@@ -8,6 +8,16 @@ type ShiftSwapRequestRow = {
   schedule_shift_id: string;
   store_id: string;
   requester_profile_id: string;
+  requester: { id: string; name: string | null } | null;
+  schedule_shift: {
+    id: string;
+    shift_date: string;
+    scheduled_start: string;
+    scheduled_end: string;
+    shift_type: string;
+    store_id: string;
+    stores?: { name: string } | null;
+  } | null;
   reason: string | null;
   status: string;
   selected_offer_id: string | null;
@@ -37,7 +47,7 @@ export async function GET(req: Request) {
   let query = supabaseServer
     .from("shift_swap_requests")
     .select(
-      "id, schedule_shift_id, store_id, requester_profile_id, reason, status, selected_offer_id, approved_by, approved_at, denial_reason, expires_at, nudge_sent_at, created_at, updated_at"
+      "id, schedule_shift_id, store_id, requester_profile_id, requester:requester_profile_id(id,name), schedule_shift:schedule_shift_id(id,shift_date,scheduled_start,scheduled_end,shift_type,store_id,stores(name)), reason, status, selected_offer_id, approved_by, approved_at, denial_reason, expires_at, nudge_sent_at, created_at, updated_at"
     );
 
   if (auth.authType === "manager") {

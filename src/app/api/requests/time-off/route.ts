@@ -6,7 +6,9 @@ import { submitTimeOffRequestSchema } from "@/schemas/requests";
 type TimeOffRequestRow = {
   id: string;
   store_id: string;
+  store: { id: string; name: string | null } | null;
   profile_id: string;
+  profile: { id: string; name: string | null } | null;
   start_date: string;
   end_date: string;
   reason: string | null;
@@ -36,7 +38,7 @@ export async function GET(req: Request) {
   let query = supabaseServer
     .from("time_off_requests")
     .select(
-      "id, store_id, profile_id, start_date, end_date, reason, status, reviewed_by, reviewed_at, denial_reason, created_at, updated_at"
+      "id, store_id, store:store_id(id,name), profile_id, profile:profile_id(id,name), start_date, end_date, reason, status, reviewed_by, reviewed_at, denial_reason, created_at, updated_at"
     );
 
   if (auth.authType === "manager") {

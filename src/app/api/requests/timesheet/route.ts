@@ -7,7 +7,9 @@ type TimesheetRequestRow = {
   id: string;
   shift_id: string;
   store_id: string;
+  store: { id: string; name: string | null } | null;
   requester_profile_id: string;
+  requester: { id: string; name: string | null } | null;
   requested_started_at: string | null;
   requested_ended_at: string | null;
   original_started_at: string;
@@ -39,7 +41,7 @@ export async function GET(req: Request) {
   let query = supabaseServer
     .from("timesheet_change_requests")
     .select(
-      "id, shift_id, store_id, requester_profile_id, requested_started_at, requested_ended_at, original_started_at, original_ended_at, reason, status, reviewed_by, reviewed_at, denial_reason, created_at, updated_at"
+      "id, shift_id, store_id, store:store_id(id,name), requester_profile_id, requester:requester_profile_id(id,name), requested_started_at, requested_ended_at, original_started_at, original_ended_at, reason, status, reviewed_by, reviewed_at, denial_reason, created_at, updated_at"
     );
 
   if (auth.authType === "manager") {

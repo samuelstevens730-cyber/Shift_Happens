@@ -15,6 +15,16 @@ type SwapRequest = {
   schedule_shift_id: string;
   store_id: string;
   requester_profile_id: string;
+  requester?: { id: string; name: string | null } | null;
+  schedule_shift?: {
+    id: string;
+    shift_date: string;
+    scheduled_start: string;
+    scheduled_end: string;
+    shift_type: string;
+    store_id: string;
+    stores?: { name: string } | null;
+  } | null;
   reason: string | null;
   status: string;
   created_at: string;
@@ -24,7 +34,9 @@ type SwapRequest = {
 type TimeOffRequest = {
   id: string;
   store_id: string;
+  store?: { id: string; name: string | null } | null;
   profile_id: string;
+  profile?: { id: string; name: string | null } | null;
   start_date: string;
   end_date: string;
   reason: string | null;
@@ -36,7 +48,9 @@ type TimesheetRequest = {
   id: string;
   shift_id: string;
   store_id: string;
+  store?: { id: string; name: string | null } | null;
   requester_profile_id: string;
+  requester?: { id: string; name: string | null } | null;
   requested_started_at: string | null;
   requested_ended_at: string | null;
   original_started_at: string;

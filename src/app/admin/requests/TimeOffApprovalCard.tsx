@@ -6,6 +6,8 @@ type TimeOffRequest = {
   id: string;
   store_id: string;
   profile_id: string;
+  store?: { id: string; name: string | null } | null;
+  profile?: { id: string; name: string | null } | null;
   start_date: string;
   end_date: string;
   reason: string | null;
@@ -86,7 +88,8 @@ export default function TimeOffApprovalCard({ requests, token, onRefresh }: Prop
               <div className="text-sm font-semibold">Request {req.id}</div>
               <div className="text-xs muted">{formatDate(req.start_date)} - {formatDate(req.end_date)}</div>
             </div>
-            <div className="text-xs muted">Employee: {req.profile_id}</div>
+            <div className="text-xs muted">Employee: {req.profile?.name ?? req.profile_id}</div>
+            <div className="text-xs muted">Store: {req.store?.name ?? req.store_id}</div>
             {req.reason && <div className="text-sm">{req.reason}</div>}
             <div className="flex flex-wrap gap-2 pt-1">
               <button className="btn-primary px-3 py-2 text-sm" onClick={() => handleApprove(req.id)}>

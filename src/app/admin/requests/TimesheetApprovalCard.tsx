@@ -7,6 +7,8 @@ type TimesheetRequest = {
   shift_id: string;
   store_id: string;
   requester_profile_id: string;
+  store?: { id: string; name: string | null } | null;
+  requester?: { id: string; name: string | null } | null;
   requested_started_at: string | null;
   requested_ended_at: string | null;
   original_started_at: string;
@@ -90,7 +92,8 @@ export default function TimesheetApprovalCard({ requests, token, onRefresh }: Pr
               <div className="text-sm font-semibold">Request {req.id}</div>
               <div className="text-xs muted">{formatDateTime(req.created_at)}</div>
             </div>
-            <div className="text-xs muted">Employee: {req.requester_profile_id}</div>
+            <div className="text-xs muted">Employee: {req.requester?.name ?? req.requester_profile_id}</div>
+            <div className="text-xs muted">Store: {req.store?.name ?? req.store_id}</div>
             <div className="text-xs muted">Shift: {req.shift_id}</div>
             <div className="text-sm">
               <div>Original: {formatDateTime(req.original_started_at)} → {formatDateTime(req.original_ended_at)}</div>
