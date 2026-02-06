@@ -241,6 +241,8 @@ function HomePageInner() {
 
     let alive = true;
     async function fetchMessages() {
+      const pinToken = sessionStorage.getItem(PIN_TOKEN_KEY);
+      const client = pinToken ? createEmployeeSupabase(pinToken) : supabase;
       let profileId = sessionStorage.getItem(PIN_PROFILE_KEY);
       if (!profileId && hasAdminAuth) {
         const { data: userData } = await supabase.auth.getUser();
@@ -255,7 +257,7 @@ function HomePageInner() {
       }
       if (!profileId) return;
 
-      const { data } = await supabase
+      const { data, error } = await client
         .from("shift_assignments")
         .select("id, message, created_at")
         .eq("type", "message")
@@ -265,6 +267,10 @@ function HomePageInner() {
         .limit(1);
 
       if (!alive) return;
+      if (error) {
+        console.error("Failed to load messages:", error);
+        return;
+      }
       if (data) {
         setEmployeeMessages(
           (data ?? []).map((row) => ({
@@ -458,7 +464,12 @@ function HomePageInner() {
 
   // Dismiss employee message
   const dismissMessage = async (messageId: string) => {
-    await supabase.from("shift_assignments").update({ acknowledged_at: new Date().toISOString() }).eq("id", messageId);
+    const pinToken = sessionStorage.getItem(PIN_TOKEN_KEY);
+    const client = pinToken ? createEmployeeSupabase(pinToken) : supabase;
+    await client
+      .from("shift_assignments")
+      .update({ acknowledged_at: new Date().toISOString() })
+      .eq("id", messageId);
     setEmployeeMessages((prev) => prev.filter((m) => m.id !== messageId));
   };
 
