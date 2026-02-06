@@ -95,6 +95,7 @@ declare
   v_store_id uuid;
   v_status public.request_status;
   v_actor_store_match boolean;
+  v_offer_label text;
 begin
   select r.requester_profile_id, r.store_id, r.status
     into v_requester_profile_id, v_store_id, v_status
@@ -169,6 +170,19 @@ begin
     p_actor_profile_id
   );
 
+  v_offer_label := case when p_offer_type = 'cover' then 'cover' else 'swap' end;
+
+  insert into public.shift_assignments (
+    type,
+    message,
+    target_profile_id
+  )
+  values (
+    'message',
+    'New ' || v_offer_label || ' offer received for your shift swap request',
+    v_requester_profile_id
+  );
+
   return v_offer_id;
 end;
 $$;
@@ -189,11 +203,12 @@ set search_path = public
 as $$
 declare
   v_requester_profile_id uuid;
+  v_store_id uuid;
   v_status public.request_status;
   v_offer_ok boolean;
 begin
-  select r.requester_profile_id, r.status
-    into v_requester_profile_id, v_status
+  select r.requester_profile_id, r.store_id, r.status
+    into v_requester_profile_id, v_store_id, v_status
   from public.shift_swap_requests r
   where r.id = p_request_id
   for update;
@@ -247,6 +262,17 @@ begin
     p_request_id,
     'offer_selected',
     p_actor_profile_id
+  );
+
+  insert into public.shift_assignments (
+    type,
+    message,
+    target_store_id
+  )
+  values (
+    'message',
+    'Swap request pending approval',
+    v_store_id
   );
 
   return true;
