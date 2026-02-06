@@ -14,6 +14,23 @@ type SwapRequest = {
   created_at: string;
 };
 
+type OpenSwapRequest = {
+  id: string;
+  schedule_shift_id: string;
+  requester_profile_id: string;
+  requester?: { id: string; name: string | null } | null;
+  schedule_shift?: {
+    id: string;
+    shift_date: string;
+    scheduled_start: string;
+    scheduled_end: string;
+    stores?: { name: string }[] | null;
+  } | null;
+  reason: string | null;
+  status: string;
+  expires_at: string;
+};
+
 type Props = {
   requests: SwapRequest[];
   onRefresh: () => void;
@@ -59,6 +76,11 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [shiftOptions, setShiftOptions] = useState<ScheduleShiftOption[]>([]);
   const [shiftError, setShiftError] = useState<string | null>(null);
+  const [openSwaps, setOpenSwaps] = useState<OpenSwapRequest[]>([]);
+  const [offerError, setOfferError] = useState<string | null>(null);
+  const [offerLoading, setOfferLoading] = useState<string | null>(null);
+  const [offerTypeById, setOfferTypeById] = useState<Record<string, "cover" | "swap">>({});
+  const [offerShiftById, setOfferShiftById] = useState<Record<string, string>>({});
 
   const openRequests = requests.filter(r => r.status === "open" || r.status === "pending");
 
@@ -125,6 +147,60 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
     setExpiresHours("48");
     setShowForm(false);
     onRefresh();
+  };
+
+  const fetchOpenSwaps = async () => {
+    setOfferError(null);
+    const pinToken = typeof window !== "undefined" ? sessionStorage.getItem("sh_pin_token") : null;
+    const token = pinToken ?? (await supabase.auth.getSession()).data.session?.access_token ?? null;
+    if (!token) return;
+    const res = await fetch("/api/requests/shift-swap/open", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      setOfferError(json?.error ?? "Failed to load open swaps.");
+      return;
+    }
+    setOpenSwaps(json?.rows ?? []);
+  };
+
+  useEffect(() => {
+    fetchOpenSwaps();
+  }, []);
+
+  const handleOffer = async (req: OpenSwapRequest) => {
+    const type = offerTypeById[req.id] ?? "cover";
+    const swapShiftId = offerShiftById[req.id];
+    if (type === "swap" && !swapShiftId) {
+      setOfferError("Select a shift to swap.");
+      return;
+    }
+    setOfferLoading(req.id);
+    setOfferError(null);
+    const pinToken = typeof window !== "undefined" ? sessionStorage.getItem("sh_pin_token") : null;
+    const token = pinToken ?? (await supabase.auth.getSession()).data.session?.access_token ?? null;
+    if (!token) {
+      setOfferError("Unauthorized.");
+      setOfferLoading(null);
+      return;
+    }
+    const res = await fetch(`/api/requests/shift-swap/${req.id}/offers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        offerType: type,
+        swapScheduleShiftId: type === "swap" ? swapShiftId : null,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      setOfferError(json?.error ?? "Failed to submit offer.");
+      setOfferLoading(null);
+      return;
+    }
+    setOfferLoading(null);
+    fetchOpenSwaps();
   };
 
   return (
@@ -197,6 +273,72 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
             <div className="text-xs muted">Created {formatDate(req.created_at)}</div>
           </div>
         ))}
+      </div>
+
+      <div className="border-t border-white/10 pt-4 space-y-3">
+        <div>
+          <h3 className="text-base font-semibold">Cover or Swap</h3>
+          <p className="text-sm muted">Offer to cover another employee’s shift or swap one of yours.</p>
+        </div>
+        {offerError && <div className="banner banner-error text-sm">{offerError}</div>}
+        {openSwaps.length === 0 && <div className="text-sm muted">No open swap requests from others.</div>}
+        <div className="space-y-3">
+          {openSwaps.map(req => {
+            const shift = req.schedule_shift;
+            const shiftLabel = shift
+              ? `${formatDateKey(shift.shift_date)} · ${formatTime(shift.scheduled_start)}-${formatTime(shift.scheduled_end)} · ${shift.stores?.[0]?.name ?? "Store"}`
+              : "Scheduled shift";
+            const requesterName = req.requester?.name ?? "Employee";
+            const offerType = offerTypeById[req.id] ?? "cover";
+            return (
+              <div key={req.id} className="rounded-lg border border-white/10 bg-white/5 p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-semibold">{requesterName}</div>
+                  <div className="text-xs muted">Expires {formatDate(req.expires_at)}</div>
+                </div>
+                <div className="text-sm">{shiftLabel}</div>
+                {req.reason && <div className="text-sm muted">{req.reason}</div>}
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="text-xs muted">Offer Type</label>
+                  <select
+                    className="select"
+                    value={offerType}
+                    onChange={(e) =>
+                      setOfferTypeById(prev => ({ ...prev, [req.id]: e.target.value as "cover" | "swap" }))
+                    }
+                  >
+                    <option value="cover">Cover</option>
+                    <option value="swap">Swap</option>
+                  </select>
+                </div>
+                {offerType === "swap" && (
+                  <div className="space-y-1">
+                    <label className="text-xs muted">Select Your Shift</label>
+                    <select
+                      className="select"
+                      value={offerShiftById[req.id] ?? ""}
+                      onChange={(e) => setOfferShiftById(prev => ({ ...prev, [req.id]: e.target.value }))}
+                    >
+                      <option value="">Choose shift</option>
+                      {shiftOptions.map(shiftOpt => (
+                        <option key={shiftOpt.id} value={shiftOpt.id}>
+                          {shiftLabelById.get(shiftOpt.id)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <button
+                  className="btn-primary w-full"
+                  onClick={() => handleOffer(req)}
+                  disabled={offerLoading === req.id}
+                >
+                  {offerLoading === req.id ? "Submitting..." : "Submit Offer"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );
