@@ -417,14 +417,6 @@ begin
     ('message', 'Your swap request was approved', v_request.requester_profile_id),
     ('message', 'Your swap offer was approved', v_offer.offerer_profile_id);
 
-  insert into public.employee_messages (
-    profile_id,
-    content
-  )
-  values
-    (v_request.requester_profile_id, 'Your swap request was approved'),
-    (v_offer.offerer_profile_id, 'Your swap offer was approved');
-
   return true;
 end;
 $$;

@@ -256,15 +256,24 @@ function HomePageInner() {
       if (!profileId) return;
 
       const { data } = await supabase
-        .from("employee_messages")
-        .select("id, content, created_at")
-        .eq("profile_id", profileId)
-        .eq("is_read", false)
+        .from("shift_assignments")
+        .select("id, message, created_at")
+        .eq("type", "message")
+        .eq("target_profile_id", profileId)
+        .is("acknowledged_at", null)
         .order("created_at", { ascending: false })
         .limit(1);
 
       if (!alive) return;
-      if (data) setEmployeeMessages(data);
+      if (data) {
+        setEmployeeMessages(
+          (data ?? []).map((row) => ({
+            id: row.id,
+            content: row.message,
+            created_at: row.created_at,
+          }))
+        );
+      }
     }
 
     fetchMessages();
@@ -449,7 +458,7 @@ function HomePageInner() {
 
   // Dismiss employee message
   const dismissMessage = async (messageId: string) => {
-    await supabase.from("employee_messages").update({ is_read: true }).eq("id", messageId);
+    await supabase.from("shift_assignments").update({ acknowledged_at: new Date().toISOString() }).eq("id", messageId);
     setEmployeeMessages((prev) => prev.filter((m) => m.id !== messageId));
   };
 
