@@ -230,18 +230,7 @@ CRON ROUTES:
 POST /api/cron/expire-requests - verify CRON_SECRET, call process_expired_requests()
 POST /api/cron/send-nudges - verify CRON_SECRET, call send_selection_nudges()
 
-VERCEL.JSON:
-json{
-  "crons": [
-    { "path": "/api/cron/expire-requests", "schedule": "*/15 * * * *" },
-    { "path": "/api/cron/send-nudges", "schedule": "0 */6 * * *" }
-  ]
-}
-DONE WHEN:
 
-Both routes secured with CRON_SECRET
-vercel.json configured correctly
-Nudges are idempotent (check nudge_sent_at before inserting)
 
 
 Execution Order
