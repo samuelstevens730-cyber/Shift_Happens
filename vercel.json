@@ -1,6 +1,1 @@
-{
-  "crons": [
-    { "path": "/api/cron/expire-requests?secret=$CRON_SECRET", "schedule": "*/15 * * * *" },
-    { "path": "/api/cron/send-nudges?secret=$CRON_SECRET", "schedule": "0 */6 * * *" }
-  ]
-}
+{}
