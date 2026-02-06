@@ -574,6 +574,12 @@ function HomePageInner() {
                 Message from Management
               </h3>
               <p className="text-sm text-[var(--text)]">{message.content}</p>
+              <Link
+                href="/dashboard/requests?tab=open"
+                className="text-xs text-[var(--green)] underline mt-2 inline-block"
+              >
+                View offers
+              </Link>
               <button
                 onClick={() => dismissMessage(message.id)}
                 className="absolute top-2 right-2 text-xs text-[var(--muted)] hover:text-[var(--text)]"

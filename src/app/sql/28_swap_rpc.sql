@@ -283,6 +283,95 @@ revoke all on function public.select_shift_swap_offer(uuid, uuid, uuid) from pub
 revoke all on function public.select_shift_swap_offer(uuid, uuid, uuid) from anon;
 grant execute on function public.select_shift_swap_offer(uuid, uuid, uuid) to authenticated, service_role;
 
+create or replace function public.decline_shift_swap_offer(
+  p_actor_profile_id uuid,
+  p_request_id uuid,
+  p_offer_id uuid
+)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_requester_profile_id uuid;
+  v_status public.request_status;
+  v_offer_ok boolean;
+  v_offerer_profile_id uuid;
+begin
+  select r.requester_profile_id, r.status
+    into v_requester_profile_id, v_status
+  from public.shift_swap_requests r
+  where r.id = p_request_id
+  for update;
+
+  if v_status is null then
+    raise exception 'Swap request not found';
+  end if;
+
+  if v_requester_profile_id <> p_actor_profile_id then
+    raise exception 'Actor does not own this request';
+  end if;
+
+  if v_status <> 'open' then
+    raise exception 'Swap request is not open';
+  end if;
+
+  select exists (
+    select 1
+    from public.shift_swap_offers o
+    where o.id = p_offer_id
+      and o.request_id = p_request_id
+      and o.is_selected = false
+  ) into v_offer_ok;
+
+  if not v_offer_ok then
+    raise exception 'Offer does not belong to request or is already selected';
+  end if;
+
+  select o.offerer_profile_id
+    into v_offerer_profile_id
+  from public.shift_swap_offers o
+  where o.id = p_offer_id
+    and o.request_id = p_request_id;
+
+  update public.shift_swap_offers
+  set is_withdrawn = true
+  where id = p_offer_id
+    and request_id = p_request_id;
+
+  insert into public.request_audit_logs (
+    request_type,
+    request_id,
+    action,
+    actor_profile_id
+  )
+  values (
+    'shift_swap',
+    p_request_id,
+    'offer_selected',
+    p_actor_profile_id
+  );
+
+  insert into public.shift_assignments (
+    type,
+    message,
+    target_profile_id
+  )
+  values (
+    'message',
+    'Your swap offer was denied',
+    v_offerer_profile_id
+  );
+
+  return true;
+end;
+$$;
+
+revoke all on function public.decline_shift_swap_offer(uuid, uuid, uuid) from public;
+revoke all on function public.decline_shift_swap_offer(uuid, uuid, uuid) from anon;
+grant execute on function public.decline_shift_swap_offer(uuid, uuid, uuid) to authenticated, service_role;
+
 create or replace function public.approve_shift_swap_or_cover(
   p_actor_auth_user_id uuid,
   p_request_id uuid

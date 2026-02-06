@@ -8,6 +8,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import HomeHeader from "@/components/HomeHeader";
 import SwapRequestCard from "./SwapRequestCard";
+import OpenRequestsPanel from "./OpenRequestsPanel";
 import TimeOffRequestForm from "./TimeOffRequestForm";
 import TimesheetCorrectionForm from "./TimesheetCorrectionForm";
 import { useShiftSwapRequests } from "@/hooks/useShiftSwapRequests";
@@ -16,6 +17,7 @@ import { useTimesheetRequests } from "@/hooks/useTimesheetRequests";
 
 const TABS = [
   { id: "swaps", label: "Swaps" },
+  { id: "open", label: "Open Requests" },
   { id: "timeoff", label: "Time Off" },
   { id: "timesheets", label: "Timesheets" },
 ] as const;
@@ -77,6 +79,14 @@ function RequestsContent() {
         <div className="space-y-4">
           {swaps.error && <div className="banner banner-error text-sm">{swaps.error}</div>}
           <SwapRequestCard requests={swaps.rows} onRefresh={swaps.refresh} />
+        </div>
+      );
+    }
+    if (activeTab === "open") {
+      return (
+        <div className="space-y-4">
+          {swaps.error && <div className="banner banner-error text-sm">{swaps.error}</div>}
+          <OpenRequestsPanel requests={swaps.rows} onRefresh={swaps.refresh} />
         </div>
       );
     }
