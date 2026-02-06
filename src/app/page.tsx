@@ -568,7 +568,7 @@ function HomePageInner() {
 
           {/* REQUESTS */}
           {showRequests ? (
-            <Link href="/dashboard/shifts" className="bento-card bento-requests">
+            <Link href="/dashboard/requests" className="bento-card bento-requests">
               <div className="flex flex-col items-center justify-center gap-3">
                 <FileText className="w-10 h-10 md:w-12 md:h-12 text-amber-400" strokeWidth={1.5} />
                 <span className="bento-card-title">REQUESTS</span>

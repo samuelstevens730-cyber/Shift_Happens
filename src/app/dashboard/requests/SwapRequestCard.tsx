@@ -101,9 +101,20 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
     (async () => {
       setShiftError(null);
       const pinToken = typeof window !== "undefined" ? sessionStorage.getItem("sh_pin_token") : null;
-      const profileId = typeof window !== "undefined" ? sessionStorage.getItem("sh_pin_profile_id") : null;
+      let profileId = typeof window !== "undefined" ? sessionStorage.getItem("sh_pin_profile_id") : null;
 
       const client = pinToken ? createEmployeeSupabase(pinToken) : supabase;
+      if (!profileId) {
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData.user) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("id")
+            .eq("auth_user_id", userData.user.id)
+            .maybeSingle();
+          profileId = profile?.id ?? null;
+        }
+      }
       if (!profileId) return;
 
       const today = new Date();

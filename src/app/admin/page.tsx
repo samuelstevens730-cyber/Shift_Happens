@@ -94,6 +94,16 @@ export default function AdminIndex() {
         </header>
 
         <section className="grid gap-4 sm:grid-cols-2">
+          {/* Requests - approval queue for swaps, time off, timesheets */}
+          <Link href="/admin/requests" className="tile">
+            <div className="flex items-center gap-2">
+              <span className="tile-dot" />
+              <div className="text-lg font-medium">Requests</div>
+            </div>
+            <p className="mt-2 text-sm muted">
+              Review swap, time off, and timesheet requests.
+            </p>
+          </Link>
           {/* Payroll - export shift data for payroll processing */}
           <Link href="/admin/payroll" className="tile">
             <div className="flex items-center gap-2">

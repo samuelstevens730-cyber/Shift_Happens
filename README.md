@@ -54,6 +54,9 @@ Create a `.env.local` file in the root directory:
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+# Cron (Vercel scheduled jobs)
+CRON_SECRET=your-long-random-secret
 ```
 
 **Where to find these values:**
@@ -222,6 +225,7 @@ src/
    - `NEXT_PUBLIC_SUPABASE_URL`
    - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
+   - `CRON_SECRET`
 4. Deploy
 
 ### Production Checklist
@@ -231,6 +235,7 @@ src/
 - [ ] Verify Row-Level Security policies are enabled
 - [ ] Test password reset flow with production URLs (⚠️ Password resets are handled by the application. Supabase-generated reset emails must include /auth/reset as an allowed redirect URL or users will be redirected to the home page without a token.)
 - [ ] Generate QR codes for each store's clock-in URL
+- [ ] Set `CRON_SECRET` in Vercel. Cron paths include `?secret=$CRON_SECRET` in `vercel.json`.
 
 ## Future Roadmap  
 
