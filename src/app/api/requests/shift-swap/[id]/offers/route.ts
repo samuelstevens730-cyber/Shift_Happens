@@ -87,6 +87,9 @@ export async function POST(
   if (body.offerType !== "cover" && body.offerType !== "swap") {
     return NextResponse.json({ error: "Invalid offerType." }, { status: 400 });
   }
+  if (body.offerType === "swap" && !body.swapScheduleShiftId) {
+    return NextResponse.json({ error: "swapScheduleShiftId is required for swap offers." }, { status: 400 });
+  }
 
   const { data, error } = await supabaseServer.rpc("submit_shift_swap_offer", {
     p_actor_profile_id: auth.profileId,
