@@ -31,32 +31,42 @@ export default function TimeOffApprovalCard({ requests, token, onRefresh }: Prop
 
   const handleApprove = async (id: string) => {
     if (!window.confirm("Approve this time off request?")) return;
-    const res = await fetch(`/api/requests/time-off/${id}/approve`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      setError(json?.error ?? "Failed to approve time off.");
-      return;
+    setError(null);
+    try {
+      const res = await fetch(`/api/requests/time-off/${id}/approve`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json?.error ?? "Failed to approve time off.");
+        return;
+      }
+      onRefresh();
+    } catch {
+      setError("Network error. Please try again.");
     }
-    onRefresh();
   };
 
   const handleDeny = async (id: string) => {
     const reason = window.prompt("Optional denial reason:", "");
     if (reason === null) return;
-    const res = await fetch(`/api/requests/time-off/${id}/deny`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ reason }),
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      setError(json?.error ?? "Failed to deny time off.");
-      return;
+    setError(null);
+    try {
+      const res = await fetch(`/api/requests/time-off/${id}/deny`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ reason }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json?.error ?? "Failed to deny time off.");
+        return;
+      }
+      onRefresh();
+    } catch {
+      setError("Network error. Please try again.");
     }
-    onRefresh();
   };
 
   return (

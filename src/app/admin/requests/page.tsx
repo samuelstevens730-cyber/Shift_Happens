@@ -3,7 +3,7 @@
  */
 "use client";
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import SwapApprovalCard from "./SwapApprovalCard";
@@ -67,7 +67,7 @@ function AdminRequestsContent() {
   const [timeOffRequests, setTimeOffRequests] = useState<TimeOffRequest[]>([]);
   const [timesheetRequests, setTimesheetRequests] = useState<TimesheetRequest[]>([]);
 
-  const refreshAll = async (authToken: string) => {
+  const refreshAll = useCallback(async (authToken: string) => {
     const [swapRes, timeRes, tsRes] = await Promise.all([
       fetch("/api/requests/shift-swap", { headers: { Authorization: `Bearer ${authToken}` } }),
       fetch("/api/requests/time-off", { headers: { Authorization: `Bearer ${authToken}` } }),
@@ -85,7 +85,7 @@ function AdminRequestsContent() {
     setSwapRequests(swapJson?.rows ?? []);
     setTimeOffRequests(timeJson?.rows ?? []);
     setTimesheetRequests(tsJson?.rows ?? []);
-  };
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -113,7 +113,7 @@ function AdminRequestsContent() {
       }
     })();
     return () => { alive = false; };
-  }, [router]);
+  }, [router, refreshAll]);
 
   const handleTabChange = (next: TabId) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -148,7 +148,7 @@ function AdminRequestsContent() {
         onRefresh={() => refreshAll(token)}
       />
     );
-  }, [activeTab, swapRequests, timeOffRequests, timesheetRequests, token]);
+  }, [activeTab, swapRequests, timeOffRequests, timesheetRequests, token, refreshAll]);
 
   if (loading) return <div className="app-shell">Loading...</div>;
   if (error) return <div className="app-shell"><div className="banner banner-error">{error}</div></div>;

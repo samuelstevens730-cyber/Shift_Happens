@@ -35,32 +35,42 @@ export default function TimesheetApprovalCard({ requests, token, onRefresh }: Pr
 
   const handleApprove = async (id: string) => {
     if (!window.confirm("Approve this timesheet correction?")) return;
-    const res = await fetch(`/api/requests/timesheet/${id}/approve`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      setError(json?.error ?? "Failed to approve timesheet.");
-      return;
+    setError(null);
+    try {
+      const res = await fetch(`/api/requests/timesheet/${id}/approve`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json?.error ?? "Failed to approve timesheet.");
+        return;
+      }
+      onRefresh();
+    } catch {
+      setError("Network error. Please try again.");
     }
-    onRefresh();
   };
 
   const handleDeny = async (id: string) => {
     const reason = window.prompt("Optional denial reason:", "");
     if (reason === null) return;
-    const res = await fetch(`/api/requests/timesheet/${id}/deny`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ reason }),
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      setError(json?.error ?? "Failed to deny timesheet.");
-      return;
+    setError(null);
+    try {
+      const res = await fetch(`/api/requests/timesheet/${id}/deny`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ reason }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json?.error ?? "Failed to deny timesheet.");
+        return;
+      }
+      onRefresh();
+    } catch {
+      setError("Network error. Please try again.");
     }
-    onRefresh();
   };
 
   return (

@@ -30,7 +30,7 @@ type Props = {
 };
 
 function formatDate(value: string) {
-  const dt = new Date(`${value}T00:00:00`);
+  const dt = value.includes("T") ? new Date(value) : new Date(`${value}T00:00:00`);
   if (Number.isNaN(dt.getTime())) return value;
   return dt.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
@@ -53,7 +53,7 @@ export default function SwapApprovalCard({ requests, token, onRefresh }: Props) 
 
   useEffect(() => {
     let alive = true;
-    const ids = Array.from(new Set(pending.map(r => r.schedule_shift_id)));
+    const ids = Array.from(new Set(requests.filter(r => r.status === "pending").map(r => r.schedule_shift_id)));
     if (ids.length === 0) {
       setShiftMap({});
       return;
@@ -74,36 +74,46 @@ export default function SwapApprovalCard({ requests, token, onRefresh }: Props) 
       setShiftMap(map);
     })();
     return () => { alive = false; };
-  }, [pending]);
+  }, [requests]);
 
   const handleApprove = async (id: string) => {
     if (!window.confirm("Approve this swap request?")) return;
-    const res = await fetch(`/api/requests/shift-swap/${id}/approve`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      setError(json?.error ?? "Failed to approve swap.");
-      return;
+    setError(null);
+    try {
+      const res = await fetch(`/api/requests/shift-swap/${id}/approve`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json?.error ?? "Failed to approve swap.");
+        return;
+      }
+      onRefresh();
+    } catch {
+      setError("Network error. Please try again.");
     }
-    onRefresh();
   };
 
   const handleDeny = async (id: string) => {
     const reason = window.prompt("Optional denial reason:", "");
     if (reason === null) return;
-    const res = await fetch(`/api/requests/shift-swap/${id}/deny`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ reason }),
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      setError(json?.error ?? "Failed to deny swap.");
-      return;
+    setError(null);
+    try {
+      const res = await fetch(`/api/requests/shift-swap/${id}/deny`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ reason }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setError(json?.error ?? "Failed to deny swap.");
+        return;
+      }
+      onRefresh();
+    } catch {
+      setError("Network error. Please try again.");
     }
-    onRefresh();
   };
 
   return (
