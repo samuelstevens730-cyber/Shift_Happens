@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { authenticateShiftRequest } from "@/lib/shiftAuth";
+import { submitSwapRequestSchema } from "@/schemas/requests";
 
 type ShiftSwapRequestRow = {
   id: string;
@@ -62,16 +63,17 @@ export async function POST(req: Request) {
 
   const auth = authResult.auth;
   const body = (await req.json().catch(() => null)) as SubmitBody | null;
-
-  if (!body?.scheduleShiftId) {
-    return NextResponse.json({ error: "Missing scheduleShiftId." }, { status: 400 });
+  const parsed = submitSwapRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
   }
+  const payload = parsed.data;
 
   const { data, error } = await supabaseServer.rpc("submit_shift_swap_request", {
     p_actor_profile_id: auth.profileId,
-    p_schedule_shift_id: body.scheduleShiftId,
-    p_reason: body.reason ?? null,
-    p_expires_hours: body.expiresHours ?? undefined,
+    p_schedule_shift_id: payload.scheduleShiftId,
+    p_reason: payload.reason ?? null,
+    p_expires_hours: payload.expiresHours ?? undefined,
   });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });

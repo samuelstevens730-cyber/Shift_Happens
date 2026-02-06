@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { authenticateShiftRequest } from "@/lib/shiftAuth";
+import { submitTimesheetChangeSchema } from "@/schemas/requests";
 
 type TimesheetRequestRow = {
   id: string;
@@ -65,16 +66,18 @@ export async function POST(req: Request) {
 
   const auth = authResult.auth;
   const body = (await req.json().catch(() => null)) as SubmitBody | null;
-
-  if (!body?.shiftId) return NextResponse.json({ error: "Missing shiftId." }, { status: 400 });
-  if (!body.reason) return NextResponse.json({ error: "Missing reason." }, { status: 400 });
+  const parsed = submitTimesheetChangeSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
+  }
+  const payload = parsed.data;
 
   const { data, error } = await supabaseServer.rpc("submit_timesheet_change_request", {
     p_actor_profile_id: auth.profileId,
-    p_shift_id: body.shiftId,
-    p_requested_started_at: body.requestedStartedAt ?? null,
-    p_requested_ended_at: body.requestedEndedAt ?? null,
-    p_reason: body.reason,
+    p_shift_id: payload.shiftId,
+    p_requested_started_at: payload.requestedStartedAt ?? null,
+    p_requested_ended_at: payload.requestedEndedAt ?? null,
+    p_reason: payload.reason,
   });
 
   if (error) {

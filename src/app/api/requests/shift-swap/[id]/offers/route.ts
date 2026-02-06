@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { authenticateShiftRequest } from "@/lib/shiftAuth";
+import { submitSwapOfferSchema } from "@/schemas/requests";
 
 type OfferRow = {
   id: string;
@@ -81,22 +82,23 @@ export async function POST(
   if (!requestId) return NextResponse.json({ error: "Missing request id." }, { status: 400 });
 
   const body = (await req.json().catch(() => null)) as OfferBody | null;
-  if (!body?.offerType) {
-    return NextResponse.json({ error: "Missing offerType." }, { status: 400 });
+  const parsed = submitSwapOfferSchema.safeParse({
+    requestId,
+    offerType: body?.offerType,
+    swapScheduleShiftId: body?.swapScheduleShiftId ?? null,
+    note: body?.note ?? null,
+  });
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
   }
-  if (body.offerType !== "cover" && body.offerType !== "swap") {
-    return NextResponse.json({ error: "Invalid offerType." }, { status: 400 });
-  }
-  if (body.offerType === "swap" && !body.swapScheduleShiftId) {
-    return NextResponse.json({ error: "swapScheduleShiftId is required for swap offers." }, { status: 400 });
-  }
+  const payload = parsed.data;
 
   const { data, error } = await supabaseServer.rpc("submit_shift_swap_offer", {
     p_actor_profile_id: auth.profileId,
-    p_request_id: requestId,
-    p_offer_type: body.offerType,
-    p_swap_schedule_shift_id: body.swapScheduleShiftId ?? null,
-    p_note: body.note ?? null,
+    p_request_id: payload.requestId,
+    p_offer_type: payload.offerType,
+    p_swap_schedule_shift_id: payload.swapScheduleShiftId ?? null,
+    p_note: payload.note ?? null,
   });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });

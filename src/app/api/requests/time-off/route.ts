@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { authenticateShiftRequest } from "@/lib/shiftAuth";
+import { submitTimeOffRequestSchema } from "@/schemas/requests";
 
 type TimeOffRequestRow = {
   id: string;
@@ -62,17 +63,18 @@ export async function POST(req: Request) {
 
   const auth = authResult.auth;
   const body = (await req.json().catch(() => null)) as SubmitBody | null;
-
-  if (!body?.storeId) return NextResponse.json({ error: "Missing storeId." }, { status: 400 });
-  if (!body.startDate) return NextResponse.json({ error: "Missing startDate." }, { status: 400 });
-  if (!body.endDate) return NextResponse.json({ error: "Missing endDate." }, { status: 400 });
+  const parsed = submitTimeOffRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
+  }
+  const payload = parsed.data;
 
   const { data, error } = await supabaseServer.rpc("submit_time_off_request", {
     p_actor_profile_id: auth.profileId,
-    p_store_id: body.storeId,
-    p_start_date: body.startDate,
-    p_end_date: body.endDate,
-    p_reason: body.reason ?? null,
+    p_store_id: payload.storeId,
+    p_start_date: payload.startDate,
+    p_end_date: payload.endDate,
+    p_reason: payload.reason ?? null,
   });
 
   if (error) {
