@@ -108,36 +108,6 @@ PROMPT 11: Cron Functions
 
 PROMPT 12: RLS Policies
 
-PROMPT 13: API Routes - Shift Swap
-OBJECTIVE: Create API routes for shift swap
-FILES TO CREATE:
-
-src/app/api/requests/shift-swap/route.ts (GET list, POST submit)
-src/app/api/requests/shift-swap/[id]/route.ts (GET single)
-src/app/api/requests/shift-swap/[id]/offers/route.ts (GET/POST offers)
-src/app/api/requests/shift-swap/[id]/select/route.ts (POST)
-src/app/api/requests/shift-swap/[id]/approve/route.ts (POST)
-src/app/api/requests/shift-swap/[id]/deny/route.ts (POST)
-src/app/api/requests/shift-swap/[id]/cancel/route.ts (POST)
-
-CRITICAL PATTERN:
-typescript// 1. Authenticate
-const auth = await authenticateShiftRequest(req);
-if (!auth.ok) return NextResponse.json({ error: auth.error }, { status: 401 });
-
-// 2. Call RPC with explicit actor
-const { data, error } = await supabaseServer.rpc('submit_shift_swap_request', {
-  p_actor_profile_id: auth.profileId,  // PASS VERIFIED IDENTITY
-  p_schedule_shift_id: body.scheduleShiftId,
-  ...
-});
-REFERENCE: src/app/api/start-shift/route.ts for auth pattern
-DONE WHEN:
-
-All routes use authenticateShiftRequest() for employee routes
-All routes pass explicit actor to RPCs
-Managers use auth.getUser() + pass user.id to RPCs
-
 
 PROMPT 14: API Routes - Time Off
 OBJECTIVE: Create API routes for time off
