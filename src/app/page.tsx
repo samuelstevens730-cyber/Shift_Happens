@@ -262,6 +262,7 @@ function HomePageInner() {
         .select("id, message, created_at")
         .eq("type", "message")
         .eq("target_profile_id", profileId)
+        .is("deleted_at", null)
         .is("acknowledged_at", null)
         .order("created_at", { ascending: false })
         .limit(1);
@@ -462,14 +463,33 @@ function HomePageInner() {
     router.push("/login?next=/");
   };
 
+  async function getAuthHeaderValue(): Promise<string | null> {
+    const pinToken = sessionStorage.getItem(PIN_TOKEN_KEY);
+    if (pinToken) return `Bearer ${pinToken}`;
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (session?.access_token) return `Bearer ${session.access_token}`;
+    return null;
+  }
+
   // Dismiss employee message
   const dismissMessage = async (messageId: string) => {
-    const pinToken = sessionStorage.getItem(PIN_TOKEN_KEY);
-    const client = pinToken ? createEmployeeSupabase(pinToken) : supabase;
-    await client
-      .from("shift_assignments")
-      .update({ acknowledged_at: new Date().toISOString() })
-      .eq("id", messageId);
+    const authHeader = await getAuthHeaderValue();
+    if (!authHeader) return;
+
+    const res = await fetch(`/api/messages/${messageId}/dismiss`, {
+      method: "POST",
+      headers: { Authorization: authHeader },
+    });
+
+    if (!res.ok) {
+      const json = await res.json().catch(() => null);
+      console.error("Failed to dismiss message:", json?.error ?? res.statusText);
+      return;
+    }
+
     setEmployeeMessages((prev) => prev.filter((m) => m.id !== messageId));
   };
 
@@ -582,8 +602,9 @@ function HomePageInner() {
               </Link>
               <button
                 onClick={() => dismissMessage(message.id)}
-                className="absolute top-2 right-2 text-xs text-[var(--muted)] hover:text-[var(--text)]"
+                className="absolute top-2 right-2 text-xs text-[var(--muted)] hover:text-[var(--text)] inline-flex items-center gap-1"
               >
+                <span>Dismiss</span>
                 <X className="w-4 h-4" />
               </button>
             </div>

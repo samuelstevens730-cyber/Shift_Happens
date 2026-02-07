@@ -429,6 +429,10 @@ declare
   v_offer public.shift_swap_offers%rowtype;
   v_request_shift public.schedule_shifts%rowtype;
   v_offer_shift public.schedule_shifts%rowtype;
+  v_request_shift_label text;
+  v_offer_shift_label text;
+  v_requester_message text;
+  v_offerer_message text;
   v_manager_ok boolean;
   v_conflict record;
 begin
@@ -553,6 +557,23 @@ begin
       updated_at = now()
   where id = v_request.id;
 
+  v_request_shift_label :=
+    to_char(v_request_shift.shift_date, 'Mon DD') || ' ' ||
+    to_char(v_request_shift.scheduled_start, 'HH12:MI AM') || ' - ' ||
+    to_char(v_request_shift.scheduled_end, 'HH12:MI AM');
+
+  if v_offer.offer_type = 'swap' then
+    v_offer_shift_label :=
+      to_char(v_offer_shift.shift_date, 'Mon DD') || ' ' ||
+      to_char(v_offer_shift.scheduled_start, 'HH12:MI AM') || ' - ' ||
+      to_char(v_offer_shift.scheduled_end, 'HH12:MI AM');
+    v_requester_message := 'Your shift swap request was approved. Your new shift is ' || v_offer_shift_label || '.';
+    v_offerer_message := 'Your shift swap offer was approved. Your new shift is ' || v_request_shift_label || '.';
+  else
+    v_requester_message := 'Your shift cover request was approved.';
+    v_offerer_message := 'Your cover offer was approved. Your new shift is ' || v_request_shift_label || '.';
+  end if;
+
   insert into public.request_audit_logs (
     request_type,
     request_id,
@@ -572,8 +593,8 @@ begin
     target_profile_id
   )
   values
-    ('message', 'Your shift swap request was approved', v_request.requester_profile_id),
-    ('message', 'Your shift swap offer was approved', v_offer.offerer_profile_id);
+    ('message', v_requester_message, v_request.requester_profile_id),
+    ('message', v_offerer_message, v_offer.offerer_profile_id);
 
   return true;
 end;
