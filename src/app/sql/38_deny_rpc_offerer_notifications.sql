@@ -19,9 +19,14 @@ begin
   if p_request_type = 'shift_swap' then
     declare
       v_request public.shift_swap_requests%rowtype;
+      v_request_shift public.schedule_shifts%rowtype;
+      v_request_shift_label text;
+      v_selected_offer public.shift_swap_offers%rowtype;
       v_selected_offerer_profile_id uuid;
       v_selected_offerer_name text;
       v_selected_offer_id uuid;
+      v_selected_offer_shift public.schedule_shifts%rowtype;
+      v_selected_offer_shift_label text;
       v_requester_name text;
     begin
       select * into v_request
@@ -37,6 +42,19 @@ begin
         raise exception 'Swap request is not pending';
       end if;
 
+      select * into v_request_shift
+      from public.schedule_shifts ss
+      where ss.id = v_request.schedule_shift_id;
+
+      if v_request_shift.id is null then
+        raise exception 'Request schedule shift not found';
+      end if;
+
+      v_request_shift_label :=
+        to_char(v_request_shift.shift_date, 'Mon DD') || ' ' ||
+        to_char(v_request_shift.scheduled_start, 'HH12:MI AM') || ' - ' ||
+        to_char(v_request_shift.scheduled_end, 'HH12:MI AM');
+
       select exists (
         select 1
         from public.store_managers sm
@@ -51,10 +69,14 @@ begin
       -- Capture selected offer before clearing request selection.
       v_selected_offer_id := v_request.selected_offer_id;
 
-      select o.offerer_profile_id
-        into v_selected_offerer_profile_id
+      select *
+        into v_selected_offer
       from public.shift_swap_offers o
       where o.id = v_selected_offer_id;
+
+      if v_selected_offer.id is not null then
+        v_selected_offerer_profile_id := v_selected_offer.offerer_profile_id;
+      end if;
 
       select p.name
         into v_requester_name
@@ -70,6 +92,19 @@ begin
           into v_selected_offerer_name
         from public.profiles p
         where p.id = v_selected_offerer_profile_id;
+      end if;
+
+      if v_selected_offer.id is not null and v_selected_offer.offer_type = 'swap' then
+        select * into v_selected_offer_shift
+        from public.schedule_shifts ss
+        where ss.id = v_selected_offer.swap_schedule_shift_id;
+
+        if v_selected_offer_shift.id is not null then
+          v_selected_offer_shift_label :=
+            to_char(v_selected_offer_shift.shift_date, 'Mon DD') || ' ' ||
+            to_char(v_selected_offer_shift.scheduled_start, 'HH12:MI AM') || ' - ' ||
+            to_char(v_selected_offer_shift.scheduled_end, 'HH12:MI AM');
+        end if;
       end if;
 
       -- Reopen request for future offers.
@@ -88,7 +123,7 @@ begin
       )
       select
         'message',
-        'Management denied ' || v_requester_name || '''s swap request. Your offer is no longer active.',
+        'Management denied ' || v_requester_name || '''s swap request for ' || v_request_shift_label || '. Your offer is no longer active.',
         o.offerer_profile_id
       from public.shift_swap_offers o
       where o.request_id = v_request.id
@@ -118,7 +153,14 @@ begin
       )
       values (
         'message',
-        'Management denied the selected offer from ' || coalesce(v_selected_offerer_name, 'an offerer') || '. Your request is open again.',
+        case
+          when v_selected_offer.id is null then
+            'Management denied the selected offer on your shift ' || v_request_shift_label || '. Your request is open again.'
+          when v_selected_offer.offer_type = 'cover' then
+            'Management denied the selected cover offer from ' || coalesce(v_selected_offerer_name, 'an offerer') || ' for your shift ' || v_request_shift_label || '. Your request is open again.'
+          else
+            'Management denied the selected swap offer from ' || coalesce(v_selected_offerer_name, 'an offerer') || ' (' || coalesce(v_selected_offer_shift_label, 'their shift') || ' for ' || v_request_shift_label || '). Your request is open again.'
+        end,
         v_request.requester_profile_id
       );
 
@@ -131,7 +173,12 @@ begin
         )
         values (
           'message',
-          'Management denied ' || v_requester_name || '''s request after selecting your offer.',
+          case
+            when v_selected_offer.offer_type = 'cover' then
+              'Management denied ' || v_requester_name || '''s cover request for ' || v_request_shift_label || ' after selecting your offer.'
+            else
+              'Management denied ' || v_requester_name || '''s swap request (' || coalesce(v_selected_offer_shift_label, 'your shift') || ' for ' || v_request_shift_label || ') after selecting your offer.'
+          end,
           v_selected_offerer_profile_id
         );
       end if;

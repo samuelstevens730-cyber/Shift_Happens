@@ -95,10 +95,14 @@ declare
   v_offerer_name text;
   v_requester_profile_id uuid;
   v_requester_name text;
+  v_request_schedule_shift_id uuid;
+  v_request_shift public.schedule_shifts%rowtype;
+  v_offer_shift public.schedule_shifts%rowtype;
+  v_request_shift_label text;
+  v_offer_shift_label text;
   v_store_id uuid;
   v_status public.request_status;
   v_actor_store_match boolean;
-  v_offer_label text;
 begin
   v_offerer_profile_id := p_actor_profile_id;
 
@@ -111,8 +115,8 @@ begin
     raise exception 'Offerer profile not found';
   end if;
 
-  select r.requester_profile_id, r.store_id, r.status
-    into v_requester_profile_id, v_store_id, v_status
+  select r.requester_profile_id, r.store_id, r.status, r.schedule_shift_id
+    into v_requester_profile_id, v_store_id, v_status, v_request_schedule_shift_id
   from public.shift_swap_requests r
   where r.id = p_request_id
   for update;
@@ -133,6 +137,19 @@ begin
   if v_status <> 'open' then
     raise exception 'Swap request is not open';
   end if;
+
+  select * into v_request_shift
+  from public.schedule_shifts ss
+  where ss.id = v_request_schedule_shift_id;
+
+  if v_request_shift.id is null then
+    raise exception 'Request schedule shift not found';
+  end if;
+
+  v_request_shift_label :=
+    to_char(v_request_shift.shift_date, 'Mon DD') || ' ' ||
+    to_char(v_request_shift.scheduled_start, 'HH12:MI AM') || ' - ' ||
+    to_char(v_request_shift.scheduled_end, 'HH12:MI AM');
 
   if v_requester_profile_id = p_actor_profile_id then
     raise exception 'Requester cannot submit an offer';
@@ -162,6 +179,19 @@ begin
     ) then
       raise exception 'Swap schedule shift not owned by actor';
     end if;
+
+    select * into v_offer_shift
+    from public.schedule_shifts ss
+    where ss.id = p_swap_schedule_shift_id;
+
+    if v_offer_shift.id is null then
+      raise exception 'Swap schedule shift not found';
+    end if;
+
+    v_offer_shift_label :=
+      to_char(v_offer_shift.shift_date, 'Mon DD') || ' ' ||
+      to_char(v_offer_shift.scheduled_start, 'HH12:MI AM') || ' - ' ||
+      to_char(v_offer_shift.scheduled_end, 'HH12:MI AM');
   end if;
 
   insert into public.shift_swap_offers (
@@ -193,8 +223,6 @@ begin
     p_actor_profile_id
   );
 
-  v_offer_label := case when p_offer_type = 'cover' then 'cover' else 'swap' end;
-
   insert into public.shift_assignments (
     type,
     message,
@@ -202,7 +230,12 @@ begin
   )
   values (
     'message',
-    v_offerer_name || ' submitted a new ' || v_offer_label || ' offer on your shift swap request',
+    case
+      when p_offer_type = 'cover' then
+        v_offerer_name || ' submitted a cover offer for your shift on ' || v_request_shift_label
+      else
+        v_offerer_name || ' submitted a swap offer: ' || v_offer_shift_label || ' for your shift on ' || v_request_shift_label
+    end,
     v_requester_profile_id
   );
 
@@ -213,7 +246,12 @@ begin
   )
   values (
     'message',
-    'Your ' || v_offer_label || ' offer was submitted to ' || v_requester_name,
+    case
+      when p_offer_type = 'cover' then
+        'Your cover offer for ' || v_requester_name || '''s shift on ' || v_request_shift_label || ' was submitted'
+      else
+        'Your swap offer to ' || v_requester_name || ' was submitted: ' || v_offer_shift_label || ' for ' || v_request_shift_label
+    end,
     v_offerer_profile_id
   );
 
@@ -236,16 +274,22 @@ security definer
 set search_path = public
 as $$
 declare
+  v_offer public.shift_swap_offers%rowtype;
   v_offerer_profile_id uuid;
   v_offerer_name text;
   v_requester_profile_id uuid;
   v_requester_name text;
+  v_request_schedule_shift_id uuid;
+  v_request_shift public.schedule_shifts%rowtype;
+  v_offer_shift public.schedule_shifts%rowtype;
+  v_request_shift_label text;
+  v_offer_shift_label text;
   v_store_id uuid;
   v_status public.request_status;
   v_offer_ok boolean;
 begin
-  select r.requester_profile_id, r.store_id, r.status
-    into v_requester_profile_id, v_store_id, v_status
+  select r.requester_profile_id, r.store_id, r.status, r.schedule_shift_id
+    into v_requester_profile_id, v_store_id, v_status, v_request_schedule_shift_id
   from public.shift_swap_requests r
   where r.id = p_request_id
   for update;
@@ -271,6 +315,19 @@ begin
     raise exception 'Swap request is not open';
   end if;
 
+  select * into v_request_shift
+  from public.schedule_shifts ss
+  where ss.id = v_request_schedule_shift_id;
+
+  if v_request_shift.id is null then
+    raise exception 'Request schedule shift not found';
+  end if;
+
+  v_request_shift_label :=
+    to_char(v_request_shift.shift_date, 'Mon DD') || ' ' ||
+    to_char(v_request_shift.scheduled_start, 'HH12:MI AM') || ' - ' ||
+    to_char(v_request_shift.scheduled_end, 'HH12:MI AM');
+
   select exists (
     select 1
     from public.shift_swap_offers o
@@ -282,11 +339,17 @@ begin
     raise exception 'Offer does not belong to request';
   end if;
 
-  select o.offerer_profile_id
-    into v_offerer_profile_id
+  select *
+    into v_offer
   from public.shift_swap_offers o
   where o.id = p_offer_id
     and o.request_id = p_request_id;
+
+  if v_offer.id is null then
+    raise exception 'Offer does not belong to request';
+  end if;
+
+  v_offerer_profile_id := v_offer.offerer_profile_id;
 
   select p.name
     into v_offerer_name
@@ -295,6 +358,21 @@ begin
 
   if v_offerer_name is null then
     raise exception 'Offerer profile not found';
+  end if;
+
+  if v_offer.offer_type = 'swap' then
+    select * into v_offer_shift
+    from public.schedule_shifts ss
+    where ss.id = v_offer.swap_schedule_shift_id;
+
+    if v_offer_shift.id is null then
+      raise exception 'Offer swap shift not found';
+    end if;
+
+    v_offer_shift_label :=
+      to_char(v_offer_shift.shift_date, 'Mon DD') || ' ' ||
+      to_char(v_offer_shift.scheduled_start, 'HH12:MI AM') || ' - ' ||
+      to_char(v_offer_shift.scheduled_end, 'HH12:MI AM');
   end if;
 
   update public.shift_swap_offers
@@ -332,7 +410,12 @@ begin
   )
   select
     'message',
-    v_requester_name || ' accepted ' || v_offerer_name || '''s offer. Swap request pending approval.',
+    case
+      when v_offer.offer_type = 'cover' then
+        v_requester_name || ' accepted ' || v_offerer_name || '''s cover offer for ' || v_request_shift_label || '. Pending manager approval.'
+      else
+        v_requester_name || ' accepted ' || v_offerer_name || '''s swap offer (' || v_offer_shift_label || ' for ' || v_request_shift_label || '). Pending manager approval.'
+    end,
     p.id
   from public.store_managers sm
   join public.profiles p
@@ -346,7 +429,12 @@ begin
   )
   values (
     'message',
-    v_requester_name || ' accepted your offer and sent it to management for approval',
+    case
+      when v_offer.offer_type = 'cover' then
+        v_requester_name || ' accepted your cover offer for ' || v_request_shift_label || ' and sent it to management for approval'
+      else
+        v_requester_name || ' accepted your swap offer (' || v_offer_shift_label || ' for ' || v_request_shift_label || ') and sent it to management for approval'
+    end,
     v_offerer_profile_id
   );
 
@@ -379,12 +467,18 @@ as $$
 declare
   v_requester_profile_id uuid;
   v_requester_name text;
+  v_request_schedule_shift_id uuid;
+  v_request_shift public.schedule_shifts%rowtype;
+  v_request_shift_label text;
+  v_offer public.shift_swap_offers%rowtype;
+  v_offer_shift public.schedule_shifts%rowtype;
+  v_offer_shift_label text;
   v_status public.request_status;
   v_offer_ok boolean;
   v_offerer_profile_id uuid;
 begin
-  select r.requester_profile_id, r.status
-    into v_requester_profile_id, v_status
+  select r.requester_profile_id, r.status, r.schedule_shift_id
+    into v_requester_profile_id, v_status, v_request_schedule_shift_id
   from public.shift_swap_requests r
   where r.id = p_request_id
   for update;
@@ -410,6 +504,19 @@ begin
     raise exception 'Swap request is not open';
   end if;
 
+  select * into v_request_shift
+  from public.schedule_shifts ss
+  where ss.id = v_request_schedule_shift_id;
+
+  if v_request_shift.id is null then
+    raise exception 'Request schedule shift not found';
+  end if;
+
+  v_request_shift_label :=
+    to_char(v_request_shift.shift_date, 'Mon DD') || ' ' ||
+    to_char(v_request_shift.scheduled_start, 'HH12:MI AM') || ' - ' ||
+    to_char(v_request_shift.scheduled_end, 'HH12:MI AM');
+
   select exists (
     select 1
     from public.shift_swap_offers o
@@ -422,11 +529,30 @@ begin
     raise exception 'Offer does not belong to request or is already selected';
   end if;
 
-  select o.offerer_profile_id
-    into v_offerer_profile_id
+  select *
+    into v_offer
   from public.shift_swap_offers o
   where o.id = p_offer_id
     and o.request_id = p_request_id;
+
+  if v_offer.id is null then
+    raise exception 'Offer does not belong to request or is already selected';
+  end if;
+
+  v_offerer_profile_id := v_offer.offerer_profile_id;
+
+  if v_offer.offer_type = 'swap' then
+    select * into v_offer_shift
+    from public.schedule_shifts ss
+    where ss.id = v_offer.swap_schedule_shift_id;
+
+    if v_offer_shift.id is not null then
+      v_offer_shift_label :=
+        to_char(v_offer_shift.shift_date, 'Mon DD') || ' ' ||
+        to_char(v_offer_shift.scheduled_start, 'HH12:MI AM') || ' - ' ||
+        to_char(v_offer_shift.scheduled_end, 'HH12:MI AM');
+    end if;
+  end if;
 
   update public.shift_swap_offers
   set is_withdrawn = true
@@ -453,7 +579,12 @@ begin
   )
   values (
     'message',
-    'Your offer was denied by ' || v_requester_name,
+    case
+      when v_offer.offer_type = 'cover' then
+        'Your cover offer for ' || v_request_shift_label || ' was denied by ' || v_requester_name
+      else
+        'Your swap offer (' || coalesce(v_offer_shift_label, 'your shift') || ' for ' || v_request_shift_label || ') was denied by ' || v_requester_name
+    end,
     v_offerer_profile_id
   );
 
