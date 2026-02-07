@@ -15,6 +15,7 @@ begin
   if p_request_type = 'shift_swap' then
     declare
       v_request public.shift_swap_requests%rowtype;
+      v_selected_offerer_profile_id uuid;
     begin
       select * into v_request
       from public.shift_swap_requests
@@ -40,6 +41,11 @@ begin
         raise exception 'Manager not authorized for this store';
       end if;
 
+      select o.offerer_profile_id
+        into v_selected_offerer_profile_id
+      from public.shift_swap_offers o
+      where o.id = v_request.selected_offer_id;
+
       update public.shift_swap_requests
       set status = 'open',
           selected_offer_id = null,
@@ -50,6 +56,37 @@ begin
       update public.shift_swap_offers
       set is_selected = false
       where request_id = v_request.id;
+
+      update public.shift_assignments
+      set acknowledged_at = now()
+      where type = 'message'
+        and target_profile_id = v_request.requester_profile_id
+        and acknowledged_at is null
+        and message like 'New % offer received on your shift swap request';
+
+      insert into public.shift_assignments (
+        type,
+        message,
+        target_profile_id
+      )
+      values (
+        'message',
+        'Management denied the selected offer. Your request is open again.',
+        v_request.requester_profile_id
+      );
+
+      if v_selected_offerer_profile_id is not null then
+        insert into public.shift_assignments (
+          type,
+          message,
+          target_profile_id
+        )
+        values (
+          'message',
+          'Management denied the request after your offer was selected.',
+          v_selected_offerer_profile_id
+        );
+      end if;
 
       insert into public.request_audit_logs (
         request_type,

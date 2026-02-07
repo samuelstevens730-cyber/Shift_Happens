@@ -288,13 +288,16 @@ begin
   insert into public.shift_assignments (
     type,
     message,
-    target_store_id
+    target_profile_id
   )
-  values (
+  select
     'message',
     'Swap request pending approval',
-    v_store_id
-  );
+    p.id
+  from public.store_managers sm
+  join public.profiles p
+    on p.auth_user_id = sm.user_id
+  where sm.store_id = v_store_id;
 
   insert into public.shift_assignments (
     type,
@@ -306,6 +309,14 @@ begin
     'Your offer was accepted and sent to management for approval',
     v_offerer_profile_id
   );
+
+  -- Clear stale "new offer" notifications for requester once they act on an offer.
+  update public.shift_assignments
+  set acknowledged_at = now()
+  where type = 'message'
+    and target_profile_id = v_requester_profile_id
+    and acknowledged_at is null
+    and message like 'New % offer received on your shift swap request';
 
   return true;
 end;
