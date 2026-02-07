@@ -570,7 +570,7 @@ begin
     v_requester_message := 'Your shift swap request was approved. Your new shift is ' || v_offer_shift_label || '.';
     v_offerer_message := 'Your shift swap offer was approved. Your new shift is ' || v_request_shift_label || '.';
   else
-    v_requester_message := 'Your shift cover request was approved.';
+    v_requester_message := 'Your shift cover request was approved. The shift on ' || v_request_shift_label || ' is now covered.';
     v_offerer_message := 'Your cover offer was approved. Your new shift is ' || v_request_shift_label || '.';
   end if;
 

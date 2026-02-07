@@ -21,6 +21,20 @@ export async function POST(
   const requestId = id;
   if (!requestId) return NextResponse.json({ error: "Missing request id." }, { status: 400 });
 
+  const { data: request, error: reqErr } = await supabaseServer
+    .from("time_off_requests")
+    .select("store_id")
+    .eq("id", requestId)
+    .maybeSingle<{ store_id: string }>();
+
+  if (reqErr || !request) {
+    return NextResponse.json({ error: "Request not found." }, { status: 404 });
+  }
+
+  if (!managerStoreIds.includes(request.store_id)) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
+
   const { data, error } = await supabaseServer.rpc("approve_time_off_request", {
     p_actor_auth_user_id: user.id,
     p_request_id: requestId,

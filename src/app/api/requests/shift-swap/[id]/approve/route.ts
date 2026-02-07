@@ -21,6 +21,20 @@ export async function POST(
   const requestId = id;
   if (!requestId) return NextResponse.json({ error: "Missing request id." }, { status: 400 });
 
+  const { data: request, error: reqErr } = await supabaseServer
+    .from("shift_swap_requests")
+    .select("store_id")
+    .eq("id", requestId)
+    .maybeSingle<{ store_id: string }>();
+
+  if (reqErr || !request) {
+    return NextResponse.json({ error: "Request not found." }, { status: 404 });
+  }
+
+  if (!managerStoreIds.includes(request.store_id)) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
+
   const { error } = await supabaseServer.rpc("approve_shift_swap_or_cover", {
     p_actor_auth_user_id: user.id,
     p_request_id: requestId,
