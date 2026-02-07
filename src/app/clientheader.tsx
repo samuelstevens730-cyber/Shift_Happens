@@ -106,67 +106,70 @@ export default function ClientHeader() {
   if (!isAdminRoute) return null;
 
   return (
-    <header className="sticky top-0 z-40 header-bar backdrop-blur">
-      <div className="mx-auto max-w-5xl px-4 py-3 flex items-center justify-between gap-3">
-        {/* Left: logo links home */}
-        <Link href="/" className="flex items-center gap-3" aria-label="Go to home">
+    <header className="sticky top-0 z-40 bg-[rgba(10,12,16,0.92)] backdrop-blur border-b border-white/10">
+      <div className="w-full px-3 py-2 flex items-center gap-3">
+        <Link href="/" aria-label="Go to home" className="shrink-0">
           <Image
             src="/brand/no_cap_logo.jpg"
             alt="No Cap Smoke Shop"
-            width={220}
+            width={56}
             height={56}
             priority
-            className="h-10 sm:h-12 md:h-14 w-auto"
+            className="h-12 w-12 rounded-full object-cover"
           />
-          <span className="hidden sm:inline text-sm font-semibold tracking-wide text-[var(--text)]">
-            Shift Happens
-          </span>
         </Link>
 
-        {/* Right: Home + Nav */}
-        <nav className="flex items-center gap-2">
-          <Link href="/" className="btn-secondary px-4 py-2">
-            Home
-          </Link>
-
-          {(isLoggedIn || hasPinSession) && (
-            <>
-              <Link href={scheduleHref} className="btn-secondary px-4 py-2">
-                My Schedule
-              </Link>
-              <Link href={shiftsHref} className="btn-secondary px-4 py-2">
-                My Shifts
-              </Link>
-            </>
-          )}
-
-          {isAdmin && (
-            <Link href="/admin" className="btn-secondary px-4 py-2">
-              Admin
-            </Link>
-          )}
-
-          {(isLoggedIn || hasPinSession) && (
-            <Link href="/dashboard" className="btn-secondary px-4 py-2">
-              Dashboard
-            </Link>
-          )}
-
-          {isLoggedIn ? (
-            <button
-              onClick={handleLogout}
-              className="btn-danger px-4 py-2"
-            >
-              Logout
-            </button>
-          ) : (
+        <nav className="min-w-0 flex-1 overflow-x-auto">
+          <div className="flex items-center gap-5 whitespace-nowrap pr-2">
             <Link
-              href={loginHref}
-              className="btn-primary px-4 py-2"
+              href="/"
+              className={`bento-nav-link ${pathname === "/" ? "bento-nav-active" : "bento-nav-inactive"}`}
             >
-              Login
+              HOME
             </Link>
-          )}
+
+            {(isLoggedIn || hasPinSession) && (
+              <>
+                <Link
+                  href={scheduleHref}
+                  className={`bento-nav-link ${pathname === "/schedule" ? "bento-nav-active" : "bento-nav-inactive"}`}
+                >
+                  MY SCHEDULE
+                </Link>
+                <Link
+                  href={shiftsHref}
+                  className={`bento-nav-link ${pathname === "/shifts" ? "bento-nav-active" : "bento-nav-inactive"}`}
+                >
+                  MY SHIFTS
+                </Link>
+                <Link
+                  href="/dashboard"
+                  className={`bento-nav-link ${pathname?.startsWith("/dashboard") ? "bento-nav-active" : "bento-nav-inactive"}`}
+                >
+                  DASHBOARD
+                </Link>
+              </>
+            )}
+
+            {isAdmin && (
+              <Link
+                href="/admin"
+                className={`bento-nav-link ${pathname?.startsWith("/admin") ? "bento-nav-active" : "bento-nav-inactive"}`}
+              >
+                ADMIN
+              </Link>
+            )}
+
+            {isLoggedIn ? (
+              <button onClick={handleLogout} className="bento-nav-link bento-nav-inactive">
+                LOGOUT
+              </button>
+            ) : (
+              <Link href={loginHref} className="bento-nav-link bento-nav-inactive">
+                LOGIN
+              </Link>
+            )}
+          </div>
         </nav>
       </div>
     </header>
