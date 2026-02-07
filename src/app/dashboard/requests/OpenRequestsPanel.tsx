@@ -75,6 +75,7 @@ export default function OpenRequestsPanel({ requests, onRefresh }: Props) {
   const [offersByRequest, setOffersByRequest] = useState<Record<string, OfferRow[]>>({});
   const [shiftOptions, setShiftOptions] = useState<Record<string, ScheduleShiftOption>>({});
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
   const openRequests = useMemo(
@@ -137,8 +138,16 @@ export default function OpenRequestsPanel({ requests, onRefresh }: Props) {
     return () => { alive = false; };
   }, [openRequests]);
 
+  useEffect(() => {
+    if (!success) return;
+    const timer = setTimeout(() => setSuccess(null), 4000);
+    return () => clearTimeout(timer);
+  }, [success]);
+
   const handleAccept = async (requestId: string, offerId: string) => {
+    if (!window.confirm("Accept this offer and send to management?")) return;
     setError(null);
+    setSuccess(null);
     setLoadingId(offerId);
     const token = await getAuthToken();
     if (!token) {
@@ -146,23 +155,31 @@ export default function OpenRequestsPanel({ requests, onRefresh }: Props) {
       setLoadingId(null);
       return;
     }
-    const res = await fetch(`/api/requests/shift-swap/${requestId}/select`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ offerId }),
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      setError(json?.error ?? "Failed to accept offer.");
+    try {
+      const res = await fetch(`/api/requests/shift-swap/${requestId}/select`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ offerId }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(json?.error ?? "Failed to accept offer.");
+        setLoadingId(null);
+        return;
+      }
       setLoadingId(null);
-      return;
+      setSuccess("Offer accepted and sent to management.");
+      onRefresh();
+    } catch {
+      setError("Network error. Please try again.");
+      setLoadingId(null);
     }
-    setLoadingId(null);
-    onRefresh();
   };
 
   const handleDeny = async (requestId: string, offerId: string) => {
+    if (!window.confirm("Deny this offer and keep the request open?")) return;
     setError(null);
+    setSuccess(null);
     setLoadingId(offerId);
     const token = await getAuthToken();
     if (!token) {
@@ -170,28 +187,34 @@ export default function OpenRequestsPanel({ requests, onRefresh }: Props) {
       setLoadingId(null);
       return;
     }
-    const res = await fetch(`/api/requests/shift-swap/${requestId}/offers/decline`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ offerId }),
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      setError(json?.error ?? "Failed to deny offer.");
+    try {
+      const res = await fetch(`/api/requests/shift-swap/${requestId}/offers/decline`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ offerId }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(json?.error ?? "Failed to deny offer.");
+        setLoadingId(null);
+        return;
+      }
       setLoadingId(null);
-      return;
+      setSuccess("Offer denied. Request remains open.");
+      onRefresh();
+    } catch {
+      setError("Network error. Please try again.");
+      setLoadingId(null);
     }
-    setLoadingId(null);
-    onRefresh();
   };
 
   const shiftLabelById = useMemo(() => {
     const map = new Map<string, string>();
     Object.values(shiftOptions).forEach(s => {
       const store = s.stores?.[0]?.name ?? "Store";
-      const label = `${formatDateKey(s.shift_date)} · ${formatTime(s.scheduled_start)}-${formatTime(
+      const label = `${formatDateKey(s.shift_date)} - ${formatTime(s.scheduled_start)}-${formatTime(
         s.scheduled_end
-      )} · ${store}`;
+      )} - ${store}`;
       map.set(s.id, label);
     });
     return map;
@@ -204,6 +227,7 @@ export default function OpenRequestsPanel({ requests, onRefresh }: Props) {
   return (
     <div className="space-y-4">
       {error && <div className="banner banner-error text-sm">{error}</div>}
+      {success && <div className="banner text-sm">{success}</div>}
       {openRequests.map((req) => {
         const offers = (offersByRequest[req.id] ?? []).filter(o => !o.is_withdrawn);
         const shiftLabel = shiftLabelById.get(req.schedule_shift_id) ?? "Scheduled shift";
@@ -226,7 +250,7 @@ export default function OpenRequestsPanel({ requests, onRefresh }: Props) {
                 <div key={offer.id} className="rounded-lg border border-white/10 bg-white/5 p-3 space-y-2">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="text-sm font-semibold">
-                      {offer.offerer?.name ?? "Employee"} · {offer.offer_type.toUpperCase()}
+                      {offer.offerer?.name ?? "Employee"} - {offer.offer_type.toUpperCase()}
                     </div>
                     <div className="text-xs muted">{formatDate(offer.created_at)}</div>
                   </div>
@@ -256,3 +280,4 @@ export default function OpenRequestsPanel({ requests, onRefresh }: Props) {
     </div>
   );
 }
+

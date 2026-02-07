@@ -13,6 +13,7 @@ do $$ begin
     'request_created',
     'offer_submitted',
     'offer_selected',
+    'offer_denied',
     'request_approved',
     'request_denied',
     'request_cancelled',

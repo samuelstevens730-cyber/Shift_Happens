@@ -74,10 +74,12 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
   const [reason, setReason] = useState("");
   const [expiresHours, setExpiresHours] = useState<string>("48");
   const [error, setError] = useState<string | null>(null);
+  const [requestSuccess, setRequestSuccess] = useState<string | null>(null);
   const [shiftOptions, setShiftOptions] = useState<ScheduleShiftOption[]>([]);
   const [shiftError, setShiftError] = useState<string | null>(null);
   const [openSwaps, setOpenSwaps] = useState<OpenSwapRequest[]>([]);
   const [offerError, setOfferError] = useState<string | null>(null);
+  const [offerSuccess, setOfferSuccess] = useState<string | null>(null);
   const [offerLoading, setOfferLoading] = useState<string | null>(null);
   const [offerTypeById, setOfferTypeById] = useState<Record<string, "cover" | "swap">>({});
   const [offerShiftById, setOfferShiftById] = useState<Record<string, string>>({});
@@ -88,9 +90,9 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
     const map = new Map<string, string>();
     shiftOptions.forEach(s => {
       const store = s.stores?.[0]?.name ?? "Store";
-      const label = `${formatDateKey(s.shift_date)} · ${formatTime(s.scheduled_start)}-${formatTime(
+      const label = `${formatDateKey(s.shift_date)} - ${formatTime(s.scheduled_start)}-${formatTime(
         s.scheduled_end
-      )} · ${store}`;
+      )} - ${store}`;
       map.set(s.id, label);
     });
     return map;
@@ -143,6 +145,7 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
 
   const handleSubmit = async () => {
     setError(null);
+    setRequestSuccess(null);
     const hours = expiresHours ? Number(expiresHours) : null;
     const res = await submitSwapRequest({
       scheduleShiftId,
@@ -157,6 +160,7 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
     setReason("");
     setExpiresHours("48");
     setShowForm(false);
+    setRequestSuccess("Swap request submitted successfully.");
     onRefresh();
   };
 
@@ -180,6 +184,18 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
     fetchOpenSwaps();
   }, []);
 
+  useEffect(() => {
+    if (!requestSuccess) return;
+    const timer = setTimeout(() => setRequestSuccess(null), 4000);
+    return () => clearTimeout(timer);
+  }, [requestSuccess]);
+
+  useEffect(() => {
+    if (!offerSuccess) return;
+    const timer = setTimeout(() => setOfferSuccess(null), 4000);
+    return () => clearTimeout(timer);
+  }, [offerSuccess]);
+
   const handleOffer = async (req: OpenSwapRequest) => {
     const type = offerTypeById[req.id] ?? "cover";
     const swapShiftId = offerShiftById[req.id];
@@ -189,6 +205,7 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
     }
     setOfferLoading(req.id);
     setOfferError(null);
+    setOfferSuccess(null);
     const pinToken = typeof window !== "undefined" ? sessionStorage.getItem("sh_pin_token") : null;
     const token = pinToken ?? (await supabase.auth.getSession()).data.session?.access_token ?? null;
     if (!token) {
@@ -196,22 +213,28 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
       setOfferLoading(null);
       return;
     }
-    const res = await fetch(`/api/requests/shift-swap/${req.id}/offers`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({
-        offerType: type,
-        swapScheduleShiftId: type === "swap" ? swapShiftId : null,
-      }),
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      setOfferError(json?.error ?? "Failed to submit offer.");
+    try {
+      const res = await fetch(`/api/requests/shift-swap/${req.id}/offers`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          offerType: type,
+          swapScheduleShiftId: type === "swap" ? swapShiftId : null,
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setOfferError(json?.error ?? "Failed to submit offer.");
+        setOfferLoading(null);
+        return;
+      }
+      setOfferSuccess("Offer submitted successfully.");
       setOfferLoading(null);
-      return;
+      fetchOpenSwaps();
+    } catch {
+      setOfferError("Network error. Please try again.");
+      setOfferLoading(null);
     }
-    setOfferLoading(null);
-    fetchOpenSwaps();
   };
 
   return (
@@ -225,6 +248,7 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
           {showForm ? "Close" : "Create"}
         </button>
       </div>
+      {requestSuccess && <div className="banner text-sm">{requestSuccess}</div>}
 
       {showForm && (
         <div className="card card-pad space-y-3 border border-white/10">
@@ -289,15 +313,16 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
       <div className="border-t border-white/10 pt-4 space-y-3">
         <div>
           <h3 className="text-base font-semibold">Cover or Swap</h3>
-          <p className="text-sm muted">Offer to cover another employee’s shift or swap one of yours.</p>
+          <p className="text-sm muted">Offer to cover another employee's shift or swap one of yours.</p>
         </div>
         {offerError && <div className="banner banner-error text-sm">{offerError}</div>}
+        {offerSuccess && <div className="banner text-sm">{offerSuccess}</div>}
         {openSwaps.length === 0 && <div className="text-sm muted">No open swap requests from others.</div>}
         <div className="space-y-3">
           {openSwaps.map(req => {
             const shift = req.schedule_shift;
             const shiftLabel = shift
-              ? `${formatDateKey(shift.shift_date)} · ${formatTime(shift.scheduled_start)}-${formatTime(shift.scheduled_end)} · ${shift.stores?.[0]?.name ?? "Store"}`
+              ? `${formatDateKey(shift.shift_date)} - ${formatTime(shift.scheduled_start)}-${formatTime(shift.scheduled_end)} - ${shift.stores?.[0]?.name ?? "Store"}`
               : "Scheduled shift";
             const requesterName = req.requester?.name ?? "Employee";
             const offerType = offerTypeById[req.id] ?? "cover";
@@ -354,3 +379,4 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
     </div>
   );
 }
+

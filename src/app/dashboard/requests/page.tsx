@@ -115,10 +115,10 @@ function RequestsContent() {
               </div>
               <div className="text-xs muted">Shift: {req.shift_id}</div>
               <div className="text-xs muted">
-                Original: {req.original_started_at} → {req.original_ended_at ?? "--"}
+                Original: {req.original_started_at} {"->"} {req.original_ended_at ?? "--"}
               </div>
               <div className="text-xs muted">
-                Requested: {req.requested_started_at ?? "--"} → {req.requested_ended_at ?? "--"}
+                Requested: {req.requested_started_at ?? "--"} {"->"} {req.requested_ended_at ?? "--"}
               </div>
             </div>
           ))}
@@ -173,3 +173,4 @@ export default function RequestsPage() {
     </Suspense>
   );
 }
+

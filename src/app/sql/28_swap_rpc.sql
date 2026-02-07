@@ -91,12 +91,15 @@ set search_path = public
 as $$
 declare
   v_offer_id uuid;
+  v_offerer_profile_id uuid;
   v_requester_profile_id uuid;
   v_store_id uuid;
   v_status public.request_status;
   v_actor_store_match boolean;
   v_offer_label text;
 begin
+  v_offerer_profile_id := p_actor_profile_id;
+
   select r.requester_profile_id, r.store_id, r.status
     into v_requester_profile_id, v_store_id, v_status
   from public.shift_swap_requests r
@@ -179,8 +182,19 @@ begin
   )
   values (
     'message',
-    'New ' || v_offer_label || ' offer received for your shift swap request',
+    'New ' || v_offer_label || ' offer received on your shift swap request',
     v_requester_profile_id
+  );
+
+  insert into public.shift_assignments (
+    type,
+    message,
+    target_profile_id
+  )
+  values (
+    'message',
+    'Your ' || v_offer_label || ' offer was submitted',
+    v_offerer_profile_id
   );
 
   return v_offer_id;
@@ -202,6 +216,7 @@ security definer
 set search_path = public
 as $$
 declare
+  v_offerer_profile_id uuid;
   v_requester_profile_id uuid;
   v_store_id uuid;
   v_status public.request_status;
@@ -235,6 +250,12 @@ begin
   if not v_offer_ok then
     raise exception 'Offer does not belong to request';
   end if;
+
+  select o.offerer_profile_id
+    into v_offerer_profile_id
+  from public.shift_swap_offers o
+  where o.id = p_offer_id
+    and o.request_id = p_request_id;
 
   update public.shift_swap_offers
   set is_selected = false
@@ -273,6 +294,17 @@ begin
     'message',
     'Swap request pending approval',
     v_store_id
+  );
+
+  insert into public.shift_assignments (
+    type,
+    message,
+    target_profile_id
+  )
+  values (
+    'message',
+    'Your offer was accepted and sent to management for approval',
+    v_offerer_profile_id
   );
 
   return true;
@@ -349,7 +381,7 @@ begin
   values (
     'shift_swap',
     p_request_id,
-    'offer_selected',
+    'offer_denied',
     p_actor_profile_id
   );
 
@@ -360,7 +392,7 @@ begin
   )
   values (
     'message',
-    'Your swap offer was denied',
+    'Your offer was denied by the requester',
     v_offerer_profile_id
   );
 
@@ -529,8 +561,8 @@ begin
     target_profile_id
   )
   values
-    ('message', 'Your swap request was approved', v_request.requester_profile_id),
-    ('message', 'Your swap offer was approved', v_offer.offerer_profile_id);
+    ('message', 'Your shift swap request was approved', v_request.requester_profile_id),
+    ('message', 'Your shift swap offer was approved', v_offer.offerer_profile_id);
 
   return true;
 end;
