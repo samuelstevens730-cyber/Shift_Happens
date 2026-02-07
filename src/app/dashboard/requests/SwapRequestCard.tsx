@@ -68,7 +68,7 @@ function formatTime(value?: string) {
 }
 
 export default function SwapRequestCard({ requests, onRefresh }: Props) {
-  const { loading, submitSwapRequest } = useRequestMutations();
+  const { loading, submitSwapRequest, cancelShiftSwapRequest } = useRequestMutations();
   const [showForm, setShowForm] = useState(false);
   const [scheduleShiftId, setScheduleShiftId] = useState("");
   const [reason, setReason] = useState("");
@@ -81,6 +81,7 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
   const [offerError, setOfferError] = useState<string | null>(null);
   const [offerSuccess, setOfferSuccess] = useState<string | null>(null);
   const [offerLoading, setOfferLoading] = useState<string | null>(null);
+  const [cancelLoadingId, setCancelLoadingId] = useState<string | null>(null);
   const [offerTypeById, setOfferTypeById] = useState<Record<string, "cover" | "swap">>({});
   const [offerShiftById, setOfferShiftById] = useState<Record<string, string>>({});
 
@@ -237,6 +238,20 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
     }
   };
 
+  const handleCancelRequest = async (requestId: string) => {
+    setError(null);
+    setRequestSuccess(null);
+    setCancelLoadingId(requestId);
+    const res = await cancelShiftSwapRequest(requestId);
+    setCancelLoadingId(null);
+    if (!res.ok) {
+      setError(res.error ?? "Failed to cancel request.");
+      return;
+    }
+    setRequestSuccess("Swap request cancelled.");
+    onRefresh();
+  };
+
   return (
     <div className="card card-pad space-y-4">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -306,6 +321,17 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
             <div className="text-xs muted">Shift: {shiftLabelById.get(req.schedule_shift_id) ?? "Scheduled shift"}</div>
             {req.reason && <div className="text-sm">{req.reason}</div>}
             <div className="text-xs muted">Created {formatDate(req.created_at)}</div>
+            {req.status === "open" && (
+              <div className="pt-2">
+                <button
+                  className="btn-secondary px-3 py-1 text-xs"
+                  onClick={() => handleCancelRequest(req.id)}
+                  disabled={cancelLoadingId === req.id}
+                >
+                  {cancelLoadingId === req.id ? "Cancelling..." : "Cancel Request"}
+                </button>
+              </div>
+            )}
           </div>
         ))}
       </div>

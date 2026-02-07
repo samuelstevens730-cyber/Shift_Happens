@@ -91,10 +91,29 @@ export function useRequestMutations() {
     []
   );
 
+  const cancelShiftSwapRequest = useCallback(async (requestId: string) => {
+    setLoading(true);
+    try {
+      const token = await getAuthToken();
+      if (!token) return { ok: false, error: "Unauthorized.", status: 401 } satisfies MutationResult<never>;
+
+      const res = await fetch(`/api/requests/shift-swap/${requestId}/cancel`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) return { ok: false, error: data?.error ?? "Request failed", status: res.status };
+      return { ok: true, data, status: res.status };
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     loading,
     submitSwapRequest,
     submitTimeOffRequest,
     submitTimesheetChange,
+    cancelShiftSwapRequest,
   };
 }
