@@ -142,12 +142,6 @@ export default function ClientHeader() {
                 >
                   MY SHIFTS
                 </Link>
-                <Link
-                  href="/dashboard"
-                  className={`bento-nav-link ${pathname?.startsWith("/dashboard") ? "bento-nav-active" : "bento-nav-inactive"}`}
-                >
-                  DASHBOARD
-                </Link>
               </>
             )}
 
