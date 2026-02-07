@@ -20,7 +20,9 @@ begin
     declare
       v_request public.shift_swap_requests%rowtype;
       v_selected_offerer_profile_id uuid;
+      v_selected_offerer_name text;
       v_selected_offer_id uuid;
+      v_requester_name text;
     begin
       select * into v_request
       from public.shift_swap_requests
@@ -54,6 +56,22 @@ begin
       from public.shift_swap_offers o
       where o.id = v_selected_offer_id;
 
+      select p.name
+        into v_requester_name
+      from public.profiles p
+      where p.id = v_request.requester_profile_id;
+
+      if v_requester_name is null then
+        raise exception 'Requester profile not found';
+      end if;
+
+      if v_selected_offerer_profile_id is not null then
+        select p.name
+          into v_selected_offerer_name
+        from public.profiles p
+        where p.id = v_selected_offerer_profile_id;
+      end if;
+
       -- Reopen request for future offers.
       update public.shift_swap_requests
       set status = 'open',
@@ -70,7 +88,7 @@ begin
       )
       select
         'message',
-        'The swap request you offered on was denied. Your offer is no longer active.',
+        'Management denied ' || v_requester_name || '''s swap request. Your offer is no longer active.',
         o.offerer_profile_id
       from public.shift_swap_offers o
       where o.request_id = v_request.id
@@ -100,7 +118,7 @@ begin
       )
       values (
         'message',
-        'Management denied the selected offer. Your request is open again.',
+        'Management denied the selected offer from ' || coalesce(v_selected_offerer_name, 'an offerer') || '. Your request is open again.',
         v_request.requester_profile_id
       );
 
@@ -113,7 +131,7 @@ begin
         )
         values (
           'message',
-          'Management denied the request after your offer was selected.',
+          'Management denied ' || v_requester_name || '''s request after selecting your offer.',
           v_selected_offerer_profile_id
         );
       end if;
@@ -247,4 +265,3 @@ $$;
 revoke all on function public.deny_request(uuid, text, uuid, text) from public;
 revoke all on function public.deny_request(uuid, text, uuid, text) from anon;
 grant execute on function public.deny_request(uuid, text, uuid, text) to authenticated, service_role;
-

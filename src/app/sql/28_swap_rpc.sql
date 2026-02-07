@@ -92,7 +92,9 @@ as $$
 declare
   v_offer_id uuid;
   v_offerer_profile_id uuid;
+  v_offerer_name text;
   v_requester_profile_id uuid;
+  v_requester_name text;
   v_store_id uuid;
   v_status public.request_status;
   v_actor_store_match boolean;
@@ -100,11 +102,29 @@ declare
 begin
   v_offerer_profile_id := p_actor_profile_id;
 
+  select p.name
+    into v_offerer_name
+  from public.profiles p
+  where p.id = v_offerer_profile_id;
+
+  if v_offerer_name is null then
+    raise exception 'Offerer profile not found';
+  end if;
+
   select r.requester_profile_id, r.store_id, r.status
     into v_requester_profile_id, v_store_id, v_status
   from public.shift_swap_requests r
   where r.id = p_request_id
   for update;
+
+  select p.name
+    into v_requester_name
+  from public.profiles p
+  where p.id = v_requester_profile_id;
+
+  if v_requester_name is null then
+    raise exception 'Requester profile not found';
+  end if;
 
   if v_status is null then
     raise exception 'Swap request not found';
@@ -182,7 +202,7 @@ begin
   )
   values (
     'message',
-    'New ' || v_offer_label || ' offer received on your shift swap request',
+    v_offerer_name || ' submitted a new ' || v_offer_label || ' offer on your shift swap request',
     v_requester_profile_id
   );
 
@@ -193,7 +213,7 @@ begin
   )
   values (
     'message',
-    'Your ' || v_offer_label || ' offer was submitted',
+    'Your ' || v_offer_label || ' offer was submitted to ' || v_requester_name,
     v_offerer_profile_id
   );
 
@@ -217,7 +237,9 @@ set search_path = public
 as $$
 declare
   v_offerer_profile_id uuid;
+  v_offerer_name text;
   v_requester_profile_id uuid;
+  v_requester_name text;
   v_store_id uuid;
   v_status public.request_status;
   v_offer_ok boolean;
@@ -230,6 +252,15 @@ begin
 
   if v_status is null then
     raise exception 'Swap request not found';
+  end if;
+
+  select p.name
+    into v_requester_name
+  from public.profiles p
+  where p.id = v_requester_profile_id;
+
+  if v_requester_name is null then
+    raise exception 'Requester profile not found';
   end if;
 
   if v_requester_profile_id <> p_actor_profile_id then
@@ -256,6 +287,15 @@ begin
   from public.shift_swap_offers o
   where o.id = p_offer_id
     and o.request_id = p_request_id;
+
+  select p.name
+    into v_offerer_name
+  from public.profiles p
+  where p.id = v_offerer_profile_id;
+
+  if v_offerer_name is null then
+    raise exception 'Offerer profile not found';
+  end if;
 
   update public.shift_swap_offers
   set is_selected = false
@@ -292,7 +332,7 @@ begin
   )
   select
     'message',
-    'Swap request pending approval',
+    v_requester_name || ' accepted ' || v_offerer_name || '''s offer. Swap request pending approval.',
     p.id
   from public.store_managers sm
   join public.profiles p
@@ -306,7 +346,7 @@ begin
   )
   values (
     'message',
-    'Your offer was accepted and sent to management for approval',
+    v_requester_name || ' accepted your offer and sent it to management for approval',
     v_offerer_profile_id
   );
 
@@ -338,6 +378,7 @@ set search_path = public
 as $$
 declare
   v_requester_profile_id uuid;
+  v_requester_name text;
   v_status public.request_status;
   v_offer_ok boolean;
   v_offerer_profile_id uuid;
@@ -350,6 +391,15 @@ begin
 
   if v_status is null then
     raise exception 'Swap request not found';
+  end if;
+
+  select p.name
+    into v_requester_name
+  from public.profiles p
+  where p.id = v_requester_profile_id;
+
+  if v_requester_name is null then
+    raise exception 'Requester profile not found';
   end if;
 
   if v_requester_profile_id <> p_actor_profile_id then
@@ -403,7 +453,7 @@ begin
   )
   values (
     'message',
-    'Your offer was denied by the requester',
+    'Your offer was denied by ' || v_requester_name,
     v_offerer_profile_id
   );
 
