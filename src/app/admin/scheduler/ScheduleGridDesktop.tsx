@@ -7,9 +7,9 @@ import {
   assignmentKey,
   calcHours,
   formatTimeLabel,
-  hashColor,
   TemplateRow,
 } from "./useSchedulerState";
+import { getEmployeeColorClass } from "@/lib/employeeColors";
 
 type Props = {
   stores: Store[];
@@ -110,7 +110,7 @@ export default function ScheduleGridDesktop({
                           {cellStart && cellEnd ? `${formatTimeLabel(cellStart)} - ${formatTimeLabel(cellEnd)}` : "Template missing"}
                         </div>
                         {current?.profileId && (
-                          <div className={`text-xs px-2 py-1 rounded border flex items-center justify-between gap-2 ${hashColor(current.profileId)}`}>
+                          <div className={`text-xs px-2 py-1 rounded border flex items-center justify-between gap-2 ${getEmployeeColorClass(current.profileId)}`}>
                             <span>{employees.find(p => p.id === current.profileId)?.name ?? "Employee"}</span>
                             {cellHours && <span className="ml-auto">{cellHours} hrs</span>}
                           </div>

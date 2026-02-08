@@ -10,6 +10,7 @@ import {
   calcHours,
   formatTimeLabel,
 } from "./useSchedulerState";
+import { getEmployeeColorClass } from "@/lib/employeeColors";
 
 type Props = {
   stores: Store[];
@@ -134,7 +135,7 @@ export default function ScheduleCardsMobile({
           const cardExpanded = expanded.has(card.cardKey);
 
           let dayHours = 0;
-          const summaries = SHIFT_TYPES.map(shift => {
+            const summaries = SHIFT_TYPES.map(shift => {
             const key = assignmentKey(card.store.id, card.date, shift.key);
             const assignment = assignments[key];
             const employees = employeesByStore[card.store.id] ?? [];
@@ -154,6 +155,7 @@ export default function ScheduleCardsMobile({
               hours,
               hasIssue: unassignedKeys.has(key) || conflictKeys.has(key),
               conflict: conflictKeys.has(key),
+              colorClass: assignment?.profileId ? getEmployeeColorClass(assignment.profileId) : "",
             };
           });
 
@@ -184,10 +186,17 @@ export default function ScheduleCardsMobile({
                 </div>
                 <div className="mt-2 text-xs muted space-y-1">
                   {summaries.map(item => (
-                    <div key={item.key}>
-                      {item.shift.label}: {item.employeeName}
-                      {item.hours > 0 ? ` (${item.hours.toFixed(1)}h)` : ""}
-                      {item.hasIssue ? " - needs attention" : ""}
+                    <div key={item.key} className="flex items-center gap-2">
+                      <span>{item.shift.label}:</span>
+                      {item.assignment?.profileId ? (
+                        <span className={`px-2 py-0.5 rounded border ${item.colorClass}`}>
+                          {item.employeeName}
+                          {item.hours > 0 ? ` (${item.hours.toFixed(1)}h)` : ""}
+                        </span>
+                      ) : (
+                        <span>Unassigned</span>
+                      )}
+                      {item.hasIssue ? <span>- needs attention</span> : null}
                     </div>
                   ))}
                 </div>

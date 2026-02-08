@@ -128,19 +128,6 @@ function getWeekKey(dateStr: string) {
   return toISODate(d);
 }
 
-export function hashColor(id: string) {
-  let hash = 0;
-  for (let i = 0; i < id.length; i += 1) hash = (hash * 31 + id.charCodeAt(i)) | 0;
-  const colors = [
-    "bg-green-500/20 text-green-200 border-green-400/40",
-    "bg-purple-500/20 text-purple-200 border-purple-400/40",
-    "bg-cyan-500/20 text-cyan-200 border-cyan-400/40",
-    "bg-amber-500/20 text-amber-200 border-amber-400/40",
-    "bg-pink-500/20 text-pink-200 border-pink-400/40",
-  ];
-  return colors[Math.abs(hash) % colors.length];
-}
-
 export function assignmentKey(storeId: string, dateStr: string, shiftType: "open" | "close") {
   return `${storeId}|${dateStr}|${shiftType}`;
 }
