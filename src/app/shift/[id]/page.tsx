@@ -545,15 +545,15 @@ export default function ShiftPage() {
 
         {/* Checklist section - not shown for "other" shift types */}
         {shiftType !== "other" && (
-          <div className="border rounded-lg bg-white shadow-sm">
+          <div className="card card-pad rounded-2xl border-cyan-400/40 bg-[#0b1220] text-slate-100 shadow-[0_0_0_1px_rgba(6,182,212,0.08)]">
             <button
               type="button"
-              className="w-full p-3 flex items-center justify-between text-left"
+              className="w-full text-left flex items-center justify-between gap-2"
               onClick={() => setChecklistExpanded(prev => !prev)}
             >
               <div className="space-y-1">
                 <div className="text-sm font-medium">Opening Checklist</div>
-                <div className="text-xs text-gray-600">
+                <div className="text-xs text-slate-300">
                   Complete: <b>{checklistCompletedCount}</b> · Incomplete: <b>{checklistIncompleteCount}</b>
                 </div>
               </div>
@@ -561,23 +561,23 @@ export default function ShiftPage() {
             </button>
 
             {checklistExpanded && (
-              <div className="px-3 pb-3 space-y-2">
+              <div className="mt-3 space-y-2">
                 {(state.checklistGroups || []).length === 0 ? (
-                  <div className="text-sm border rounded p-3">No checklist items found.</div>
+                  <div className="text-sm border border-cyan-400/30 rounded p-3 bg-slate-900/50">No checklist items found.</div>
                 ) : (
-                  <ul className="border rounded divide-y">
+                  <ul className="border border-cyan-400/30 rounded divide-y divide-cyan-400/20 bg-slate-900/50">
                     {state.checklistGroups.map(g => {
                       const isDone = done.has(g.norm);
                       return (
                         <li key={g.norm} className="flex items-center justify-between p-3">
                           <div>
                             <div>{g.label}</div>
-                            <div className="text-xs text-gray-500">{g.required ? "Required" : "Optional"}</div>
+                            <div className="text-xs text-slate-400">{g.required ? "Required" : "Optional"}</div>
                           </div>
                           <button
                             onClick={() => checkGroup(g)}
                             disabled={isDone}
-                            className={`px-3 py-1 rounded text-black ${isDone ? "bg-green-500" : "bg-gray-200"}`}
+                            className={`px-3 py-1 rounded ${isDone ? "bg-emerald-500 text-black" : "bg-slate-200 text-black"}`}
                           >
                             {isDone ? "Done" : "Check"}
                           </button>
@@ -599,10 +599,10 @@ export default function ShiftPage() {
 
         {/* Cleaning tasks section (separate from operational checklist) */}
         {shiftType !== "other" && (
-          <div className="border rounded-lg bg-white shadow-sm">
+          <div className="card card-pad rounded-2xl border-cyan-400/40 bg-[#0b1220] text-slate-100 shadow-[0_0_0_1px_rgba(6,182,212,0.08)]">
             <button
               type="button"
-              className="w-full p-3 flex items-center justify-between text-left"
+              className="w-full text-left flex items-center justify-between gap-2"
               onClick={() => setCleaningExpanded(prev => !prev)}
             >
               <div className="space-y-1">
@@ -614,7 +614,7 @@ export default function ShiftPage() {
                     </span>
                   )}
                 </div>
-                <div className="text-xs text-gray-600">
+                <div className="text-xs text-slate-300">
                   Complete: <b>{cleaningCompletedCount}</b> · Incomplete: <b>{cleaningIncompleteCount}</b>
                 </div>
               </div>
@@ -622,7 +622,7 @@ export default function ShiftPage() {
             </button>
 
             {cleaningExpanded && (
-              <div className="px-3 pb-3 space-y-2">
+              <div className="mt-3 space-y-2">
                 <div className="text-xs text-amber-700 border border-amber-300 rounded p-2 bg-amber-50">
                   Cleaning tasks can be skipped with a reason. Skips notify managers but do not block clock out.
                 </div>
@@ -630,14 +630,14 @@ export default function ShiftPage() {
                   Completion is mandatory: failure to complete these tasks, or marking them complete when they were not done, may result in disciplinary action up to and including termination. If a task cannot be completed, document the reason in the app so it can be reviewed and approved by a manager.
                 </div>
 
-                {cleaningLoading && <div className="text-sm border rounded p-3">Loading cleaning tasks...</div>}
+                {cleaningLoading && <div className="text-sm border border-cyan-400/30 rounded p-3 bg-slate-900/50">Loading cleaning tasks...</div>}
                 {!cleaningLoading && cleaningTasks.length === 0 && (
-                  <div className="text-sm border rounded p-3">No cleaning tasks scheduled for this shift.</div>
+                  <div className="text-sm border border-cyan-400/30 rounded p-3 bg-slate-900/50">No cleaning tasks scheduled for this shift.</div>
                 )}
 
                 {!cleaningLoading && cleaningTasks.length > 0 && (
                   <>
-                    <ul className="border rounded divide-y">
+                    <ul className="border border-cyan-400/30 rounded divide-y divide-cyan-400/20 bg-slate-900/50">
                       {cleaningTasks.map(task => {
                         const isCompleted = task.status === "completed";
                         const isSkipped = task.status === "skipped";
@@ -646,14 +646,14 @@ export default function ShiftPage() {
                             <div className="flex items-start justify-between gap-3">
                               <div>
                                 <div>{task.task_name}</div>
-                                <div className="text-xs text-gray-500">
+                                <div className="text-xs text-slate-400">
                                   {task.cleaning_shift_type.toUpperCase()} · {task.task_category ?? "cleaning"}
                                 </div>
                               </div>
                               <div className="text-xs">
-                                {isCompleted && <span className="text-green-700">Completed</span>}
+                                {isCompleted && <span className="text-emerald-300">Completed</span>}
                                 {isSkipped && <span className="text-amber-700">Skipped</span>}
-                                {!isCompleted && !isSkipped && <span className="text-gray-500">Pending</span>}
+                                {!isCompleted && !isSkipped && <span className="text-slate-400">Pending</span>}
                               </div>
                             </div>
 
@@ -665,7 +665,7 @@ export default function ShiftPage() {
 
                             <div className="flex gap-2 justify-end">
                               <button
-                                className={`px-3 py-1 rounded text-black ${isCompleted ? "bg-green-500" : "bg-gray-200"}`}
+                                className={`px-3 py-1 rounded ${isCompleted ? "bg-emerald-500 text-black" : "bg-slate-200 text-black"}`}
                                 disabled={isCompleted}
                                 onClick={() => void completeCleaningTask(task)}
                               >
