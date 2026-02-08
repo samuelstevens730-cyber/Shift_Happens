@@ -314,9 +314,16 @@ export default function EmployeeShiftsPage() {
           {filteredShifts.map(s => {
             const start = new Date(s.planned_start_at ?? s.started_at);
             const end = s.ended_at ? new Date(s.ended_at) : null;
+            const hours = end ? (end.getTime() - start.getTime()) / 3600000 : null;
             const periodKey = getPayPeriodKey(new Date(s.planned_start_at ?? s.started_at));
             return (
               <div key={s.id} className="card card-pad">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div className="text-xs muted">Shift Summary</div>
+                  <span className="inline-flex items-center rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-xs font-medium text-cyan-200">
+                    {hours != null ? `${hours.toFixed(2)} hrs` : "--"}
+                  </span>
+                </div>
                 <div className="grid gap-2 text-sm sm:grid-cols-2">
                   <div>
                     <div className="text-xs muted">Date</div>
