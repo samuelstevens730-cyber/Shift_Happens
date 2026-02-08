@@ -160,7 +160,9 @@ export async function POST(req: Request) {
     const { data: scheduledRows, error: schedErr } = await supabaseServer
       .from("schedule_shifts")
       .select("id, shift_type, scheduled_start, scheduled_end, shift_date, schedules!inner(status)")
-      .eq("store_id", store.id)
+      // Source-of-truth store scope should come from parent schedule record.
+      // schedule_shifts.store_id can be null/stale on legacy rows.
+      .eq("schedules.store_id", store.id)
       .eq("profile_id", body.profileId)
       .eq("shift_date", plannedDateKey)
       .eq("schedules.status", "published");
