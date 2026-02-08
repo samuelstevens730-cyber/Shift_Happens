@@ -21,3 +21,13 @@ export function getEmployeeColorClass(profileId: string): string {
   return EMPLOYEE_COLOR_CLASSES[index];
 }
 
+export function buildEmployeeColorClassMap(profileIds: string[]): Record<string, string> {
+  const uniqueSorted = Array.from(new Set(profileIds.filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  const out: Record<string, string> = {};
+
+  uniqueSorted.forEach((profileId, idx) => {
+    out[profileId] = EMPLOYEE_COLOR_CLASSES[idx % EMPLOYEE_COLOR_CLASSES.length];
+  });
+
+  return out;
+}

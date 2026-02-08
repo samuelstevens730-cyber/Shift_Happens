@@ -9,7 +9,8 @@ import {
   formatTimeLabel,
   TemplateRow,
 } from "./useSchedulerState";
-import { getEmployeeColorClass } from "@/lib/employeeColors";
+import { buildEmployeeColorClassMap } from "@/lib/employeeColors";
+import { useMemo } from "react";
 
 type Props = {
   stores: Store[];
@@ -38,6 +39,11 @@ export default function ScheduleGridDesktop({
   onModeChange,
   onOtherTimeChange,
 }: Props) {
+  const employeeColorMap = useMemo(() => {
+    const ids = Object.values(employeesByStore).flat().map(p => p.id);
+    return buildEmployeeColorClassMap(ids);
+  }, [employeesByStore]);
+
   return (
     <div className="card card-pad overflow-x-auto hidden md:block">
       <table className="w-full text-sm">
@@ -110,7 +116,7 @@ export default function ScheduleGridDesktop({
                           {cellStart && cellEnd ? `${formatTimeLabel(cellStart)} - ${formatTimeLabel(cellEnd)}` : "Template missing"}
                         </div>
                         {current?.profileId && (
-                          <div className={`text-xs px-2 py-1 rounded border flex items-center justify-between gap-2 ${getEmployeeColorClass(current.profileId)}`}>
+                          <div className={`text-xs px-2 py-1 rounded border flex items-center justify-between gap-2 ${employeeColorMap[current.profileId] ?? ""}`}>
                             <span>{employees.find(p => p.id === current.profileId)?.name ?? "Employee"}</span>
                             {cellHours && <span className="ml-auto">{cellHours} hrs</span>}
                           </div>

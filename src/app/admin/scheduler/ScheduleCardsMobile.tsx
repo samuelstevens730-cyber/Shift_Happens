@@ -10,7 +10,7 @@ import {
   calcHours,
   formatTimeLabel,
 } from "./useSchedulerState";
-import { getEmployeeColorClass } from "@/lib/employeeColors";
+import { buildEmployeeColorClassMap } from "@/lib/employeeColors";
 
 type Props = {
   stores: Store[];
@@ -67,6 +67,11 @@ export default function ScheduleCardsMobile({
   onPublish,
   onJumpTotals,
 }: Props) {
+  const employeeColorMap = useMemo(() => {
+    const ids = Object.values(employeesByStore).flat().map(p => p.id);
+    return buildEmployeeColorClassMap(ids);
+  }, [employeesByStore]);
+
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [issuesOnly, setIssuesOnly] = useState(false);
   const [incompleteCursor, setIncompleteCursor] = useState(-1);
@@ -155,7 +160,7 @@ export default function ScheduleCardsMobile({
               hours,
               hasIssue: unassignedKeys.has(key) || conflictKeys.has(key),
               conflict: conflictKeys.has(key),
-              colorClass: assignment?.profileId ? getEmployeeColorClass(assignment.profileId) : "",
+              colorClass: assignment?.profileId ? (employeeColorMap[assignment.profileId] ?? "") : "",
             };
           });
 
