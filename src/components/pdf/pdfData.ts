@@ -75,6 +75,26 @@ function formatTimeLabel(value?: string) {
   return `${hour12}:${minute} ${suffix}`;
 }
 
+function sortTimesAsc(values: string[]) {
+  return [...values].sort((a, b) => toMinutes(a) - toMinutes(b));
+}
+
+function latestEndFromAssignments(
+  assignments: Array<{ start?: string; end?: string; hours: number }>
+) {
+  const candidates = assignments
+    .filter(entry => entry.start && entry.end)
+    .map(entry => {
+      const start = toMinutes(entry.start as string);
+      let end = toMinutes(entry.end as string);
+      if (end < start) end += 24 * 60;
+      return { end, rawEnd: entry.end as string };
+    })
+    .sort((a, b) => a.end - b.end);
+
+  return candidates.length ? candidates[candidates.length - 1].rawEnd : undefined;
+}
+
 function dayOfWeek(dateStr: string) {
   const dt = new Date(`${dateStr}T00:00:00`);
   return dt.getDay();
@@ -225,14 +245,15 @@ export function buildEmployeeSections(args: {
       });
 
       const starts = dayAssignments.map(x => x.start).filter(Boolean) as string[];
-      const ends = dayAssignments.map(x => x.end).filter(Boolean) as string[];
       const totalHours = dayAssignments.reduce((sum, entry) => sum + entry.hours, 0);
+      const earliestStart = starts.length ? sortTimesAsc(starts)[0] : undefined;
+      const latestEnd = latestEndFromAssignments(dayAssignments);
 
       return {
         date: dateStr,
         label: format(parseISO(dateStr), "EEE, MMM d"),
-        timeIn: starts.length ? starts.map(formatTimeLabel).join(" / ") : "-",
-        timeOut: ends.length ? ends.map(formatTimeLabel).join(" / ") : "-",
+        timeIn: earliestStart ? formatTimeLabel(earliestStart) : "-",
+        timeOut: latestEnd ? formatTimeLabel(latestEnd) : "-",
         totalHours,
       };
     });
@@ -255,4 +276,3 @@ export function periodLabel(periodStart: string, periodEnd: string) {
 export function monthLabel(periodStart: string) {
   return format(parseISO(periodStart), "MMMM yyyy");
 }
-
