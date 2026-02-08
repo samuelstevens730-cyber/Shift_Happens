@@ -6,6 +6,7 @@
 import ScheduleCardsMobile from "./ScheduleCardsMobile";
 import ScheduleGridDesktop from "./ScheduleGridDesktop";
 import { useSchedulerState } from "./useSchedulerState";
+import ExportScheduleButton from "@/components/pdf/ExportScheduleButton";
 
 export default function AdminSchedulerPage() {
   const {
@@ -122,6 +123,15 @@ export default function AdminSchedulerPage() {
             <button className="btn-secondary px-4 py-2" onClick={() => void ensureSchedules()}>
               Create/Load
             </button>
+            <ExportScheduleButton
+              stores={stores}
+              dates={dates}
+              assignments={assignments}
+              templates={templates}
+              memberships={memberships}
+              periodStart={periodStart}
+              periodEnd={periodEnd}
+            />
             <div className="hidden md:flex gap-2">
               <button className="btn-primary px-4 py-2 disabled:opacity-50" onClick={saveDraft} disabled={saving}>
                 {saving ? "Saving..." : "Save Draft"}
