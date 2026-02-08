@@ -209,6 +209,17 @@ export default function AdminIndex() {
             </p>
           </Link>
 
+          {/* Cleaning Tasks - per-store/day/shift cleaning matrix */}
+          <Link href="/admin/cleaning" className="tile">
+            <div className="flex items-center gap-2">
+              <span className="tile-dot" />
+              <div className="text-lg font-medium">Cleaning Tasks</div>
+            </div>
+            <p className="mt-2 text-sm muted">
+              Configure cleaning requirements by store, day, and shift.
+            </p>
+          </Link>
+
           {/* Scheduler - build weekly schedules */}
           <Link href="/admin/scheduler" className="tile">
             <div className="flex items-center gap-2">

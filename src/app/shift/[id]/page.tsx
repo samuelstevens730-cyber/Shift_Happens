@@ -78,6 +78,23 @@ type ShiftState = {
   }[];
 };
 
+type CleaningTaskStatus = "pending" | "completed" | "skipped";
+
+type CleaningTaskRow = {
+  schedule_id: string;
+  cleaning_task_id: string;
+  task_name: string;
+  task_description: string | null;
+  task_category: string | null;
+  task_sort_order: number;
+  cleaning_shift_type: "am" | "pm";
+  day_of_week: number;
+  status: CleaningTaskStatus;
+  completed_at: string | null;
+  skipped_reason: string | null;
+  completed_by: string | null;
+};
+
 function toLocalInputValue(d = new Date()) {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -153,6 +170,10 @@ export default function ShiftPage() {
   const [showClockOut, setShowClockOut] = useState(false);
   const [showReuseBanner, setShowReuseBanner] = useState(reused);
   const [profileId, setProfileId] = useState<string | null>(null);
+  const [cleaningTasks, setCleaningTasks] = useState<CleaningTaskRow[]>([]);
+  const [cleaningLoading, setCleaningLoading] = useState(false);
+  const [cleaningErr, setCleaningErr] = useState<string | null>(null);
+  const [skipModalTask, setSkipModalTask] = useState<CleaningTaskRow | null>(null);
 
   // Auth state for API calls
   const [pinToken, setPinToken] = useState<string | null>(null);
@@ -253,6 +274,32 @@ export default function ShiftPage() {
     }
   }, [resolveAuthToken, qrToken, shiftId, router, seedDoneFromState]);
 
+  const loadCleaningTasks = useCallback(async () => {
+    const currentShiftType = state?.shift?.shift_type;
+    if (currentShiftType === "other") {
+      setCleaningTasks([]);
+      setCleaningErr(null);
+      return;
+    }
+    const authToken = await resolveAuthToken();
+    if (!authToken) return;
+    setCleaningLoading(true);
+    setCleaningErr(null);
+    try {
+      const res = await fetch(`/api/cleaning/${shiftId}`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to load cleaning tasks.");
+      setCleaningTasks((json.tasks ?? []) as CleaningTaskRow[]);
+    } catch (e: unknown) {
+      setCleaningErr(e instanceof Error ? e.message : "Failed to load cleaning tasks.");
+      setCleaningTasks([]);
+    } finally {
+      setCleaningLoading(false);
+    }
+  }, [resolveAuthToken, shiftId, state?.shift?.shift_type]);
+
   useEffect(() => {
     let alive = true;
 
@@ -273,6 +320,11 @@ export default function ShiftPage() {
       alive = false;
     };
   }, [reloadShift]);
+
+  useEffect(() => {
+    if (!state?.shift?.id) return;
+    void loadCleaningTasks();
+  }, [state?.shift?.id, loadCleaningTasks]);
 
   const shiftType = state?.shift.shift_type;
 
@@ -302,6 +354,60 @@ export default function ShiftPage() {
   const pendingTasks = useMemo(() => {
     return (state?.assignments || []).filter(a => a.type === "task" && !a.completed_at);
   }, [state]);
+
+  const cleaningCompletedCount = useMemo(() => {
+    return cleaningTasks.filter(task => task.status === "completed").length;
+  }, [cleaningTasks]);
+  const cleaningSkippedCount = useMemo(() => {
+    return cleaningTasks.filter(task => task.status === "skipped").length;
+  }, [cleaningTasks]);
+
+  async function completeCleaningTask(task: CleaningTaskRow) {
+    setCleaningErr(null);
+    const authToken = await resolveAuthToken();
+    if (!authToken) {
+      setCleaningErr(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
+      return;
+    }
+    const res = await fetch("/api/cleaning/complete", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ shiftId, scheduleId: task.schedule_id }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      setCleaningErr(json?.error || "Failed to complete cleaning task.");
+      return;
+    }
+    await loadCleaningTasks();
+  }
+
+  async function skipCleaningTask(task: CleaningTaskRow, reason: string) {
+    setCleaningErr(null);
+    const authToken = await resolveAuthToken();
+    if (!authToken) {
+      setCleaningErr(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
+      return false;
+    }
+    const res = await fetch("/api/cleaning/skip", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ shiftId, scheduleId: task.schedule_id, reason }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      setCleaningErr(json?.error || "Failed to skip cleaning task.");
+      return false;
+    }
+    await loadCleaningTasks();
+    return true;
+  }
 
   const endNote = useMemo(() => {
     return (state?.counts || []).find(c => c.count_type === "end")?.note ?? null;
@@ -465,6 +571,87 @@ export default function ShiftPage() {
           </div>
         )}
 
+        {/* Cleaning tasks section (separate from operational checklist) */}
+        {shiftType !== "other" && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="text-sm font-medium">Cleaning Tasks</div>
+              {cleaningSkippedCount > 0 && (
+                <span className="text-xs rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5">
+                  Skipped: {cleaningSkippedCount}
+                </span>
+              )}
+            </div>
+            <div className="text-xs text-amber-700 border border-amber-300 rounded p-2 bg-amber-50">
+              Cleaning tasks can be skipped with a reason. Skips notify managers but do not block clock out.
+            </div>
+            <div className="text-xs text-red-700 border border-red-300 rounded p-2 bg-red-50">
+              Completion is mandatory: failure to complete these tasks, or marking them complete when they were not done, may result in disciplinary action up to and including termination. If a task cannot be completed, document the reason in the app so it can be reviewed and approved by a manager.
+            </div>
+
+            {cleaningLoading && <div className="text-sm border rounded p-3">Loading cleaning tasks...</div>}
+            {!cleaningLoading && cleaningTasks.length === 0 && (
+              <div className="text-sm border rounded p-3">No cleaning tasks scheduled for this shift.</div>
+            )}
+
+            {!cleaningLoading && cleaningTasks.length > 0 && (
+              <>
+                <ul className="border rounded divide-y">
+                  {cleaningTasks.map(task => {
+                    const isCompleted = task.status === "completed";
+                    const isSkipped = task.status === "skipped";
+                    return (
+                      <li key={task.schedule_id} className="p-3 space-y-2">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div>{task.task_name}</div>
+                            <div className="text-xs text-gray-500">
+                              {task.cleaning_shift_type.toUpperCase()} · {task.task_category ?? "cleaning"}
+                            </div>
+                          </div>
+                          <div className="text-xs">
+                            {isCompleted && <span className="text-green-700">Completed</span>}
+                            {isSkipped && <span className="text-amber-700">Skipped</span>}
+                            {!isCompleted && !isSkipped && <span className="text-gray-500">Pending</span>}
+                          </div>
+                        </div>
+
+                        {task.skipped_reason && (
+                          <div className="text-xs text-amber-700 border border-amber-300 rounded p-2 bg-amber-50">
+                            Reason: {task.skipped_reason}
+                          </div>
+                        )}
+
+                        <div className="flex gap-2 justify-end">
+                          <button
+                            className={`px-3 py-1 rounded text-black ${isCompleted ? "bg-green-500" : "bg-gray-200"}`}
+                            disabled={isCompleted}
+                            onClick={() => void completeCleaningTask(task)}
+                          >
+                            {isCompleted ? "Done" : "Complete"}
+                          </button>
+                          <button
+                            className="px-3 py-1 rounded border border-amber-400 text-amber-800 disabled:opacity-50"
+                            disabled={isCompleted}
+                            onClick={() => setSkipModalTask(task)}
+                          >
+                            Skip
+                          </button>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <div className="text-sm">
+                  {cleaningCompletedCount} of {cleaningTasks.length} tasks completed
+                </div>
+              </>
+            )}
+
+            {cleaningErr && <div className="text-sm text-red-600 border border-red-300 rounded p-2">{cleaningErr}</div>}
+          </div>
+        )}
+
         {/* Manager assignments section */}
         {(pendingMessages.length > 0 || pendingTasks.length > 0) && (
           <div className="space-y-3">
@@ -547,8 +734,76 @@ export default function ShiftPage() {
             managerSession={managerSession}
           />
         )}
+
+        {skipModalTask && (
+          <SkipCleaningTaskModal
+            taskName={skipModalTask.task_name}
+            onClose={() => setSkipModalTask(null)}
+            onSubmit={async reason => {
+              const ok = await skipCleaningTask(skipModalTask, reason);
+              if (ok) setSkipModalTask(null);
+              return ok;
+            }}
+          />
+        )}
       </div>
     </div>
+    </div>
+  );
+}
+
+function SkipCleaningTaskModal({
+  taskName,
+  onClose,
+  onSubmit,
+}: {
+  taskName: string;
+  onClose: () => void;
+  onSubmit: (reason: string) => Promise<boolean>;
+}) {
+  const [reason, setReason] = useState("");
+  const [err, setErr] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-start justify-center p-4 overflow-y-auto modal-under-header">
+      <div className="w-full max-w-md bg-white text-black rounded-2xl p-4 space-y-3">
+        <h2 className="text-lg font-semibold">Skip Cleaning Task</h2>
+        <div className="text-sm">
+          Task: <b>{taskName}</b>
+        </div>
+        <label className="text-sm">Reason (required)</label>
+        <textarea
+          className="w-full border rounded p-2 min-h-24"
+          value={reason}
+          onChange={e => setReason(e.target.value)}
+          placeholder="Why are you skipping this cleaning task?"
+        />
+        {err && <div className="text-sm text-red-600 border border-red-300 rounded p-2">{err}</div>}
+        <div className="flex justify-end gap-2">
+          <button className="px-3 py-1.5 rounded border" onClick={onClose} disabled={saving}>
+            Cancel
+          </button>
+          <button
+            className="px-3 py-1.5 rounded bg-amber-600 text-white disabled:opacity-50"
+            disabled={saving}
+            onClick={async () => {
+              setErr(null);
+              const trimmed = reason.trim();
+              if (!trimmed) {
+                setErr("Reason is required.");
+                return;
+              }
+              setSaving(true);
+              const ok = await onSubmit(trimmed);
+              if (!ok) setErr("Failed to skip task.");
+              setSaving(false);
+            }}
+          >
+            {saving ? "Saving..." : "Confirm Skip"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
