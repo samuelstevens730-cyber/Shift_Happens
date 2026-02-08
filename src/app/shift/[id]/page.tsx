@@ -174,6 +174,8 @@ export default function ShiftPage() {
   const [cleaningLoading, setCleaningLoading] = useState(false);
   const [cleaningErr, setCleaningErr] = useState<string | null>(null);
   const [skipModalTask, setSkipModalTask] = useState<CleaningTaskRow | null>(null);
+  const [checklistExpanded, setChecklistExpanded] = useState(false);
+  const [cleaningExpanded, setCleaningExpanded] = useState(false);
 
   // Auth state for API calls
   const [pinToken, setPinToken] = useState<string | null>(null);
@@ -344,6 +346,11 @@ export default function ShiftPage() {
   const remainingRequired = useMemo(() => {
     return requiredGroupKeys.filter(k => !done.has(k)).length;
   }, [requiredGroupKeys, done]);
+  const checklistTotalCount = useMemo(() => (state?.checklistGroups || []).length, [state]);
+  const checklistCompletedCount = useMemo(() => {
+    return (state?.checklistGroups || []).filter(group => done.has(group.norm)).length;
+  }, [state, done]);
+  const checklistIncompleteCount = checklistTotalCount - checklistCompletedCount;
 
   // Messages that haven't been acknowledged yet
   const pendingMessages = useMemo(() => {
@@ -358,6 +365,9 @@ export default function ShiftPage() {
   const cleaningCompletedCount = useMemo(() => {
     return cleaningTasks.filter(task => task.status === "completed").length;
   }, [cleaningTasks]);
+  const cleaningIncompleteCount = useMemo(() => {
+    return cleaningTasks.length - cleaningCompletedCount;
+  }, [cleaningTasks, cleaningCompletedCount]);
   const cleaningSkippedCount = useMemo(() => {
     return cleaningTasks.filter(task => task.status === "skipped").length;
   }, [cleaningTasks]);
@@ -535,120 +545,153 @@ export default function ShiftPage() {
 
         {/* Checklist section - not shown for "other" shift types */}
         {shiftType !== "other" && (
-          <div className="space-y-2">
-            <div className="text-sm font-medium">Checklist</div>
+          <div className="border rounded-lg bg-white shadow-sm">
+            <button
+              type="button"
+              className="w-full p-3 flex items-center justify-between text-left"
+              onClick={() => setChecklistExpanded(prev => !prev)}
+            >
+              <div className="space-y-1">
+                <div className="text-sm font-medium">Opening Checklist</div>
+                <div className="text-xs text-gray-600">
+                  Complete: <b>{checklistCompletedCount}</b> · Incomplete: <b>{checklistIncompleteCount}</b>
+                </div>
+              </div>
+              <span className="text-sm">{checklistExpanded ? "Hide" : "Show"}</span>
+            </button>
 
-            {(state.checklistGroups || []).length === 0 ? (
-              <div className="text-sm border rounded p-3">No checklist items found.</div>
-            ) : (
-              <ul className="border rounded divide-y">
-                {state.checklistGroups.map(g => {
-                  const isDone = done.has(g.norm);
-                  return (
-                    <li key={g.norm} className="flex items-center justify-between p-3">
-                      <div>
-                        <div>{g.label}</div>
-                        <div className="text-xs text-gray-500">{g.required ? "Required" : "Optional"}</div>
-                      </div>
-                      <button
-                        onClick={() => checkGroup(g)}
-                        disabled={isDone}
-                        className={`px-3 py-1 rounded text-black ${isDone ? "bg-green-500" : "bg-gray-200"}`}
-                      >
-                        {isDone ? "Done" : "Check"}
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
+            {checklistExpanded && (
+              <div className="px-3 pb-3 space-y-2">
+                {(state.checklistGroups || []).length === 0 ? (
+                  <div className="text-sm border rounded p-3">No checklist items found.</div>
+                ) : (
+                  <ul className="border rounded divide-y">
+                    {state.checklistGroups.map(g => {
+                      const isDone = done.has(g.norm);
+                      return (
+                        <li key={g.norm} className="flex items-center justify-between p-3">
+                          <div>
+                            <div>{g.label}</div>
+                            <div className="text-xs text-gray-500">{g.required ? "Required" : "Optional"}</div>
+                          </div>
+                          <button
+                            onClick={() => checkGroup(g)}
+                            disabled={isDone}
+                            className={`px-3 py-1 rounded text-black ${isDone ? "bg-green-500" : "bg-gray-200"}`}
+                          >
+                            {isDone ? "Done" : "Check"}
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+
+                <div className="text-sm">
+                  {remainingRequired > 0
+                    ? `Finish ${remainingRequired} required task${remainingRequired === 1 ? "" : "s"} before clock out.`
+                    : "All required tasks done."}
+                </div>
+              </div>
             )}
-
-            <div className="text-sm">
-              {remainingRequired > 0
-                ? `Finish ${remainingRequired} required task${remainingRequired === 1 ? "" : "s"} before clock out.`
-                : "All required tasks done."}
-            </div>
           </div>
         )}
 
         {/* Cleaning tasks section (separate from operational checklist) */}
         {shiftType !== "other" && (
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <div className="text-sm font-medium">Cleaning Tasks</div>
-              {cleaningSkippedCount > 0 && (
-                <span className="text-xs rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5">
-                  Skipped: {cleaningSkippedCount}
-                </span>
-              )}
-            </div>
-            <div className="text-xs text-amber-700 border border-amber-300 rounded p-2 bg-amber-50">
-              Cleaning tasks can be skipped with a reason. Skips notify managers but do not block clock out.
-            </div>
-            <div className="text-xs text-red-700 border border-red-300 rounded p-2 bg-red-50">
-              Completion is mandatory: failure to complete these tasks, or marking them complete when they were not done, may result in disciplinary action up to and including termination. If a task cannot be completed, document the reason in the app so it can be reviewed and approved by a manager.
-            </div>
-
-            {cleaningLoading && <div className="text-sm border rounded p-3">Loading cleaning tasks...</div>}
-            {!cleaningLoading && cleaningTasks.length === 0 && (
-              <div className="text-sm border rounded p-3">No cleaning tasks scheduled for this shift.</div>
-            )}
-
-            {!cleaningLoading && cleaningTasks.length > 0 && (
-              <>
-                <ul className="border rounded divide-y">
-                  {cleaningTasks.map(task => {
-                    const isCompleted = task.status === "completed";
-                    const isSkipped = task.status === "skipped";
-                    return (
-                      <li key={task.schedule_id} className="p-3 space-y-2">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <div>{task.task_name}</div>
-                            <div className="text-xs text-gray-500">
-                              {task.cleaning_shift_type.toUpperCase()} · {task.task_category ?? "cleaning"}
-                            </div>
-                          </div>
-                          <div className="text-xs">
-                            {isCompleted && <span className="text-green-700">Completed</span>}
-                            {isSkipped && <span className="text-amber-700">Skipped</span>}
-                            {!isCompleted && !isSkipped && <span className="text-gray-500">Pending</span>}
-                          </div>
-                        </div>
-
-                        {task.skipped_reason && (
-                          <div className="text-xs text-amber-700 border border-amber-300 rounded p-2 bg-amber-50">
-                            Reason: {task.skipped_reason}
-                          </div>
-                        )}
-
-                        <div className="flex gap-2 justify-end">
-                          <button
-                            className={`px-3 py-1 rounded text-black ${isCompleted ? "bg-green-500" : "bg-gray-200"}`}
-                            disabled={isCompleted}
-                            onClick={() => void completeCleaningTask(task)}
-                          >
-                            {isCompleted ? "Done" : "Complete"}
-                          </button>
-                          <button
-                            className="px-3 py-1 rounded border border-amber-400 text-amber-800 disabled:opacity-50"
-                            disabled={isCompleted}
-                            onClick={() => setSkipModalTask(task)}
-                          >
-                            Skip
-                          </button>
-                        </div>
-                      </li>
-                    );
-                  })}
-                </ul>
-                <div className="text-sm">
-                  {cleaningCompletedCount} of {cleaningTasks.length} tasks completed
+          <div className="border rounded-lg bg-white shadow-sm">
+            <button
+              type="button"
+              className="w-full p-3 flex items-center justify-between text-left"
+              onClick={() => setCleaningExpanded(prev => !prev)}
+            >
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">Cleaning Tasks</span>
+                  {cleaningSkippedCount > 0 && (
+                    <span className="text-xs rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5">
+                      Skipped: {cleaningSkippedCount}
+                    </span>
+                  )}
                 </div>
-              </>
-            )}
+                <div className="text-xs text-gray-600">
+                  Complete: <b>{cleaningCompletedCount}</b> · Incomplete: <b>{cleaningIncompleteCount}</b>
+                </div>
+              </div>
+              <span className="text-sm">{cleaningExpanded ? "Hide" : "Show"}</span>
+            </button>
 
-            {cleaningErr && <div className="text-sm text-red-600 border border-red-300 rounded p-2">{cleaningErr}</div>}
+            {cleaningExpanded && (
+              <div className="px-3 pb-3 space-y-2">
+                <div className="text-xs text-amber-700 border border-amber-300 rounded p-2 bg-amber-50">
+                  Cleaning tasks can be skipped with a reason. Skips notify managers but do not block clock out.
+                </div>
+                <div className="text-xs text-red-700 border border-red-300 rounded p-2 bg-red-50">
+                  Completion is mandatory: failure to complete these tasks, or marking them complete when they were not done, may result in disciplinary action up to and including termination. If a task cannot be completed, document the reason in the app so it can be reviewed and approved by a manager.
+                </div>
+
+                {cleaningLoading && <div className="text-sm border rounded p-3">Loading cleaning tasks...</div>}
+                {!cleaningLoading && cleaningTasks.length === 0 && (
+                  <div className="text-sm border rounded p-3">No cleaning tasks scheduled for this shift.</div>
+                )}
+
+                {!cleaningLoading && cleaningTasks.length > 0 && (
+                  <>
+                    <ul className="border rounded divide-y">
+                      {cleaningTasks.map(task => {
+                        const isCompleted = task.status === "completed";
+                        const isSkipped = task.status === "skipped";
+                        return (
+                          <li key={task.schedule_id} className="p-3 space-y-2">
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div>{task.task_name}</div>
+                                <div className="text-xs text-gray-500">
+                                  {task.cleaning_shift_type.toUpperCase()} · {task.task_category ?? "cleaning"}
+                                </div>
+                              </div>
+                              <div className="text-xs">
+                                {isCompleted && <span className="text-green-700">Completed</span>}
+                                {isSkipped && <span className="text-amber-700">Skipped</span>}
+                                {!isCompleted && !isSkipped && <span className="text-gray-500">Pending</span>}
+                              </div>
+                            </div>
+
+                            {task.skipped_reason && (
+                              <div className="text-xs text-amber-700 border border-amber-300 rounded p-2 bg-amber-50">
+                                Reason: {task.skipped_reason}
+                              </div>
+                            )}
+
+                            <div className="flex gap-2 justify-end">
+                              <button
+                                className={`px-3 py-1 rounded text-black ${isCompleted ? "bg-green-500" : "bg-gray-200"}`}
+                                disabled={isCompleted}
+                                onClick={() => void completeCleaningTask(task)}
+                              >
+                                {isCompleted ? "Done" : "Complete"}
+                              </button>
+                              <button
+                                className="px-3 py-1 rounded border border-amber-400 text-amber-800 disabled:opacity-50"
+                                disabled={isCompleted}
+                                onClick={() => setSkipModalTask(task)}
+                              >
+                                Skip
+                              </button>
+                            </div>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                    <div className="text-sm">
+                      {cleaningCompletedCount} of {cleaningTasks.length} tasks completed
+                    </div>
+                  </>
+                )}
+
+                {cleaningErr && <div className="text-sm text-red-600 border border-red-300 rounded p-2">{cleaningErr}</div>}
+              </div>
+            )}
           </div>
         )}
 
