@@ -65,9 +65,12 @@ These routes import/use `src/lib/supabaseServer.ts` (service-role key, RLS bypas
 ## 2) Routes Missing/Weak Store-ID Isolation
 
 ### A) Critical: Missing auth + ownership/store guard
-- `src/app/api/checklist/check-item/route.ts`
-- `src/app/api/confirm-changeover/route.ts`
-- `src/app/api/shift/[shiftId]/assignments/[assignmentId]/route.ts`
+~~- `src/app/api/checklist/check-item/route.ts`~~ ✅ FIXED 2026-02-08
+~~- `src/app/api/confirm-changeover/route.ts`~~ ✅ FIXED 2026-02-08
+~~- `src/app/api/shift/[shiftId]/assignments/[assignmentId]/route.ts`~~ ✅ FIXED 2026-02-08
+
+**Fix applied:** All three routes now use `authenticateShiftRequest()` to verify caller identity,
+then check `shift.profile_id === auth.profileId` before allowing any mutations.
 
 ### B) Manager authenticated, but no target store ownership check
 - `src/app/api/admin/open-shifts/route.ts`

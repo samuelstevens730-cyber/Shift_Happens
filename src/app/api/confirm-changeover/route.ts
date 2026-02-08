@@ -26,6 +26,7 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { isOutOfThreshold } from "@/lib/kioskRules";
+import { authenticateShiftRequest } from "@/lib/shiftAuth";
 
 type Body = {
   qrToken?: string;
@@ -38,18 +39,30 @@ type Body = {
 
 export async function POST(req: Request) {
   try {
+    // Authenticate request (employee PIN JWT or manager Supabase session)
+    const authResult = await authenticateShiftRequest(req);
+    if (!authResult.ok) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
+    }
+    const auth = authResult.auth;
+
     const body = (await req.json()) as Body;
     if (!body.shiftId) return NextResponse.json({ error: "Missing shiftId." }, { status: 400 });
     if (typeof body.drawerCents !== "number") return NextResponse.json({ error: "Missing drawerCents." }, { status: 400 });
 
     const { data: shift } = await supabaseServer
       .from("shifts")
-      .select("id, store_id, shift_type, ended_at")
+      .select("id, store_id, profile_id, shift_type, ended_at")
       .eq("id", body.shiftId)
       .maybeSingle();
 
     if (!shift) return NextResponse.json({ error: "Shift not found." }, { status: 404 });
     if (shift.ended_at) return NextResponse.json({ error: "Shift already ended." }, { status: 400 });
+
+    // Verify caller owns this shift
+    if (shift.profile_id !== auth.profileId) {
+      return NextResponse.json({ error: "Not your shift." }, { status: 403 });
+    }
 
     let store: { id: string; expected_drawer_cents: number } | null = null;
 

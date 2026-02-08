@@ -30,6 +30,7 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { ShiftType } from "@/lib/kioskRules";
+import { authenticateShiftRequest } from "@/lib/shiftAuth";
 
 type Body = {
   shiftId: string;
@@ -70,6 +71,13 @@ async function fetchTemplatesForStore(storeId: string, shiftTypes: string[]) {
 
 export async function POST(req: Request) {
   try {
+    // Authenticate request (employee PIN JWT or manager Supabase session)
+    const authResult = await authenticateShiftRequest(req);
+    if (!authResult.ok) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
+    }
+    const auth = authResult.auth;
+
     const body = (await req.json()) as Body;
 
     if (!body.shiftId) return NextResponse.json({ error: "Missing shiftId." }, { status: 400 });
@@ -88,13 +96,18 @@ export async function POST(req: Request) {
     // 1) Fetch shift and validate not ended
     const { data: shift, error: shiftErr } = await supabaseServer
       .from("shifts")
-      .select("id, store_id, ended_at, shift_type")
+      .select("id, store_id, profile_id, ended_at, shift_type")
       .eq("id", body.shiftId)
       .maybeSingle();
 
     if (shiftErr) return NextResponse.json({ error: shiftErr.message }, { status: 500 });
     if (!shift) return NextResponse.json({ error: "Shift not found." }, { status: 404 });
     if (shift.ended_at) return NextResponse.json({ error: "Shift already ended." }, { status: 400 });
+
+    // Verify caller owns this shift
+    if (shift.profile_id !== auth.profileId) {
+      return NextResponse.json({ error: "Not your shift." }, { status: 403 });
+    }
 
     if (body.qrToken) {
       // Resolve store by token and validate ownership

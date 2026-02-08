@@ -27,6 +27,7 @@
  */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { authenticateShiftRequest } from "@/lib/shiftAuth";
 
 type AssignmentRow = {
   id: string;
@@ -45,6 +46,26 @@ export async function PATCH(
     const { shiftId, assignmentId } = await params;
     if (!shiftId || !assignmentId) {
       return NextResponse.json({ error: "Missing ids." }, { status: 400 });
+    }
+
+    // Authenticate request (employee PIN JWT or manager Supabase session)
+    const authResult = await authenticateShiftRequest(req);
+    if (!authResult.ok) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
+    }
+    const auth = authResult.auth;
+
+    // Verify caller owns this shift
+    const { data: shift, error: shiftErr } = await supabaseServer
+      .from("shifts")
+      .select("id, profile_id")
+      .eq("id", shiftId)
+      .maybeSingle();
+
+    if (shiftErr) return NextResponse.json({ error: shiftErr.message }, { status: 500 });
+    if (!shift) return NextResponse.json({ error: "Shift not found." }, { status: 404 });
+    if (shift.profile_id !== auth.profileId) {
+      return NextResponse.json({ error: "Not your shift." }, { status: 403 });
     }
 
     const body = (await req.json()) as { action?: "ack" | "complete" };
