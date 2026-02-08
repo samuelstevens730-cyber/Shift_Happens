@@ -123,12 +123,6 @@ function isFutureShift(shift: ScheduleShiftRow, now: Date) {
   return startMinutes > nowMinutes;
 }
 
-function addDays(dateKey: string, days: number) {
-  const dt = new Date(`${dateKey}T00:00:00`);
-  dt.setDate(dt.getDate() + days);
-  return getCstDateKey(dt);
-}
-
 function getPayPeriodKey(dateStr: string) {
   const dt = new Date(`${dateStr}T00:00:00`);
   const { year, month, day } = getCstDateParts(dt);
@@ -210,14 +204,6 @@ function getShiftStatusLabel(shiftDate: string, shifts: ScheduleShiftRow[]) {
     return { label: `Starts in ${minutes} min`, tone: "upcoming" as const };
   }
   return { label: "Shift complete", tone: "muted" as const };
-}
-
-function getWeekStartKey(dateKey: string) {
-  const dt = new Date(`${dateKey}T00:00:00`);
-  const day = dt.getDay();
-  const diff = (day + 6) % 7;
-  dt.setDate(dt.getDate() - diff);
-  return getCstDateKey(dt);
 }
 
 function StoreBadge({ name }: { name?: string | null }) {
@@ -576,22 +562,11 @@ export default function EmployeeSchedulePage() {
     0
   );
 
-  const weekDays = useMemo(() => {
-    return Array.from({ length: 6 }).map((_, idx) => addDays(todayKey, idx + 1));
-  }, [todayKey]);
-
-  const futureShiftDates = useMemo(() => {
-    const cutoff = addDays(todayKey, 6);
-    return Array.from(shiftsByDate.keys()).filter(key => key > cutoff);
+  const upcomingDates = useMemo(() => {
+    return Array.from(shiftsByDate.keys())
+      .filter(key => key > todayKey)
+      .sort((a, b) => a.localeCompare(b));
   }, [shiftsByDate, todayKey]);
-
-  const futureWeeks = useMemo(() => {
-    const groups = new Set<string>();
-    futureShiftDates.forEach(dateKey => {
-      groups.add(getWeekStartKey(dateKey));
-    });
-    return Array.from(groups.values()).sort((a, b) => a.localeCompare(b));
-  }, [futureShiftDates]);
 
   const handleRequestSwap = (shift: ScheduleShiftRow) => {
     setSwapShift(shift);
@@ -719,11 +694,14 @@ export default function EmployeeSchedulePage() {
 
         <section className="space-y-3">
           <div className="flex items-center justify-between">
-            <div className="text-sm uppercase tracking-widest text-white/40">This Week</div>
-            <span className="text-xs muted">Next 6 days</span>
+            <div className="text-sm uppercase tracking-widest text-white/40">Upcoming Shifts</div>
+            <span className="text-xs muted">{upcomingDates.length} day{upcomingDates.length === 1 ? "" : "s"}</span>
           </div>
           <div className="space-y-3">
-            {weekDays.map(dateKey => (
+            {upcomingDates.length === 0 && (
+              <div className="card card-pad text-sm muted">No upcoming shifts.</div>
+            )}
+            {upcomingDates.map(dateKey => (
               <WeekCard
                 key={dateKey}
                 dateKey={dateKey}
@@ -734,42 +712,6 @@ export default function EmployeeSchedulePage() {
               />
             ))}
           </div>
-        </section>
-
-        <section className="space-y-3">
-          <details className="card card-pad">
-            <summary className="flex cursor-pointer items-center justify-between text-sm font-semibold">
-              <span>Future Weeks</span>
-              <span className="text-xs muted">{futureWeeks.length} week{futureWeeks.length === 1 ? "" : "s"}</span>
-            </summary>
-            <div className="mt-4 space-y-4">
-              {futureWeeks.length === 0 && (
-                <div className="text-sm muted">No future shifts beyond this week.</div>
-              )}
-              {futureWeeks.map(weekKey => (
-                <div key={weekKey} className="space-y-2">
-                  <div className="text-xs uppercase tracking-widest text-white/40">
-                    Week of {formatCstCompactLabel(new Date(`${weekKey}T00:00:00`))}
-                  </div>
-                  <div className="space-y-2">
-                    {Array.from({ length: 7 }).map((_, idx) => {
-                      const dateKey = addDays(weekKey, idx);
-                      return (
-                        <WeekCard
-                          key={dateKey}
-                          dateKey={dateKey}
-                          shifts={shiftsByDate.get(dateKey) ?? []}
-                          swapStatusByShift={swapStatusByShift}
-                          onRequestSwap={handleRequestSwap}
-                          canRequestSwap={pinToken !== "manager"}
-                        />
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </details>
         </section>
 
         {periodTotals.size > 0 && (
