@@ -51,8 +51,9 @@ function formatCstShortDate(dt: Date) {
   if (Number.isNaN(dt.getTime())) return "";
   return dt.toLocaleDateString("en-US", {
     timeZone: "America/Chicago",
-    month: "2-digit",
-    day: "2-digit",
+    weekday: "short",
+    month: "short",
+    day: "numeric",
   });
 }
 
@@ -295,41 +296,6 @@ export default function EmployeeShiftsPage() {
 
         {error && <div className="banner banner-error text-sm">{error}</div>}
 
-        <div className="card card-pad space-y-3">
-          <div className="grid grid-cols-6 gap-2 text-xs muted">
-            <div>Date</div>
-            <div>Store</div>
-            <div>Clock In</div>
-            <div>Clock Out</div>
-            <div>Hours</div>
-            <div>Status</div>
-          </div>
-          <div className="space-y-2">
-            {filteredShifts.map(s => {
-              const start = new Date(s.planned_start_at ?? s.started_at);
-              const end = s.ended_at ? new Date(s.ended_at) : null;
-              const hours = end ? (end.getTime() - start.getTime()) / 3600000 : null;
-              const periodKey = getPayPeriodKey(new Date(s.planned_start_at ?? s.started_at));
-              return (
-                <div key={s.id} className="grid grid-cols-6 gap-2 text-sm">
-                  <div>{formatCstShortDate(new Date(s.planned_start_at ?? s.started_at))}</div>
-                  <div>{s.stores?.name ?? s.store_id}</div>
-                  <div>{formatCstTime(start)}</div>
-                  <div>{end ? formatCstTime(end) : "--"}</div>
-                  <div>{hours != null ? hours.toFixed(2) : "--"}</div>
-                  <div>{s.ended_at ? "Closed" : "Open"}</div>
-                  {filterPeriod === "all" && (
-                    <div className="col-span-6 text-xs muted">
-                      Pay period: {periodKey}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            {!filteredShifts.length && <div className="text-sm muted">No shifts found.</div>}
-          </div>
-        </div>
-
         {periodTotals.size > 0 && (
           <div className="card card-pad space-y-2">
             <div className="text-sm font-medium">Total hours by pay period</div>
@@ -343,6 +309,54 @@ export default function EmployeeShiftsPage() {
             </div>
           </div>
         )}
+
+        <div className="space-y-3">
+          {filteredShifts.map(s => {
+            const start = new Date(s.planned_start_at ?? s.started_at);
+            const end = s.ended_at ? new Date(s.ended_at) : null;
+            const periodKey = getPayPeriodKey(new Date(s.planned_start_at ?? s.started_at));
+            return (
+              <div key={s.id} className="card card-pad">
+                <div className="grid gap-2 text-sm sm:grid-cols-2">
+                  <div>
+                    <div className="text-xs muted">Date</div>
+                    <div>{formatCstShortDate(start)}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs muted">Store</div>
+                    <div>{s.stores?.name ?? s.store_id}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs muted">In / Out</div>
+                    <div>
+                      {formatCstTime(start)} - {end ? formatCstTime(end) : "--"}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs muted">Status</div>
+                    <div>
+                      <span
+                        className={
+                          s.ended_at
+                            ? "inline-flex items-center rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-xs font-medium text-white/80"
+                            : "inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-300"
+                        }
+                      >
+                        {s.ended_at ? "Closed" : "Open"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                {filterPeriod === "all" && (
+                  <div className="mt-2 text-xs muted">Pay period: {periodKey}</div>
+                )}
+              </div>
+            );
+          })}
+          {!filteredShifts.length && (
+            <div className="card card-pad text-sm muted">No shifts found.</div>
+          )}
+        </div>
       </div>
 
       <PinGate
