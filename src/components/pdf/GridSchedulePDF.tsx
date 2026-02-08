@@ -1,6 +1,7 @@
 "use client";
 
 import { Document, Page, Text, View } from "@react-pdf/renderer";
+import { format, parseISO } from "date-fns";
 import type { Assignment, Store, TemplateRow } from "@/app/admin/scheduler/useSchedulerState";
 import { pdfStyles } from "./PdfStyles";
 import {
@@ -8,7 +9,6 @@ import {
   ProfileInfo,
   buildEmployeeStoreTotals,
   buildGridRows,
-  buildStoreDailyTotals,
   monthLabel,
   periodLabel,
 } from "./pdfData";
@@ -36,7 +36,7 @@ function renderGridTable(rows: GridRow[], dates: string[]) {
         </View>
         {dates.map(date => (
           <View key={`h-${date}`} style={[pdfStyles.th, { width: dateWidth, borderRightWidth: 0 }]}>
-            <Text>{date.slice(5)}</Text>
+            <Text>{format(parseISO(date), "EEE M/d")}</Text>
           </View>
         ))}
       </View>
@@ -79,7 +79,6 @@ export default function GridSchedulePDF(props: Props) {
     colorClassByProfileId: props.colorClassByProfileId,
   });
 
-  const storeDailyTotals = buildStoreDailyTotals(rows, props.dates);
   const employeeStoreTotals = buildEmployeeStoreTotals(rows, props.profilesById);
 
   return (
@@ -90,15 +89,6 @@ export default function GridSchedulePDF(props: Props) {
         <Text style={pdfStyles.subtitle}>Pay Period: {periodLabel(props.periodStart, props.periodEnd)}</Text>
 
         <View style={{ marginTop: 8 }}>{renderGridTable(rows, props.dates)}</View>
-
-        <View style={pdfStyles.footerBlock}>
-          <Text style={pdfStyles.sectionTitle}>Daily Totals By Store</Text>
-          {Object.entries(storeDailyTotals).map(([storeName, values]) => (
-            <Text key={`daily-${storeName}`}>
-              {storeName}: {values.map(v => v.toFixed(1)).join(" | ")}
-            </Text>
-          ))}
-        </View>
 
         <View style={pdfStyles.footerBlock}>
           <Text style={pdfStyles.sectionTitle}>Employee Totals By Store</Text>
@@ -116,4 +106,3 @@ export default function GridSchedulePDF(props: Props) {
     </Document>
   );
 }
-
