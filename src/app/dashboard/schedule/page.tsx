@@ -92,6 +92,34 @@ function calcHours(start: string, end: string) {
   return (e - s) / 60;
 }
 
+function formatMinutesLabel(totalMinutes: number) {
+  const minutesInDay = 24 * 60;
+  const normalized = ((totalMinutes % minutesInDay) + minutesInDay) % minutesInDay;
+  const hour24 = Math.floor(normalized / 60);
+  const minute = normalized % 60;
+  const hour12 = ((hour24 + 11) % 12) + 1;
+  const suffix = hour24 >= 12 ? "PM" : "AM";
+  return `${hour12}:${String(minute).padStart(2, "0")} ${suffix}`;
+}
+
+function getShiftWindowLabel(shifts: ScheduleShiftRow[]) {
+  if (!shifts.length) return "Off";
+  const windows = shifts
+    .map(shift => {
+      const start = toMinutes(shift.scheduled_start);
+      let end = toMinutes(shift.scheduled_end);
+      if (Number.isNaN(start) || Number.isNaN(end)) return null;
+      if (end < start) end += 24 * 60;
+      return { start, end };
+    })
+    .filter((v): v is { start: number; end: number } => v !== null);
+
+  if (!windows.length) return "Off";
+  const minStart = Math.min(...windows.map(w => w.start));
+  const maxEnd = Math.max(...windows.map(w => w.end));
+  return `${formatMinutesLabel(minStart)} - ${formatMinutesLabel(maxEnd)}`;
+}
+
 function getCstDateParts(dt: Date) {
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: CST_TZ,
@@ -250,11 +278,7 @@ function WeekCard({
       ? "Multiple"
       : getShiftTypeLabel(orderedShifts[0])
     : "No shift";
-  const timeLabel = hasShift
-    ? orderedShifts
-        .map(s => `${formatTimeLabel(s.scheduled_start)} - ${formatTimeLabel(s.scheduled_end)}`)
-        .join(" / ")
-    : "Off";
+  const timeLabel = hasShift ? getShiftWindowLabel(orderedShifts) : "Off";
   const totalHours = hasShift
     ? orderedShifts.reduce((total, s) => total + calcHours(s.scheduled_start, s.scheduled_end), 0)
     : 0;
@@ -552,11 +576,7 @@ export default function EmployeeSchedulePage() {
   const todayStatus = getShiftStatusLabel(todayKey, todayShifts);
   const todayStoreName = todayShifts[0]?.stores?.name ?? todayShifts[0]?.store_id;
   const todayShiftType = todayShifts.length > 1 ? "Double" : todayShifts[0] ? getShiftTypeLabel(todayShifts[0]) : "Off";
-  const todayTimeRange = todayShifts.length
-    ? todayShifts
-        .map(s => `${formatTimeLabel(s.scheduled_start)} - ${formatTimeLabel(s.scheduled_end)}`)
-        .join(" / ")
-    : "No shift scheduled";
+  const todayTimeRange = todayShifts.length ? getShiftWindowLabel(todayShifts) : "No shift scheduled";
   const todayHours = todayShifts.reduce(
     (total, s) => total + calcHours(s.scheduled_start, s.scheduled_end),
     0
