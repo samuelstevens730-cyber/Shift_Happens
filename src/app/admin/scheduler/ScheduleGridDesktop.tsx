@@ -9,7 +9,7 @@ import {
   formatTimeLabel,
   TemplateRow,
 } from "./useSchedulerState";
-import { buildEmployeeColorClassMap } from "@/lib/employeeColors";
+import { applyPreferredColorOverrides, buildEmployeeColorClassMap } from "@/lib/employeeColors";
 import { useMemo } from "react";
 
 type Props = {
@@ -40,8 +40,9 @@ export default function ScheduleGridDesktop({
   onOtherTimeChange,
 }: Props) {
   const employeeColorMap = useMemo(() => {
-    const ids = Object.values(employeesByStore).flat().map(p => p.id);
-    return buildEmployeeColorClassMap(ids);
+    const employees = Object.values(employeesByStore).flat();
+    const ids = employees.map(p => p.id);
+    return applyPreferredColorOverrides(buildEmployeeColorClassMap(ids), employees);
   }, [employeesByStore]);
 
   return (

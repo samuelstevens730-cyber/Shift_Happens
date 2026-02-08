@@ -5,6 +5,7 @@ const EMPLOYEE_COLOR_CLASSES = [
   "bg-amber-500/20 text-amber-200 border-amber-400/40",
   "bg-pink-500/20 text-pink-200 border-pink-400/40",
 ] as const;
+const PURPLE_CLASS = EMPLOYEE_COLOR_CLASSES[1];
 
 function fnv1a(input: string): number {
   let hash = 0x811c9dc5;
@@ -29,5 +30,19 @@ export function buildEmployeeColorClassMap(profileIds: string[]): Record<string,
     out[profileId] = EMPLOYEE_COLOR_CLASSES[idx % EMPLOYEE_COLOR_CLASSES.length];
   });
 
+  return out;
+}
+
+export function applyPreferredColorOverrides(
+  colorMap: Record<string, string>,
+  employees: Array<{ id: string; name?: string | null }>
+): Record<string, string> {
+  const out = { ...colorMap };
+  employees.forEach(employee => {
+    const name = (employee.name ?? "").trim().toLowerCase();
+    if (name === "dorothy") {
+      out[employee.id] = PURPLE_CLASS;
+    }
+  });
   return out;
 }

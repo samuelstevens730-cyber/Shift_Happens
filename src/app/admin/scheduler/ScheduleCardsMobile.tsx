@@ -10,7 +10,7 @@ import {
   calcHours,
   formatTimeLabel,
 } from "./useSchedulerState";
-import { buildEmployeeColorClassMap } from "@/lib/employeeColors";
+import { applyPreferredColorOverrides, buildEmployeeColorClassMap } from "@/lib/employeeColors";
 
 type Props = {
   stores: Store[];
@@ -68,8 +68,9 @@ export default function ScheduleCardsMobile({
   onJumpTotals,
 }: Props) {
   const employeeColorMap = useMemo(() => {
-    const ids = Object.values(employeesByStore).flat().map(p => p.id);
-    return buildEmployeeColorClassMap(ids);
+    const employees = Object.values(employeesByStore).flat();
+    const ids = employees.map(p => p.id);
+    return applyPreferredColorOverrides(buildEmployeeColorClassMap(ids), employees);
   }, [employeesByStore]);
 
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -131,7 +132,7 @@ export default function ScheduleCardsMobile({
   }
 
   return (
-    <div className="md:hidden pb-[12.5rem]">
+    <div className="md:hidden">
       <div className="space-y-3">
         {visibleCards.map(card => {
           const scheduleStatus = scheduleMap[card.store.id]?.status;

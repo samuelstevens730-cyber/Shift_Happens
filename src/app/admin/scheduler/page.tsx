@@ -52,7 +52,7 @@ export default function AdminSchedulerPage() {
 
   return (
     <div className="app-shell">
-      <div className="max-w-6xl mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto space-y-6 pb-[12.5rem] md:pb-0">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-semibold">Scheduler</h1>
           <div className="text-xs muted">Admin</div>
