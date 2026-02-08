@@ -92,6 +92,7 @@ export default function EmployeeShiftsPage() {
   const [error, setError] = useState<string | null>(null);
   const [filterStore, setFilterStore] = useState<string>("all");
   const [filterPeriod, setFilterPeriod] = useState<string>("all");
+  const [expandedShiftIds, setExpandedShiftIds] = useState<Set<string>>(new Set());
 
   // Check auth: Supabase session FIRST, then PIN token, then redirect
   useEffect(() => {
@@ -316,46 +317,66 @@ export default function EmployeeShiftsPage() {
             const end = s.ended_at ? new Date(s.ended_at) : null;
             const hours = end ? (end.getTime() - start.getTime()) / 3600000 : null;
             const periodKey = getPayPeriodKey(new Date(s.planned_start_at ?? s.started_at));
+            const isExpanded = expandedShiftIds.has(s.id);
             return (
               <div key={s.id} className="card card-pad">
-                <div className="mb-3 flex items-start justify-between gap-3">
-                  <div className="text-xs muted">Shift Summary</div>
-                  <span className="inline-flex items-center rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-xs font-medium text-cyan-200">
-                    {hours != null ? `${hours.toFixed(2)} hrs` : "--"}
-                  </span>
-                </div>
-                <div className="grid gap-2 text-sm sm:grid-cols-2">
-                  <div>
-                    <div className="text-xs muted">Date</div>
-                    <div>{formatCstShortDate(start)}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs muted">Store</div>
-                    <div>{s.stores?.name ?? s.store_id}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs muted">In / Out</div>
-                    <div>
-                      {formatCstTime(start)} - {end ? formatCstTime(end) : "--"}
+                <button
+                  type="button"
+                  className="w-full text-left"
+                  aria-expanded={isExpanded}
+                  onClick={() =>
+                    setExpandedShiftIds(prev => {
+                      const next = new Set(prev);
+                      if (next.has(s.id)) next.delete(s.id);
+                      else next.add(s.id);
+                      return next;
+                    })
+                  }
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium">{formatCstShortDate(start)}</div>
+                      <div className="text-xs muted truncate">{s.stores?.name ?? s.store_id}</div>
                     </div>
-                  </div>
-                  <div>
-                    <div className="text-xs muted">Status</div>
-                    <div>
-                      <span
-                        className={
-                          s.ended_at
-                            ? "inline-flex items-center rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-xs font-medium text-white/80"
-                            : "inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-300"
-                        }
-                      >
-                        {s.ended_at ? "Closed" : "Open"}
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-xs font-medium text-cyan-200">
+                        {hours != null ? `${hours.toFixed(2)} hrs` : "--"}
                       </span>
+                      <span className="text-xs muted">{isExpanded ? "Hide" : "Details"}</span>
                     </div>
                   </div>
-                </div>
-                {filterPeriod === "all" && (
-                  <div className="mt-2 text-xs muted">Pay period: {periodKey}</div>
+                </button>
+                {isExpanded && (
+                  <div className="mt-3 grid gap-2 border-t border-white/10 pt-3 text-sm sm:grid-cols-2">
+                    <div>
+                      <div className="text-xs muted">Time In</div>
+                      <div>{formatCstTime(start)}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs muted">Time Out</div>
+                      <div>{end ? formatCstTime(end) : "--"}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs muted">Status</div>
+                      <div>
+                        <span
+                          className={
+                            s.ended_at
+                              ? "inline-flex items-center rounded-full border border-white/20 bg-white/10 px-2 py-0.5 text-xs font-medium text-white/80"
+                              : "inline-flex items-center rounded-full border border-emerald-400/40 bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-300"
+                          }
+                        >
+                          {s.ended_at ? "Closed" : "Open"}
+                        </span>
+                      </div>
+                    </div>
+                    {filterPeriod === "all" && (
+                      <div>
+                        <div className="text-xs muted">Pay Period</div>
+                        <div>{periodKey}</div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             );
