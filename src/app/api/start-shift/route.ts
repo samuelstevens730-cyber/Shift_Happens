@@ -168,32 +168,35 @@ export async function POST(req: Request) {
     if (schedErr) return NextResponse.json({ error: schedErr.message }, { status: 500 });
 
     let matchedSchedule: { id: string; shift_type: ShiftType } | null = null;
+    let bestWithinWindowScore: number | null = null;
+    let nearestSchedule: { id: string; shift_type: ShiftType; score: number } | null = null;
     if (plannedMinutes != null && scheduledRows?.length) {
-      let best: { id: string; shift_type: ShiftType; score: number } | null = null;
       for (const row of scheduledRows) {
         const [h, m] = row.scheduled_start.split(":");
         const schedMinutes = Number(h) * 60 + Number(m);
         const diff = plannedMinutes - schedMinutes;
+        const score = Math.abs(diff);
+        if (!nearestSchedule || score < nearestSchedule.score) {
+          nearestSchedule = { id: row.id, shift_type: row.shift_type as ShiftType, score };
+        }
         if (diff >= -5 && diff <= 15) {
-          const score = Math.abs(diff);
-          if (!best || score < best.score) {
-            best = { id: row.id, shift_type: row.shift_type as ShiftType, score };
+          if (bestWithinWindowScore == null || score < bestWithinWindowScore) {
+            matchedSchedule = { id: row.id, shift_type: row.shift_type as ShiftType };
+            bestWithinWindowScore = score;
           }
         }
       }
-      if (best) matchedSchedule = { id: best.id, shift_type: best.shift_type };
+    } else if (scheduledRows?.length) {
+      const first = scheduledRows[0];
+      nearestSchedule = { id: first.id, shift_type: first.shift_type as ShiftType, score: 0 };
     }
 
-    const isScheduled = Boolean(matchedSchedule);
-    if (!isScheduled && !body.force) {
-      return NextResponse.json(
-        { error: "UNSCHEDULED", code: "UNSCHEDULED", requiresApproval: true },
-        { status: 409 }
-      );
-    }
+    const isWithinScheduledWindow = Boolean(matchedSchedule);
+    const hasScheduledShift = Boolean(nearestSchedule);
+    const requiresTimingApproval = !isWithinScheduledWindow;
 
-    let resolvedShiftType: ShiftType = matchedSchedule?.shift_type ?? "other";
-    if (!isScheduled) {
+    let resolvedShiftType: ShiftType = nearestSchedule?.shift_type ?? "other";
+    if (!hasScheduledShift) {
       if (plannedCst) {
         const { data: templates } = await supabaseServer
           .from("shift_templates")
@@ -225,8 +228,8 @@ export async function POST(req: Request) {
       }
     }
 
-    // 4c) Enforce clock window for open shifts only when scheduled
-    if (isScheduled && resolvedShiftType === "open") {
+    // 4c) Enforce fallback clock window for unscheduled open shifts only.
+    if (!hasScheduledShift && resolvedShiftType === "open") {
       const storeKey = toStoreKey(store.name);
       const cst = getCstDowMinutes(plannedRounded);
       if (!storeKey || !cst) {
@@ -310,10 +313,14 @@ export async function POST(req: Request) {
           store_id: store.id,
           profile_id: body.profileId,
           shift_type: resolvedShiftType,
-          schedule_shift_id: matchedSchedule?.id ?? null,
-          shift_source: isScheduled ? "scheduled" : "manual",
-          requires_override: !isScheduled,
-          override_note: !isScheduled ? "Unscheduled clock-in" : null,
+          schedule_shift_id: nearestSchedule?.id ?? null,
+          shift_source: hasScheduledShift ? "scheduled" : "manual",
+          requires_override: requiresTimingApproval,
+          override_note: !requiresTimingApproval
+            ? null
+            : hasScheduledShift
+              ? "Clock-in outside scheduled window"
+              : "Unscheduled clock-in",
           planned_start_at: plannedRounded.toISOString(),
           started_at: new Date().toISOString(),
         })

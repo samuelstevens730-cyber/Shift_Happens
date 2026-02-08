@@ -53,12 +53,62 @@ type Body = {
 };
 
 type TemplateRow = { id: string; store_id: string | null; shift_type: string };
+type ScheduleShiftRow = {
+  shift_date: string;
+  scheduled_start: string;
+  scheduled_end: string;
+};
 
 function parseClockWindowError(message: string) {
   const token = "CLOCK_WINDOW_VIOLATION:";
   if (!message.includes(token)) return null;
   const label = message.split(token)[1]?.trim() || "Outside allowed clock window";
   return { code: "CLOCK_WINDOW_VIOLATION", windowLabel: label };
+}
+
+function parseTimeToMinutes(timeValue: string): number | null {
+  const parts = timeValue.split(":");
+  if (parts.length < 2) return null;
+  const hour = Number(parts[0]);
+  const minute = Number(parts[1]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  return (hour * 60) + minute;
+}
+
+function dateKeyToDayNumber(dateKey: string): number | null {
+  const parts = dateKey.split("-");
+  if (parts.length !== 3) return null;
+  const year = Number(parts[0]);
+  const month = Number(parts[1]);
+  const day = Number(parts[2]);
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
+  return Math.floor(Date.UTC(year, month - 1, day) / 86400000);
+}
+
+function isWithinScheduledEndWindow(endRounded: Date, scheduleShift: ScheduleShiftRow): boolean {
+  const endLocalDate = endRounded.toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+  const endLocal = getCstDowMinutes(endRounded);
+  const scheduledStartMinutes = parseTimeToMinutes(scheduleShift.scheduled_start);
+  const scheduledEndMinutes = parseTimeToMinutes(scheduleShift.scheduled_end);
+  const endDayNumber = dateKeyToDayNumber(endLocalDate);
+  const scheduledDayNumber = dateKeyToDayNumber(scheduleShift.shift_date);
+
+  if (
+    !endLocal ||
+    scheduledStartMinutes == null ||
+    scheduledEndMinutes == null ||
+    endDayNumber == null ||
+    scheduledDayNumber == null
+  ) {
+    return false;
+  }
+
+  const overnightOffset = scheduledEndMinutes < scheduledStartMinutes ? 1 : 0;
+  const endAbsolute = (endDayNumber * 1440) + endLocal.minutes;
+  const scheduledAbsolute = ((scheduledDayNumber + overnightOffset) * 1440) + scheduledEndMinutes;
+  const diff = endAbsolute - scheduledAbsolute;
+
+  return diff >= -5 && diff <= 15;
 }
 
 function templatesForShiftType(st: ShiftType) {
@@ -104,7 +154,7 @@ export async function POST(req: Request) {
 
     const { data: shift, error: shiftErr } = await supabaseServer
       .from("shifts")
-      .select("id, store_id, profile_id, shift_type, ended_at, started_at")
+      .select("id, store_id, profile_id, shift_type, ended_at, started_at, schedule_shift_id, shift_source, requires_override")
       .eq("id", body.shiftId)
       .maybeSingle();
 
@@ -276,7 +326,23 @@ export async function POST(req: Request) {
     if (Number.isNaN(endAt.getTime())) return NextResponse.json({ error: "Invalid endAt." }, { status: 400 });
     const endRounded = roundTo30Minutes(endAt);
 
-    if (shiftType === "close") {
+    let hasScheduledShift = false;
+    let isWithinScheduleWindow = false;
+    if (shift.schedule_shift_id) {
+      const { data: scheduleShift, error: scheduleShiftErr } = await supabaseServer
+        .from("schedule_shifts")
+        .select("shift_date, scheduled_start, scheduled_end")
+        .eq("id", shift.schedule_shift_id)
+        .maybeSingle<ScheduleShiftRow>();
+      if (!scheduleShiftErr && scheduleShift) {
+        hasScheduledShift = true;
+        isWithinScheduleWindow = isWithinScheduledEndWindow(endRounded, scheduleShift);
+      }
+    }
+
+    const requiresTimingApproval = !isWithinScheduleWindow;
+
+    if (shiftType === "close" && !hasScheduledShift) {
       const storeKey = toStoreKey(store.name);
       const cst = getCstDowMinutes(endRounded);
       if (!storeKey || !cst) {
@@ -303,12 +369,19 @@ export async function POST(req: Request) {
     const durationHours = Number.isNaN(startedAt.getTime())
       ? null
       : (endRounded.getTime() - startedAt.getTime()) / (1000 * 60 * 60);
-    const requiresOverride = durationHours != null && durationHours > 13;
+    const durationRequiresOverride = durationHours != null && durationHours > 13;
+    const requiresOverride = Boolean(shift.requires_override) || requiresTimingApproval || durationRequiresOverride;
 
     const updatePayload: Record<string, string | boolean | null> = {
       ended_at: endRounded.toISOString(),
       requires_override: requiresOverride,
     };
+
+    if (requiresTimingApproval) {
+      updatePayload.override_note = hasScheduledShift
+        ? "Clock-out outside scheduled window"
+        : "Unscheduled clock-out";
+    }
 
     if (body.manualClose) {
       updatePayload.manual_closed = true;
