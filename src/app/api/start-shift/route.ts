@@ -195,6 +195,19 @@ export async function POST(req: Request) {
     const hasScheduledShift = Boolean(nearestSchedule);
     const requiresTimingApproval = !isWithinScheduledWindow;
 
+    // Block unscheduled clock-ins unless explicitly forced (user confirmed the popup)
+    if (!hasScheduledShift && !body.force) {
+      return NextResponse.json(
+        {
+          error: "UNSCHEDULED",
+          code: "UNSCHEDULED",
+          requiresApproval: true,
+          message: `You are clocking in for ${plannedRounded.toLocaleDateString("en-US", { timeZone: "America/Chicago", weekday: "long", month: "short", day: "numeric" })} at ${plannedRounded.toLocaleTimeString("en-US", { timeZone: "America/Chicago", hour: "numeric", minute: "2-digit" })}, but you are not on the schedule. This shift will require management approval.`,
+        },
+        { status: 409 }
+      );
+    }
+
     let resolvedShiftType: ShiftType = nearestSchedule?.shift_type ?? "other";
     if (!hasScheduledShift) {
       if (plannedCst) {
