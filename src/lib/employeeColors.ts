@@ -6,6 +6,7 @@ const EMPLOYEE_COLOR_CLASSES = [
   "bg-pink-500/20 text-pink-200 border-pink-400/40",
 ] as const;
 const PURPLE_CLASS = EMPLOYEE_COLOR_CLASSES[1];
+const ORANGE_CLASS = EMPLOYEE_COLOR_CLASSES[3];
 
 function fnv1a(input: string): number {
   let hash = 0x811c9dc5;
@@ -42,6 +43,10 @@ export function applyPreferredColorOverrides(
     const name = (employee.name ?? "").trim().toLowerCase();
     if (name === "dorothy") {
       out[employee.id] = PURPLE_CLASS;
+      return;
+    }
+    if (name === "tay") {
+      out[employee.id] = ORANGE_CLASS;
     }
   });
   return out;
