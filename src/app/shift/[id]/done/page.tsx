@@ -261,6 +261,11 @@ export default function ShiftPage() {
     if (!usingGroups && doneItemIds.has(group.label)) return; // fallback mapping uses label as key
 
     setErr(null);
+    const authToken = await resolveAuthToken();
+    if (!authToken) {
+      setErr(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
+      return;
+    }
 
     // optimistic
     if (usingGroups) {
@@ -271,7 +276,7 @@ export default function ShiftPage() {
 
     const res = await fetch("/api/checklist/check-item", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
       body: JSON.stringify({
         shiftId,
         qrToken,
@@ -336,6 +341,7 @@ export default function ShiftPage() {
             qrToken={qrToken}
             expectedCents={state.store.expected_drawer_cents}
             alreadyConfirmed={hasChangeover}
+            resolveAuthToken={resolveAuthToken}
             onDone={async () => {
               try {
                 await refreshShift();
@@ -427,12 +433,14 @@ function ChangeoverPanel({
   qrToken,
   expectedCents,
   alreadyConfirmed,
+  resolveAuthToken,
   onDone,
 }: {
   shiftId: string;
   qrToken: string;
   expectedCents: number;
   alreadyConfirmed: boolean;
+  resolveAuthToken: () => Promise<string | null>;
   onDone: () => void;
 }) {
   const [drawer, setDrawer] = useState("200");
@@ -480,9 +488,11 @@ function ChangeoverPanel({
           setErr(null);
           setSaving(true);
           try {
+            const authToken = await resolveAuthToken();
+            if (!authToken) throw new Error("Session expired. Please refresh and try again.");
             const res = await fetch("/api/confirm-changeover", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
               body: JSON.stringify({
                 qrToken,
                 shiftId,
