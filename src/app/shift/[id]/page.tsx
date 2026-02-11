@@ -192,6 +192,7 @@ export default function ShiftPage() {
   const [pinToken, setPinToken] = useState<string | null>(null);
   const [managerAccessToken, setManagerAccessToken] = useState<string | null>(null);
   const [managerSession, setManagerSession] = useState(false);
+  const [authBootstrapped, setAuthBootstrapped] = useState(false);
   const profileIdRef = useRef<string | null>(null);
   const loadInFlightRef = useRef<Promise<boolean> | null>(null);
   const initialLoadKeyRef = useRef<string | null>(null);
@@ -220,6 +221,7 @@ export default function ShiftPage() {
       if (hasSession && data?.session?.access_token) {
         setManagerAccessToken(data.session.access_token);
       }
+      setAuthBootstrapped(true);
     })();
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -253,6 +255,16 @@ export default function ShiftPage() {
   const resolveAuthToken = useCallback(async () => {
     if (managerAccessToken) return managerAccessToken;
     if (pinToken) return pinToken;
+    const storedToken = sessionStorage.getItem(PIN_TOKEN_KEY);
+    if (storedToken) {
+      setPinToken(storedToken);
+      const storedProfile = sessionStorage.getItem("sh_pin_profile_id");
+      if (storedProfile && !profileIdRef.current) {
+        profileIdRef.current = storedProfile;
+        setProfileId(storedProfile);
+      }
+      return storedToken;
+    }
     const { data } = await supabase.auth.getSession();
     const hasSession = Boolean(data?.session?.user);
     setManagerSession(hasSession);
@@ -339,6 +351,11 @@ export default function ShiftPage() {
   useEffect(() => {
     let alive = true;
     const loadKey = `${shiftId}|${qrToken}`;
+    if (!authBootstrapped) {
+      return () => {
+        alive = false;
+      };
+    }
 
     if (initialLoadKeyRef.current === loadKey) {
       return () => {
@@ -353,6 +370,10 @@ export default function ShiftPage() {
         const loaded = await reloadShift();
         if (loaded) {
           initialLoadKeyRef.current = loadKey;
+        } else if (alive) {
+          // If no auth token/session was available, show explicit guidance instead of "No data".
+          setErr("Authentication required. Please re-open this shift from the clock screen.");
+          initialLoadKeyRef.current = null;
         }
       } catch (e: unknown) {
         if (!alive) return;
@@ -366,7 +387,7 @@ export default function ShiftPage() {
     return () => {
       alive = false;
     };
-  }, [reloadShift]);
+  }, [authBootstrapped, reloadShift, qrToken, shiftId]);
 
   useEffect(() => {
     if (!state?.shift?.id) return;
