@@ -19,7 +19,7 @@
 // src/app/shift/[id]/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { isOutOfThreshold, roundTo30Minutes, thresholdMessage } from "@/lib/kioskRules";
 import { getCstDowMinutes, isTimeWithinWindow, toStoreKey, WindowShiftType } from "@/lib/clockWindows";
@@ -181,6 +181,13 @@ export default function ShiftPage() {
   const [pinToken, setPinToken] = useState<string | null>(null);
   const [managerAccessToken, setManagerAccessToken] = useState<string | null>(null);
   const [managerSession, setManagerSession] = useState(false);
+  const profileIdRef = useRef<string | null>(null);
+  const loadInFlightRef = useRef<Promise<boolean> | null>(null);
+  const initialLoadKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    profileIdRef.current = profileId;
+  }, [profileId]);
 
   // Load auth tokens on mount
   useEffect(() => {
@@ -240,39 +247,55 @@ export default function ShiftPage() {
     setManagerSession(hasSession);
     if (hasSession && data?.session?.access_token) {
       setManagerAccessToken(data.session.access_token);
-      if (!profileId) {
+      if (!profileIdRef.current) {
         const res = await fetch("/api/me/profile", {
           headers: { Authorization: `Bearer ${data.session.access_token}` },
         });
         if (res.ok) {
           const profile = await res.json();
-          setProfileId(profile?.profileId ?? null);
+          const nextProfileId = profile?.profileId ?? null;
+          profileIdRef.current = nextProfileId;
+          setProfileId(nextProfileId);
         }
       }
       return data.session.access_token;
     }
     return null;
-  }, [managerAccessToken, pinToken, profileId]);
+  }, [managerAccessToken, pinToken]);
 
-  const reloadShift = useCallback(async () => {
-    const query = qrToken ? `?t=${encodeURIComponent(qrToken)}` : "";
-    const authToken = await resolveAuthToken();
-    if (!authToken) {
-      return;
-    }
-    const res = await fetch(`/api/shift/${shiftId}${query}`, {
-      headers: { Authorization: `Bearer ${authToken}` },
-    });
-    const json = await res.json();
-    if (!res.ok) throw new Error(json?.error || "Failed to load shift.");
+  const reloadShift = useCallback(async (): Promise<boolean> => {
+    if (loadInFlightRef.current) return loadInFlightRef.current;
 
-    setState(json);
-    seedDoneFromState(json);
+    const inFlight = (async () => {
+      const query = qrToken ? `?t=${encodeURIComponent(qrToken)}` : "";
+      const authToken = await resolveAuthToken();
+      if (!authToken) {
+        return false;
+      }
+      const res = await fetch(`/api/shift/${shiftId}${query}`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to load shift.");
 
-    // If shift already ended, redirect to completion page
-    if (json.shift?.ended_at) {
-      const doneQuery = qrToken ? `?t=${encodeURIComponent(qrToken)}` : "";
-      router.replace(`/shift/${shiftId}/done${doneQuery}`);
+      setState(json);
+      seedDoneFromState(json);
+
+      // If shift already ended, redirect to completion page
+      if (json.shift?.ended_at) {
+        const doneQuery = qrToken ? `?t=${encodeURIComponent(qrToken)}` : "";
+        router.replace(`/shift/${shiftId}/done${doneQuery}`);
+      }
+      return true;
+    })();
+
+    loadInFlightRef.current = inFlight;
+    try {
+      return await inFlight;
+    } finally {
+      if (loadInFlightRef.current === inFlight) {
+        loadInFlightRef.current = null;
+      }
     }
   }, [resolveAuthToken, qrToken, shiftId, router, seedDoneFromState]);
 
@@ -304,15 +327,26 @@ export default function ShiftPage() {
 
   useEffect(() => {
     let alive = true;
+    const loadKey = `${shiftId}|${qrToken}`;
+
+    if (initialLoadKeyRef.current === loadKey) {
+      return () => {
+        alive = false;
+      };
+    }
 
     (async () => {
       try {
         setErr(null);
         setLoading(true);
-        await reloadShift();
+        const loaded = await reloadShift();
+        if (loaded) {
+          initialLoadKeyRef.current = loadKey;
+        }
       } catch (e: unknown) {
         if (!alive) return;
         setErr(e instanceof Error ? e.message : "Failed to load shift.");
+        initialLoadKeyRef.current = null;
       } finally {
         if (alive) setLoading(false);
       }
