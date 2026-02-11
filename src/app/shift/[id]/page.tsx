@@ -149,6 +149,17 @@ function formatDateTime(value: string) {
   });
 }
 
+function SkeletonCard() {
+  return (
+    <div className="card animate-pulse bg-slate-800/50 border-slate-700 h-32 w-full rounded-2xl">
+      <div className="p-6 space-y-4">
+        <div className="h-4 bg-slate-700 rounded w-3/4" />
+        <div className="h-4 bg-slate-700 rounded w-1/2" />
+      </div>
+    </div>
+  );
+}
+
 export default function ShiftPage() {
   const { id } = useParams<{ id: string }>();
   const shiftId = id;
@@ -528,10 +539,6 @@ export default function ShiftPage() {
     // await reloadShift();
   }
 
-  if (loading) return <div className="p-6">Loading…</div>;
-  if (err) return <div className="p-6 text-red-600">{err}</div>;
-  if (!state) return <div className="p-6">No data.</div>;
-
   const reuseLabel = reusedStartedAt
     ? formatDateTime(reusedStartedAt)
     : "an earlier time";
@@ -547,6 +554,19 @@ export default function ShiftPage() {
         <div className="max-w-md mx-auto space-y-4">
           <h1 className="text-2xl font-semibold">Shift</h1>
 
+        {err ? (
+          <div className="p-3 rounded border border-red-300 text-red-600 bg-red-50">{err}</div>
+        ) : loading ? (
+          <div className="space-y-4">
+            <div className="h-4 bg-slate-800 rounded w-1/2 animate-pulse mb-2" />
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </div>
+        ) : !state ? (
+          <div className="p-6 text-slate-400">No data found for this shift.</div>
+        ) : (
+          <>
         {/* Banner shown when redirected to existing open shift */}
         {showReuseBanner && (
           <div className="banner text-sm">
@@ -828,6 +848,8 @@ export default function ShiftPage() {
               return ok;
             }}
           />
+        )}
+          </>
         )}
       </div>
     </div>
