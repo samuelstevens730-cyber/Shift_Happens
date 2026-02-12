@@ -253,7 +253,7 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
   };
 
   return (
-    <div className="card card-pad space-y-4">
+    <div className="card card-pad space-y-4 min-w-0">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-lg font-semibold">Shift Swaps</h2>
@@ -318,7 +318,7 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
               <div className="text-sm font-semibold">{req.status.toUpperCase()}</div>
               <div className="text-xs muted">Expires {formatDate(req.expires_at)}</div>
             </div>
-            <div className="text-xs muted">Shift: {shiftLabelById.get(req.schedule_shift_id) ?? "Scheduled shift"}</div>
+            <div className="text-xs muted break-words">Shift: {shiftLabelById.get(req.schedule_shift_id) ?? "Scheduled shift"}</div>
             {req.reason && <div className="text-sm">{req.reason}</div>}
             <div className="text-xs muted">Created {formatDate(req.created_at)}</div>
             {req.status === "open" && (
@@ -358,7 +358,7 @@ export default function SwapRequestCard({ requests, onRefresh }: Props) {
                   <div className="text-sm font-semibold">{requesterName}</div>
                   <div className="text-xs muted">Expires {formatDate(req.expires_at)}</div>
                 </div>
-                <div className="text-sm">{shiftLabel}</div>
+                <div className="text-sm break-words">{shiftLabel}</div>
                 {req.reason && <div className="text-sm muted">{req.reason}</div>}
                 <div className="flex flex-wrap items-center gap-2">
                   <label className="text-xs muted">Offer Type</label>

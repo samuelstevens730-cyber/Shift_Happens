@@ -146,7 +146,7 @@ function RequestsContent() {
         isAuthenticated={isAuthenticated}
         profileId={profileId}
       />
-      <div className="max-w-5xl mx-auto space-y-4 px-4 py-4">
+      <div className="max-w-5xl mx-auto space-y-4 px-4 py-4 overflow-x-hidden">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold">Requests</h1>
@@ -154,12 +154,12 @@ function RequestsContent() {
           </div>
         </div>
 
-        <div className="w-full overflow-x-auto pb-1">
-          <div className="inline-flex min-w-max rounded-full border border-white/10 bg-white/5 p-1">
+        <div className="w-full">
+          <div className="flex flex-wrap gap-1 rounded-2xl border border-white/10 bg-white/5 p-1">
             {TABS.map(tab => (
               <button
                 key={tab.id}
-                className={`px-4 py-2 text-sm font-semibold rounded-full transition ${
+                className={`min-w-[120px] flex-1 px-3 py-2 text-xs sm:flex-none sm:text-sm font-semibold rounded-full transition ${
                   activeTab === tab.id
                     ? "bg-white text-black"
                     : "text-white/70 hover:text-white"

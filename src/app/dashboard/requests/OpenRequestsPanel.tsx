@@ -225,7 +225,7 @@ export default function OpenRequestsPanel({ requests, onRefresh }: Props) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 min-w-0">
       {error && <div className="banner banner-error text-sm">{error}</div>}
       {success && <div className="banner text-sm">{success}</div>}
       {openRequests.map((req) => {
@@ -236,7 +236,7 @@ export default function OpenRequestsPanel({ requests, onRefresh }: Props) {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <div className="text-sm font-semibold">Your Swap Request</div>
-                <div className="text-xs muted">{shiftLabel}</div>
+                <div className="text-xs muted break-words">{shiftLabel}</div>
               </div>
               <div className="text-xs muted">Expires {formatDate(req.expires_at)}</div>
             </div>
