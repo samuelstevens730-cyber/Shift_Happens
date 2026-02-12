@@ -11,15 +11,18 @@ import SwapRequestCard from "./SwapRequestCard";
 import OpenRequestsPanel from "./OpenRequestsPanel";
 import TimeOffRequestForm from "./TimeOffRequestForm";
 import TimesheetCorrectionForm from "./TimesheetCorrectionForm";
+import AdvanceRequestForm from "./AdvanceRequestForm";
 import { useShiftSwapRequests } from "@/hooks/useShiftSwapRequests";
 import { useTimeOffRequests } from "@/hooks/useTimeOffRequests";
 import { useTimesheetRequests } from "@/hooks/useTimesheetRequests";
+import { useAdvances } from "@/hooks/useAdvances";
 
 const TABS = [
   { id: "swaps", label: "Swaps" },
   { id: "open", label: "Open Requests" },
   { id: "timeoff", label: "Time Off" },
   { id: "timesheets", label: "Timesheets" },
+  { id: "advances", label: "Advances" },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
@@ -37,6 +40,7 @@ function RequestsContent() {
   const swaps = useShiftSwapRequests();
   const timeOff = useTimeOffRequests();
   const timesheets = useTimesheetRequests();
+  const advances = useAdvances();
 
   useEffect(() => {
     let alive = true;
@@ -98,34 +102,42 @@ function RequestsContent() {
         </div>
       );
     }
+    if (activeTab === "timesheets") {
+      return (
+        <div className="space-y-4">
+          {timesheets.error && <div className="banner banner-error text-sm">{timesheets.error}</div>}
+          <TimesheetCorrectionForm onRefresh={timesheets.refresh} />
+          <div className="card card-pad space-y-2">
+            <div className="text-sm font-semibold">Recent Timesheet Requests</div>
+            {timesheets.rows.length === 0 && <div className="text-sm muted">No requests yet.</div>}
+            {timesheets.rows.map(req => (
+              <div key={req.id} className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold">{req.status.toUpperCase()}</span>
+                  <span className="text-xs muted">
+                    {new Date(req.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                  </span>
+                </div>
+                <div className="text-xs muted">Shift: {req.shift_id}</div>
+                <div className="text-xs muted">
+                  Original: {req.original_started_at} {"->"} {req.original_ended_at ?? "--"}
+                </div>
+                <div className="text-xs muted">
+                  Requested: {req.requested_started_at ?? "--"} {"->"} {req.requested_ended_at ?? "--"}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="space-y-4">
-        {timesheets.error && <div className="banner banner-error text-sm">{timesheets.error}</div>}
-        <TimesheetCorrectionForm onRefresh={timesheets.refresh} />
-        <div className="card card-pad space-y-2">
-          <div className="text-sm font-semibold">Recent Timesheet Requests</div>
-          {timesheets.rows.length === 0 && <div className="text-sm muted">No requests yet.</div>}
-          {timesheets.rows.map(req => (
-            <div key={req.id} className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
-              <div className="flex items-center justify-between gap-2">
-                <span className="font-semibold">{req.status.toUpperCase()}</span>
-                <span className="text-xs muted">
-                  {new Date(req.created_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                </span>
-              </div>
-              <div className="text-xs muted">Shift: {req.shift_id}</div>
-              <div className="text-xs muted">
-                Original: {req.original_started_at} {"->"} {req.original_ended_at ?? "--"}
-              </div>
-              <div className="text-xs muted">
-                Requested: {req.requested_started_at ?? "--"} {"->"} {req.requested_ended_at ?? "--"}
-              </div>
-            </div>
-          ))}
-        </div>
+        {advances.error && <div className="banner banner-error text-sm">{advances.error}</div>}
+        <AdvanceRequestForm rows={advances.rows} stores={advances.stores} loading={advances.loading} onSubmit={advances.submit} />
       </div>
     );
-  }, [activeTab, swaps, timeOff, timesheets]);
+  }, [activeTab, swaps, timeOff, timesheets, advances]);
 
   return (
     <div className="bento-shell">
@@ -138,7 +150,7 @@ function RequestsContent() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-2xl font-semibold">Requests</h1>
-            <p className="text-sm muted">Submit and track shift swaps, time off, and timesheet corrections.</p>
+            <p className="text-sm muted">Submit and track swaps, time off, timesheets, and advances.</p>
           </div>
         </div>
 

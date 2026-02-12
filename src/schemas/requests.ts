@@ -44,3 +44,11 @@ export const submitTimesheetChangeSchema = z.object({
 export const denyRequestSchema = z.object({
   reason: z.string().trim().optional().nullable(),
 });
+
+export const submitAdvanceSchema = z.object({
+  storeId: z.string().uuid().optional().nullable(),
+  advanceDate: z.string().datetime().optional().nullable(),
+  advanceHours: z.number().positive(),
+  cashAmountDollars: z.number().nonnegative().optional().nullable(),
+  note: z.string().trim().optional().nullable(),
+});
