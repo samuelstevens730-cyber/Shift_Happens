@@ -47,7 +47,7 @@ export const denyRequestSchema = z.object({
 
 export const submitAdvanceSchema = z.object({
   storeId: z.string().uuid().optional().nullable(),
-  advanceDate: z.string().datetime().optional().nullable(),
+  advanceDate: z.string().datetime({ offset: true }).optional().nullable(),
   advanceHours: z.number().positive(),
   cashAmountDollars: z.number().nonnegative().optional().nullable(),
   note: z.string().trim().optional().nullable(),
