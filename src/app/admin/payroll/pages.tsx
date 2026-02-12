@@ -1,25 +1,3 @@
-/**
- * Payroll Admin Page - Generate payroll reports with hours calculation and CSV export
- *
- * This administrative page provides payroll reporting functionality, allowing managers
- * to generate reports of employee worked hours for a specified date range. It supports
- * filtering and exports data in CSV format for import into payroll systems.
- *
- * Features:
- * - Select date range (defaults to current week starting Monday)
- * - Filter by specific employee or store
- * - View shift details including start/end times, raw minutes, and rounded hours
- * - Display running totals for minutes and rounded hours
- * - Export filtered results to CSV file for payroll system import
- * - Paginated results with 25 shifts per page
- *
- * Business Logic:
- * - Hours are calculated as raw minutes and rounded hours for payroll purposes
- * - Rounding rules are applied server-side for consistency
- * - Only completed shifts (with both start and end times) are included
- * - CSV export includes shift ID, user ID, name, store, timestamps, and hour calculations
- * - Date range uses start of day for "from" and end of day for "to" to capture full days
- */
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -38,6 +16,46 @@ interface ShiftRow {
   end_at: string;
   minutes: number;
   rounded_hours: number;
+}
+
+interface PayrollReportEmployeeRow {
+  user_id: string;
+  full_name: string | null;
+  worked_hours: number;
+  projected_hours: number;
+  advance_hours: number;
+  submit_hours: number;
+}
+
+interface PayrollReportResponse {
+  employees: PayrollReportEmployeeRow[];
+  totals: {
+    worked_hours: number;
+    projected_hours: number;
+    advances_hours: number;
+    submitted_hours: number;
+  };
+  openTotals: {
+    lv1_hours: number;
+    lv2_hours: number;
+    total_hours: number;
+  };
+  reconciliationDiff: number;
+  whatsappText: string;
+}
+
+interface AdvanceRow {
+  id: string;
+  profile_id: string;
+  store_id: string | null;
+  advance_date: string;
+  advance_hours: string;
+  cash_amount_cents: number | null;
+  note: string | null;
+  status: "pending_verification" | "verified" | "voided";
+  created_at: string;
+  profile: { id: string; name: string | null } | null;
+  store: { id: string; name: string } | null;
 }
 
 type PayrollResponse =
@@ -84,24 +102,28 @@ function toISODate(d: Date) {
   return `${y}-${m}-${day}`;
 }
 
+function formatNumber(value: number) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1);
+}
+
 export default function PayrollAdminPage() {
-  // default range = this week
   const today  = new Date();
   const monday = new Date(today);
   monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
 
-  const [from, setFrom]               = useState(toISODate(monday));
-  const [to, setTo]                   = useState(toISODate(today));
-  const [profiles, setProfiles]       = useState<Profile[]>([]);
-  const [stores, setStores]           = useState<Store[]>([]);
-  const [selectedUser, setSelectedUser]   = useState<string>("all");
+  const [from, setFrom] = useState(toISODate(monday));
+  const [to, setTo] = useState(toISODate(today));
+  const [asOf, setAsOf] = useState(toISODate(today));
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [stores, setStores] = useState<Store[]>([]);
+  const [selectedUser, setSelectedUser] = useState<string>("all");
   const [selectedStore, setSelectedStore] = useState<string>("all");
-  const [rows, setRows]               = useState<ShiftRow[]>([]);
-  const [loading, setLoading]         = useState(false);
-  const [err, setErr]                 = useState<string | null>(null);
-  const [page, setPage]               = useState(1);
-  const [total, setTotal]             = useState(0);
-  const [summary, setSummary]         = useState<{
+  const [rows, setRows] = useState<ShiftRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
+  const [summary, setSummary] = useState<{
     byEmployee: {
       user_id: string;
       full_name: string | null;
@@ -115,21 +137,25 @@ export default function PayrollAdminPage() {
       total_hours: number;
     };
   } | null>(null);
+  const [payrollReport, setPayrollReport] = useState<PayrollReportResponse | null>(null);
+  const [advances, setAdvances] = useState<AdvanceRow[]>([]);
+  const [notes, setNotes] = useState("");
+  const [advanceDraft, setAdvanceDraft] = useState({
+    profileId: "",
+    storeId: "all",
+    advanceDate: toISODate(today),
+    advanceHours: "",
+    cashAmountDollars: "",
+    note: "",
+    status: "verified" as "pending_verification" | "verified" | "voided",
+  });
   const pageSize = 25;
 
-  // dropdowns
   useEffect(() => {
     (async () => {
-      const { data: profs } = await supabase
-        .from("profiles")
-        .select("id, name")
-        .order("name", { ascending: true });
+      const { data: profs } = await supabase.from("profiles").select("id, name").order("name", { ascending: true });
       setProfiles(profs ?? []);
-
-      const { data: sts } = await supabase
-        .from("stores")
-        .select("id, name")
-        .order("name", { ascending: true });
+      const { data: sts } = await supabase.from("stores").select("id, name").order("name", { ascending: true });
       setStores(sts ?? []);
     })();
   }, []);
@@ -142,7 +168,6 @@ export default function PayrollAdminPage() {
       const params = new URLSearchParams({
         page: String(nextPage),
         pageSize: String(pageSize),
-        // Send date-only values; server applies America/Chicago day boundaries.
         from,
         to,
       });
@@ -153,29 +178,107 @@ export default function PayrollAdminPage() {
       const token = session?.access_token || "";
       if (!token) throw new Error("Unauthorized");
 
-      const res = await fetch(`/api/admin/payroll?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const json = (await res.json()) as PayrollResponse;
-      if (!res.ok || "error" in json) {
-        throw new Error("error" in json ? json.error : "Failed to run report");
+      const [payrollRes, reportRes, advancesRes] = await Promise.all([
+        fetch(`/api/admin/payroll?${params.toString()}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`/api/admin/payroll/report?${params.toString()}&asOf=${encodeURIComponent(asOf)}`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`/api/admin/payroll/advances?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`, { headers: { Authorization: `Bearer ${token}` } }),
+      ]);
+
+      const payrollJson = (await payrollRes.json()) as PayrollResponse;
+      const reportJson = (await reportRes.json()) as PayrollReportResponse | { error: string };
+      const advancesJson = (await advancesRes.json()) as { rows: AdvanceRow[] } | { error: string };
+
+      if (!payrollRes.ok || "error" in payrollJson) {
+        throw new Error("error" in payrollJson ? payrollJson.error : "Failed to run report");
+      }
+      if (!reportRes.ok || "error" in reportJson) {
+        throw new Error("error" in reportJson ? reportJson.error : "Failed to build payroll report");
+      }
+      if (!advancesRes.ok || "error" in advancesJson) {
+        throw new Error("error" in advancesJson ? advancesJson.error : "Failed to load advances");
       }
 
-      setRows(json.rows);
-      setPage(json.page);
-      setTotal(json.total);
-      setSummary(json.summary ?? null);
+      setRows(payrollJson.rows);
+      setPage(payrollJson.page);
+      setTotal(payrollJson.total);
+      setSummary(payrollJson.summary ?? null);
+      setPayrollReport(reportJson);
+      setAdvances(advancesJson.rows ?? []);
     } catch (e: unknown) {
-      console.error("Payroll run error:", e);
       setErr(e instanceof Error ? e.message : "Failed to run report");
       setRows([]);
       setSummary(null);
+      setPayrollReport(null);
+      setAdvances([]);
     } finally {
       setLoading(false);
     }
-  }, [from, to, selectedUser, selectedStore, page]);
+  }, [from, to, asOf, selectedUser, selectedStore, page]);
 
-  useEffect(() => { void runReport(1); }, [from, to, selectedUser, selectedStore]);
+  useEffect(() => { void runReport(1); }, [from, to, asOf, selectedUser, selectedStore]);
+
+  async function saveAdvance() {
+    setErr(null);
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || "";
+    if (!token) return setErr("Unauthorized");
+    if (!advanceDraft.profileId || !advanceDraft.advanceHours) {
+      return setErr("Profile and advance hours are required.");
+    }
+
+    const res = await fetch("/api/admin/payroll/advances", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({
+        profileId: advanceDraft.profileId,
+        storeId: advanceDraft.storeId === "all" ? null : advanceDraft.storeId,
+        advanceDate: `${advanceDraft.advanceDate}T12:00:00-06:00`,
+        advanceHours: Number(advanceDraft.advanceHours),
+        cashAmountDollars: advanceDraft.cashAmountDollars === "" ? null : Number(advanceDraft.cashAmountDollars),
+        note: advanceDraft.note || null,
+        status: advanceDraft.status,
+      }),
+    });
+    const json = await res.json();
+    if (!res.ok) return setErr(json?.error || "Failed to save advance.");
+    setAdvanceDraft(d => ({ ...d, advanceHours: "", cashAmountDollars: "", note: "" }));
+    await runReport(1);
+  }
+
+  async function updateAdvance(id: string, patch: Record<string, unknown>) {
+    setErr(null);
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || "";
+    if (!token) return setErr("Unauthorized");
+    const res = await fetch(`/api/admin/payroll/advances/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(patch),
+    });
+    const json = await res.json();
+    if (!res.ok) return setErr(json?.error || "Failed to update advance.");
+    await runReport(1);
+  }
+
+  async function deleteAdvance(id: string) {
+    setErr(null);
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || "";
+    if (!token) return setErr("Unauthorized");
+    const res = await fetch(`/api/admin/payroll/advances/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = await res.json();
+    if (!res.ok) return setErr(json?.error || "Failed to delete advance.");
+    await runReport(1);
+  }
+
+  async function copyWhatsappSummary() {
+    if (!payrollReport) return;
+    const notesBlock = notes.trim() ? `\n\nNotes:\n${notes.trim()}` : "";
+    await navigator.clipboard.writeText(`${payrollReport.whatsappText}${notesBlock}`);
+  }
 
   const totalMinutes = useMemo(() => rows.reduce((a, r) => a + r.minutes, 0), [rows]);
   const totalRounded = useMemo(() => rows.reduce((a, r) => a + r.rounded_hours, 0), [rows]);
@@ -205,10 +308,10 @@ export default function PayrollAdminPage() {
 
   return (
     <div className="app-shell">
-      <div className="max-w-5xl mx-auto space-y-6">
+      <div className="max-w-6xl mx-auto space-y-6">
         <h1 className="text-2xl font-semibold">Payroll Admin</h1>
 
-        <div className="card card-pad grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+        <div className="card card-pad grid grid-cols-1 md:grid-cols-7 gap-3 items-end">
           <div>
             <label className="text-sm muted">From</label>
             <input type="date" className="input" value={from} onChange={e => setFrom(e.target.value)} />
@@ -218,21 +321,21 @@ export default function PayrollAdminPage() {
             <input type="date" className="input" value={to} onChange={e => setTo(e.target.value)} />
           </div>
           <div>
+            <label className="text-sm muted">Worked Through</label>
+            <input type="date" className="input" value={asOf} onChange={e => setAsOf(e.target.value)} />
+          </div>
+          <div>
             <label className="text-sm muted">User</label>
             <select className="select" value={selectedUser} onChange={e => setSelectedUser(e.target.value)}>
               <option value="all">All</option>
-              {profiles.map(p => (
-                <option key={p.id} value={p.id}>{p.name || p.id.slice(0,8)}</option>
-              ))}
+              {profiles.map(p => <option key={p.id} value={p.id}>{p.name || p.id.slice(0,8)}</option>)}
             </select>
           </div>
           <div>
             <label className="text-sm muted">Store</label>
             <select className="select" value={selectedStore} onChange={e => setSelectedStore(e.target.value)}>
               <option value="all">All</option>
-              {stores.map(s => (
-                <option key={s.id} value={s.id}>{s.name || s.id}</option>
-              ))}
+              {stores.map(s => <option key={s.id} value={s.id}>{s.name || s.id}</option>)}
             </select>
           </div>
           <button onClick={() => runReport(1)} className="h-12 btn-primary px-4 disabled:opacity-50" disabled={loading}>
@@ -244,6 +347,120 @@ export default function PayrollAdminPage() {
         </div>
 
         {err && <div className="banner banner-error text-sm">{err}</div>}
+
+        {payrollReport && (
+          <div className="card space-y-4 p-4">
+            <div className="font-medium">Payroll Formula Report</div>
+            <table className="w-full text-sm">
+              <thead className="bg-black/40">
+                <tr>
+                  <th className="text-left px-3 py-2">Name</th>
+                  <th className="text-right px-3 py-2">Worked</th>
+                  <th className="text-right px-3 py-2">Projected</th>
+                  <th className="text-right px-3 py-2">Advances</th>
+                  <th className="text-right px-3 py-2">Submit Hours</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payrollReport.employees.map(row => (
+                  <tr key={row.user_id} className="border-t border-white/10">
+                    <td className="px-3 py-2">{row.full_name || "Unknown"}</td>
+                    <td className="px-3 py-2 text-right">{formatNumber(row.worked_hours)}</td>
+                    <td className="px-3 py-2 text-right">{formatNumber(row.projected_hours)}</td>
+                    <td className="px-3 py-2 text-right">{formatNumber(row.advance_hours)}</td>
+                    <td className="px-3 py-2 text-right font-semibold">{formatNumber(row.submit_hours)}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-black/40">
+                <tr className="font-semibold">
+                  <td className="px-3 py-2">Totals</td>
+                  <td className="px-3 py-2 text-right">{formatNumber(payrollReport.totals.worked_hours)}</td>
+                  <td className="px-3 py-2 text-right">{formatNumber(payrollReport.totals.projected_hours)}</td>
+                  <td className="px-3 py-2 text-right">{formatNumber(payrollReport.totals.advances_hours)}</td>
+                  <td className="px-3 py-2 text-right">{formatNumber(payrollReport.totals.submitted_hours)}</td>
+                </tr>
+              </tfoot>
+            </table>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+              <div className="card card-pad">LV1 Open Hours: <b>{formatNumber(payrollReport.openTotals.lv1_hours)}</b></div>
+              <div className="card card-pad">LV2 Open Hours: <b>{formatNumber(payrollReport.openTotals.lv2_hours)}</b></div>
+              <div className="card card-pad">Total Open Hours: <b>{formatNumber(payrollReport.openTotals.total_hours)}</b></div>
+            </div>
+            <div className={`text-sm ${Math.abs(payrollReport.reconciliationDiff) < 0.01 ? "text-green-400" : "text-amber-300"}`}>
+              Reconciliation diff (submitted - open): {formatNumber(payrollReport.reconciliationDiff)}
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm muted">Notes (included in final summary)</label>
+              <textarea className="input min-h-24" value={notes} onChange={e => setNotes(e.target.value)} />
+              <button className="btn-secondary px-3 py-2" onClick={copyWhatsappSummary}>Copy WhatsApp Summary</button>
+            </div>
+          </div>
+        )}
+
+        <div className="card space-y-4 p-4">
+          <div className="font-medium">Advances</div>
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-2">
+            <select className="select" value={advanceDraft.profileId} onChange={e => setAdvanceDraft(d => ({ ...d, profileId: e.target.value }))}>
+              <option value="">Employee</option>
+              {profiles.map(p => <option key={p.id} value={p.id}>{p.name || p.id.slice(0,8)}</option>)}
+            </select>
+            <select className="select" value={advanceDraft.storeId} onChange={e => setAdvanceDraft(d => ({ ...d, storeId: e.target.value }))}>
+              <option value="all">Auto Store</option>
+              {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <input type="date" className="input" value={advanceDraft.advanceDate} onChange={e => setAdvanceDraft(d => ({ ...d, advanceDate: e.target.value }))} />
+            <input className="input" placeholder="Advance hours" value={advanceDraft.advanceHours} onChange={e => setAdvanceDraft(d => ({ ...d, advanceHours: e.target.value }))} />
+            <input className="input" placeholder="Cash $ (optional)" value={advanceDraft.cashAmountDollars} onChange={e => setAdvanceDraft(d => ({ ...d, cashAmountDollars: e.target.value }))} />
+            <select className="select" value={advanceDraft.status} onChange={e => setAdvanceDraft(d => ({ ...d, status: e.target.value as "pending_verification" | "verified" | "voided" }))}>
+              <option value="verified">Verified</option>
+              <option value="pending_verification">Pending</option>
+              <option value="voided">Voided</option>
+            </select>
+            <button className="btn-primary px-3 py-2" onClick={saveAdvance}>Add Advance</button>
+          </div>
+          <input className="input" placeholder="Note (optional)" value={advanceDraft.note} onChange={e => setAdvanceDraft(d => ({ ...d, note: e.target.value }))} />
+
+          <table className="w-full text-sm">
+            <thead className="bg-black/40">
+              <tr>
+                <th className="text-left px-3 py-2">Employee</th>
+                <th className="text-left px-3 py-2">Date</th>
+                <th className="text-right px-3 py-2">Hours</th>
+                <th className="text-right px-3 py-2">Cash</th>
+                <th className="text-left px-3 py-2">Status</th>
+                <th className="text-left px-3 py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {advances.map(row => (
+                <tr key={row.id} className="border-t border-white/10">
+                  <td className="px-3 py-2">{row.profile?.name || "Unknown"}</td>
+                  <td className="px-3 py-2">{formatWhen(row.advance_date)}</td>
+                  <td className="px-3 py-2 text-right">{row.advance_hours}</td>
+                  <td className="px-3 py-2 text-right">{row.cash_amount_cents == null ? "--" : `$${(row.cash_amount_cents / 100).toFixed(2)}`}</td>
+                  <td className="px-3 py-2">{row.status}</td>
+                  <td className="px-3 py-2 flex gap-2">
+                    {row.status !== "verified" && (
+                      <button className="btn-secondary px-2 py-1" onClick={() => updateAdvance(row.id, { status: "verified" })}>Verify</button>
+                    )}
+                    {row.status !== "voided" && (
+                      <button className="btn-secondary px-2 py-1" onClick={() => updateAdvance(row.id, { status: "voided" })}>Void</button>
+                    )}
+                    <button className="btn-secondary px-2 py-1" onClick={() => deleteAdvance(row.id)}>Delete</button>
+                  </td>
+                </tr>
+              ))}
+              {!advances.length && (
+                <tr>
+                  <td className="px-3 py-4 muted text-center" colSpan={6}>No advances in selected date range.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
         {summary && summary.byEmployee.length > 0 && (
           <div className="card">
@@ -280,7 +497,7 @@ export default function PayrollAdminPage() {
         )}
 
         <div className="card">
-          <div className="px-3 py-2 font-medium border-b border-white/10">Shifts</div>
+          <div className="px-3 py-2 font-medium border-b border-white/10">Worked Shifts</div>
           <table className="w-full text-sm">
             <thead className="bg-black/40">
               <tr>
@@ -322,12 +539,7 @@ export default function PayrollAdminPage() {
         </div>
 
         {total > pageSize && (
-          <Pagination
-            page={page}
-            pageSize={pageSize}
-            total={total}
-            onPageChange={p => runReport(p)}
-          />
+          <Pagination page={page} pageSize={pageSize} total={total} onPageChange={p => runReport(p)} />
         )}
       </div>
     </div>
@@ -357,11 +569,7 @@ function Pagination({
         Prev
       </button>
       {pages.map(p => (
-        <button
-          key={p}
-          className={p === page ? "btn-primary px-3 py-1.5" : "btn-secondary px-3 py-1.5"}
-          onClick={() => onPageChange(p)}
-        >
+        <button key={p} className={p === page ? "btn-primary px-3 py-1.5" : "btn-secondary px-3 py-1.5"} onClick={() => onPageChange(p)}>
           {p}
         </button>
       ))}
