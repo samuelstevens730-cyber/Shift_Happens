@@ -87,6 +87,47 @@ function roundMinutes(mins: number) {
   return hours + 0.5;
 }
 
+function getCstOffsetMinutes(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    timeZoneName: "shortOffset",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(date);
+  const tz = parts.find(p => p.type === "timeZoneName")?.value ?? "";
+  const match = tz.match(/GMT([+-]\d{1,2})(?::(\d{2}))?/i);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const mins = Number(match[2] || "0");
+  return hours * 60 + (hours < 0 ? -mins : mins);
+}
+
+function cstDateStartToUtcIso(dateOnly: string) {
+  const match = dateOnly.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const [, y, m, d] = match;
+  const utcMidnight = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d), 0, 0, 0));
+  const offset = getCstOffsetMinutes(utcMidnight);
+  if (offset == null) return null;
+  const utcMillis = Date.UTC(Number(y), Number(m) - 1, Number(d), 0, 0, 0) - offset * 60000;
+  return new Date(utcMillis).toISOString();
+}
+
+function nextDateOnly(dateOnly: string) {
+  const match = dateOnly.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const [, y, m, d] = match;
+  const dt = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d), 0, 0, 0));
+  dt.setUTCDate(dt.getUTCDate() + 1);
+  const yyyy = dt.getUTCFullYear();
+  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
+  const dd = String(dt.getUTCDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 function detectStoreBucket(storeName: string | null) {
   const name = (storeName || "").toLowerCase();
   if (/\blv\s*1\b/.test(name)) return "lv1";
@@ -124,13 +165,21 @@ export async function GET(req: Request) {
     const applyFilters = (query: any) => {
       let next = query;
       if (from) {
-        next = next.gte("planned_start_at", isDateOnly(from) ? `${from}T00:00:00.000Z` : from);
+        if (isDateOnly(from)) {
+          const fromIso = cstDateStartToUtcIso(from);
+          if (!fromIso) throw new Error("Invalid from date.");
+          next = next.gte("planned_start_at", fromIso);
+        } else {
+          next = next.gte("planned_start_at", from);
+        }
       }
       if (to) {
         if (isDateOnly(to)) {
-          const d = new Date(`${to}T00:00:00.000Z`);
-          d.setUTCDate(d.getUTCDate() + 1);
-          next = next.lt("ended_at", d.toISOString());
+          const toNext = nextDateOnly(to);
+          if (!toNext) throw new Error("Invalid to date.");
+          const toExclusiveIso = cstDateStartToUtcIso(toNext);
+          if (!toExclusiveIso) throw new Error("Invalid to date.");
+          next = next.lt("ended_at", toExclusiveIso);
         } else {
           next = next.lte("ended_at", to);
         }

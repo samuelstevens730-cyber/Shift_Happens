@@ -83,8 +83,6 @@ function toISODate(d: Date) {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
-function startOfDay(d: Date) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
-function endOfDay(d: Date)   { const x = new Date(d); x.setHours(23,59,59,999); return x; }
 
 export default function PayrollAdminPage() {
   // default range = this week
@@ -141,14 +139,12 @@ export default function PayrollAdminPage() {
       setErr(null);
       setLoading(true);
 
-      const fromISO = startOfDay(new Date(from)).toISOString();
-      const toISO   = endOfDay(new Date(to)).toISOString();
-
       const params = new URLSearchParams({
         page: String(nextPage),
         pageSize: String(pageSize),
-        from: fromISO,
-        to: toISO,
+        // Send date-only values; server applies America/Chicago day boundaries.
+        from,
+        to,
       });
       if (selectedUser !== "all") params.set("profileId", selectedUser);
       if (selectedStore !== "all") params.set("storeId", selectedStore);
