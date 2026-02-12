@@ -62,6 +62,22 @@ function formatNumber(value: number) {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
+function renderCheckDetail(checkKey: string, detail: Record<string, unknown>) {
+  if (checkKey === "unapproved_shifts") {
+    return `${detail.employee ?? "Unknown"} @ ${detail.store ?? "Unknown"} | ${detail.planned_start_at ?? "--"} | ${detail.reason ?? "pending_review"}`;
+  }
+  if (checkKey === "missing_coverage") {
+    return `${detail.shift_date ?? "--"} | ${detail.store ?? "Unknown"} | ${detail.employee ?? "Unknown"} | ${detail.shift_type ?? "shift"} not logged`;
+  }
+  if (checkKey === "open_shifts") {
+    return `${detail.employee ?? "Unknown"} @ ${detail.store ?? "Unknown"} | open since ${detail.planned_start_at ?? "--"}`;
+  }
+  if (checkKey === "unexplained_variance") {
+    return `${detail.employee ?? "Unknown"} @ ${detail.store ?? "Unknown"} | drift ${detail.drift_hours ?? "--"}h | no override note`;
+  }
+  return JSON.stringify(detail);
+}
+
 export default function PayrollReconciliationPage() {
   const today = new Date();
   const monday = new Date(today);
@@ -227,18 +243,29 @@ export default function PayrollReconciliationPage() {
               </div>
             </div>
 
-            <div className="card p-4 space-y-2">
+            <div className="card p-4 space-y-3">
               <div className="font-medium">Operational Checks</div>
               {report.operationalChecks.map(check => (
-                <div key={check.key} className="rounded border border-white/10 p-3">
-                  <div className="text-sm">
-                    {check.ok ? "[OK]" : "[WARN]"} {check.label} ({check.count})
+                <div
+                  key={check.key}
+                  className={`rounded border p-3 ${
+                    check.ok ? "border-green-500/20 bg-green-500/5" : "border-amber-500/25 bg-amber-500/5"
+                  }`}
+                >
+                  <div className="text-sm flex items-center justify-between gap-2">
+                    <span>{check.ok ? "[OK]" : "[WARN]"} {check.label}</span>
+                    <span className="text-xs px-2 py-1 rounded bg-black/30">{check.count}</span>
                   </div>
                   {!check.ok && check.details.length > 0 && (
-                    <div className="text-xs muted mt-2 space-y-1">
-                      {check.details.slice(0, 3).map((d, idx) => (
-                        <div key={`${check.key}-${idx}`}>{JSON.stringify(d)}</div>
+                    <div className="text-xs mt-2 space-y-1">
+                      {check.details.slice(0, 8).map((d, idx) => (
+                        <div key={`${check.key}-${idx}`} className="rounded bg-black/20 px-2 py-1 text-white/80">
+                          {renderCheckDetail(check.key, d)}
+                        </div>
                       ))}
+                      {check.details.length > 8 && (
+                        <div className="text-white/50">+{check.details.length - 8} more</div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -311,4 +338,3 @@ export default function PayrollReconciliationPage() {
     </div>
   );
 }
-
