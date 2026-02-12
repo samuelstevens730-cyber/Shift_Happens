@@ -41,8 +41,11 @@ type ReconciliationResponse = {
     scheduled_hours: number;
     worked_hours: number;
     projected_hours: number;
+    gross_worked_projected_hours: number;
     advances_hours: number;
     submitted_hours: number;
+    scheduled_minus_gross: number;
+    gross_minus_scheduled: number;
     scheduled_minus_submitted: number;
     submitted_minus_scheduled: number;
     open_minus_submitted: number;
@@ -339,12 +342,16 @@ export default function PayrollReconciliationPage() {
             <div className="card p-4 space-y-2">
               <div className="font-medium">Financial Reconciliation</div>
               <div className="text-sm">Scheduled labor hours: <b>{formatNumber(report.financialReconciliation.scheduled_hours)}</b></div>
-              <div className="text-sm">Worked + Projected: <b>{formatNumber(report.financialReconciliation.worked_hours + report.financialReconciliation.projected_hours)}</b></div>
+              <div className="text-sm">Worked + Projected (gross): <b>{formatNumber(report.financialReconciliation.gross_worked_projected_hours)}</b></div>
               <div className="text-sm">Less Advances: <b>{formatNumber(report.financialReconciliation.advances_hours)}</b></div>
               <div className="text-sm">Hours to submit: <b>{formatNumber(report.financialReconciliation.submitted_hours)}</b></div>
+              <div className="text-sm">Scheduled minus Gross (coverage drift): <b>{formatNumber(report.financialReconciliation.scheduled_minus_gross)}</b></div>
               <div className="text-sm">Scheduled minus Submitted: <b>{formatNumber(report.financialReconciliation.scheduled_minus_submitted)}</b></div>
               <div className="text-sm">Submitted minus Scheduled: <b>{formatNumber(report.financialReconciliation.submitted_minus_scheduled)}</b></div>
               <div className="text-sm">Open minus Submitted: <b>{formatNumber(report.financialReconciliation.open_minus_submitted)}</b></div>
+              <div className="text-xs muted">
+                Note: Scheduled vs Submitted includes advances. Use Scheduled minus Gross to spot scheduling/coverage mismatch.
+              </div>
               {report.warnings.length > 0 && (
                 <div className="banner banner-warn text-sm">
                   {report.warnings.join(" ")}

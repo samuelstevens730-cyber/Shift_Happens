@@ -341,7 +341,8 @@ export async function GET(req: Request) {
     for (const row of shiftsWorkedThrough) {
       if (!row.ended_at) continue;
       const entry = upsert(row.profile_id, row.profile?.name ?? null);
-      const hours = roundMinutes(calcActualMinutes(row.started_at || row.planned_start_at, row.ended_at));
+      // Keep reconciliation aligned with payroll calculation: planned start -> ended.
+      const hours = roundMinutes(calcActualMinutes(row.planned_start_at, row.ended_at));
       entry.worked_hours += hours;
     }
 
@@ -384,9 +385,12 @@ export async function GET(req: Request) {
       }
     }
 
+    const grossWorkedProjected = totals.worked_hours + totals.projected_hours;
+    const scheduledMinusGross = totals.scheduled_hours - grossWorkedProjected;
+    const grossMinusScheduled = grossWorkedProjected - totals.scheduled_hours;
     const scheduledMinusSubmitted = totals.scheduled_hours - totals.submitted_hours;
     const submittedMinusScheduled = totals.submitted_hours - totals.scheduled_hours;
-    const scheduledVarianceWarning = Math.abs(scheduledMinusSubmitted) > varianceThresholdHours;
+    const scheduledVarianceWarning = Math.abs(scheduledMinusGross) > varianceThresholdHours;
     const openMinusSubmitted = openTotals.total_hours - totals.submitted_hours;
     const coveragePercent = openTotals.total_hours > 0
       ? (scheduledTotalsByStore.total_hours / openTotals.total_hours) * 100
@@ -453,7 +457,7 @@ export async function GET(req: Request) {
     const warnings: string[] = [];
     if (scheduledVarianceWarning) {
       warnings.push(
-        `Scheduled vs submitted differs by ${scheduledMinusSubmitted.toFixed(1)} hours (threshold ${varianceThresholdHours}).`
+        `Scheduled vs worked+projected differs by ${scheduledMinusGross.toFixed(1)} hours (threshold ${varianceThresholdHours}).`
       );
     }
     if (missingCoverageRows.length > 0) {
@@ -511,8 +515,11 @@ export async function GET(req: Request) {
         scheduled_hours: totals.scheduled_hours,
         worked_hours: totals.worked_hours,
         projected_hours: totals.projected_hours,
+        gross_worked_projected_hours: grossWorkedProjected,
         advances_hours: totals.advances_hours,
         submitted_hours: totals.submitted_hours,
+        scheduled_minus_gross: Number(scheduledMinusGross.toFixed(2)),
+        gross_minus_scheduled: Number(grossMinusScheduled.toFixed(2)),
         scheduled_minus_submitted: Number(scheduledMinusSubmitted.toFixed(2)),
         submitted_minus_scheduled: Number(submittedMinusScheduled.toFixed(2)),
         open_minus_submitted: Number(openMinusSubmitted.toFixed(2)),
