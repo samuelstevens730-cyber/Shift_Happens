@@ -196,13 +196,18 @@ export default function PayrollReconciliationPage() {
       <pre>${report.whatsappText}</pre>
       </body></html>
     `;
-    const w = window.open("", "_blank", "noopener,noreferrer");
-    if (!w) return;
+    const w = window.open("about:blank", "_blank");
+    if (!w) {
+      window.alert("Popup blocked. Please allow popups for this site and try again.");
+      return;
+    }
     w.document.open();
     w.document.write(html);
     w.document.close();
     w.focus();
-    w.print();
+    w.setTimeout(() => {
+      w.print();
+    }, 250);
   }
 
   return (
