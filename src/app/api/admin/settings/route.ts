@@ -39,7 +39,19 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
 
-type StoreRow = { id: string; name: string; expected_drawer_cents: number };
+type StoreRow = {
+  id: string;
+  name: string;
+  expected_drawer_cents: number;
+  payroll_variance_warn_hours: number;
+  payroll_shift_drift_warn_hours: number;
+};
+type StoreBaseRow = { id: string; name: string; expected_drawer_cents: number };
+type StoreSettingsRow = {
+  store_id: string;
+  payroll_variance_warn_hours: number | null;
+  payroll_shift_drift_warn_hours: number | null;
+};
 type TemplateRow = { id: string; store_id: string | null; shift_type: string; name: string };
 type ItemRow = { id: string; template_id: string; label: string; sort_order: number; required: boolean };
 
@@ -156,13 +168,30 @@ export async function GET(req: Request) {
       return NextResponse.json({ stores: [], storeId: null, templates: [] });
     }
 
-    const { data: stores, error: storesErr } = await supabaseServer
+    const { data: storesBase, error: storesErr } = await supabaseServer
       .from("stores")
       .select("id, name, expected_drawer_cents")
       .in("id", managerStoreIds)
       .order("name", { ascending: true })
-      .returns<StoreRow[]>();
+      .returns<StoreBaseRow[]>();
     if (storesErr) return NextResponse.json({ error: storesErr.message }, { status: 500 });
+
+    const { data: settingsRows, error: settingsErr } = await supabaseServer
+      .from("store_settings")
+      .select("store_id, payroll_variance_warn_hours, payroll_shift_drift_warn_hours")
+      .in("store_id", managerStoreIds)
+      .returns<StoreSettingsRow[]>();
+    if (settingsErr) return NextResponse.json({ error: settingsErr.message }, { status: 500 });
+
+    const settingsByStoreId = new Map((settingsRows ?? []).map(r => [r.store_id, r]));
+    const stores: StoreRow[] = (storesBase ?? []).map(s => {
+      const row = settingsByStoreId.get(s.id);
+      return {
+        ...s,
+        payroll_variance_warn_hours: Number(row?.payroll_variance_warn_hours ?? 2),
+        payroll_shift_drift_warn_hours: Number(row?.payroll_shift_drift_warn_hours ?? 2),
+      };
+    });
 
     const url = new URL(req.url);
     const requestedStoreId = url.searchParams.get("storeId");

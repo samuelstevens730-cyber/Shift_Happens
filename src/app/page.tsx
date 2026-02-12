@@ -626,12 +626,20 @@ function HomePageInner() {
 
           {/* REQUESTS */}
           {showRequests ? (
-            <Link href="/dashboard/requests" className="bento-card bento-requests">
-              <div className="flex flex-col items-center justify-center gap-3">
-                <FileText className="w-10 h-10 md:w-12 md:h-12 text-amber-400" strokeWidth={1.5} />
-                <span className="bento-card-title">REQUESTS</span>
-              </div>
-            </Link>
+            <div className="space-y-2">
+              <Link href="/dashboard/requests" className="bento-card bento-requests">
+                <div className="flex flex-col items-center justify-center gap-3">
+                  <FileText className="w-10 h-10 md:w-12 md:h-12 text-amber-400" strokeWidth={1.5} />
+                  <span className="bento-card-title">REQUESTS</span>
+                </div>
+              </Link>
+              <Link
+                href="/dashboard/requests?tab=advances"
+                className="block rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2 text-center text-xs font-semibold tracking-wide text-amber-200 hover:bg-amber-500/15"
+              >
+                QUICK LINK: SUBMIT ADVANCE
+              </Link>
+            </div>
           ) : (
             <div className="bento-card bento-requests bento-card-disabled">
               <div className="flex flex-col items-center justify-center gap-3">

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -280,6 +281,100 @@ export default function PayrollAdminPage() {
     await navigator.clipboard.writeText(`${payrollReport.whatsappText}${notesBlock}`);
   }
 
+  function exportPayrollPacketPdf() {
+    if (!payrollReport) return;
+
+    const safeNotes = notes.trim()
+      ? notes
+          .trim()
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll("\n", "<br/>")
+      : "None";
+
+    const employeeRows = payrollReport.employees
+      .map(
+        row => `
+          <tr>
+            <td>${row.full_name || "Unknown"}</td>
+            <td style="text-align:right;">${formatNumber(row.worked_hours)}</td>
+            <td style="text-align:right;">${formatNumber(row.projected_hours)}</td>
+            <td style="text-align:right;">${formatNumber(row.advance_hours)}</td>
+            <td style="text-align:right;font-weight:700;">${formatNumber(row.submit_hours)}</td>
+          </tr>
+        `
+      )
+      .join("");
+
+    const now = new Date().toLocaleString("en-US", { timeZone: "America/Chicago" });
+    const openMinusSubmitted = payrollReport.openTotals.total_hours - payrollReport.totals.submitted_hours;
+    const submittedMinusOpen = payrollReport.totals.submitted_hours - payrollReport.openTotals.total_hours;
+
+    const html = `
+      <html>
+        <head>
+          <title>Payroll Packet ${from} to ${to}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 24px; color: #111; }
+            h1, h2 { margin: 0 0 12px 0; }
+            .muted { color: #555; margin-bottom: 16px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+            th, td { border: 1px solid #ddd; padding: 8px; font-size: 12px; }
+            th { background: #f5f5f5; text-align: left; }
+            .cards { margin: 8px 0 16px 0; }
+            .cards div { margin-bottom: 4px; }
+          </style>
+        </head>
+        <body>
+          <h1>Payroll Packet</h1>
+          <div class="muted">Range: ${from} to ${to} | Worked Through: ${asOf} | Generated: ${now} (CST)</div>
+          <h2>Payroll Formula</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th style="text-align:right;">Worked</th>
+                <th style="text-align:right;">Projected</th>
+                <th style="text-align:right;">Advances</th>
+                <th style="text-align:right;">Submit Hours</th>
+              </tr>
+            </thead>
+            <tbody>${employeeRows}</tbody>
+            <tfoot>
+              <tr>
+                <th>Totals</th>
+                <th style="text-align:right;">${formatNumber(payrollReport.totals.worked_hours)}</th>
+                <th style="text-align:right;">${formatNumber(payrollReport.totals.projected_hours)}</th>
+                <th style="text-align:right;">${formatNumber(payrollReport.totals.advances_hours)}</th>
+                <th style="text-align:right;">${formatNumber(payrollReport.totals.submitted_hours)}</th>
+              </tr>
+            </tfoot>
+          </table>
+          <div class="cards">
+            <div><b>LV1 Open Hours:</b> ${formatNumber(payrollReport.openTotals.lv1_hours)}</div>
+            <div><b>LV2 Open Hours:</b> ${formatNumber(payrollReport.openTotals.lv2_hours)}</div>
+            <div><b>Total Open Hours:</b> ${formatNumber(payrollReport.openTotals.total_hours)}</div>
+            <div><b>Open minus Submitted:</b> ${formatNumber(openMinusSubmitted)}</div>
+            <div><b>Submitted minus Open:</b> ${formatNumber(submittedMinusOpen)}</div>
+          </div>
+          <h2>Notes</h2>
+          <div>${safeNotes}</div>
+          <h2>WhatsApp Summary</h2>
+          <pre style="white-space: pre-wrap; border: 1px solid #ddd; padding: 8px;">${payrollReport.whatsappText}</pre>
+        </body>
+      </html>
+    `;
+
+    const w = window.open("", "_blank", "noopener,noreferrer");
+    if (!w) return;
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    w.print();
+  }
+
   const totalMinutes = useMemo(() => rows.reduce((a, r) => a + r.minutes, 0), [rows]);
   const totalRounded = useMemo(() => rows.reduce((a, r) => a + r.rounded_hours, 0), [rows]);
 
@@ -310,6 +405,11 @@ export default function PayrollAdminPage() {
     <div className="app-shell">
       <div className="max-w-6xl mx-auto space-y-6">
         <h1 className="text-2xl font-semibold">Payroll Admin</h1>
+        <div className="flex justify-end">
+          <Link href="/admin/payroll/reconciliation" className="btn-secondary px-3 py-2">
+            Reconcile Payroll
+          </Link>
+        </div>
 
         <div className="card card-pad grid grid-cols-1 md:grid-cols-7 gap-3 items-end">
           <div>
@@ -389,13 +489,18 @@ export default function PayrollAdminPage() {
               <div className="card card-pad">Total Open Hours: <b>{formatNumber(payrollReport.openTotals.total_hours)}</b></div>
             </div>
             <div className={`text-sm ${Math.abs(payrollReport.reconciliationDiff) < 0.01 ? "text-green-400" : "text-amber-300"}`}>
-              Reconciliation diff (submitted - open): {formatNumber(payrollReport.reconciliationDiff)}
+              Open minus Submitted: {formatNumber(payrollReport.openTotals.total_hours - payrollReport.totals.submitted_hours)}
+              {" "}|{" "}
+              Submitted minus Open: {formatNumber(payrollReport.totals.submitted_hours - payrollReport.openTotals.total_hours)}
             </div>
 
             <div className="space-y-2">
               <label className="text-sm muted">Notes (included in final summary)</label>
               <textarea className="input min-h-24" value={notes} onChange={e => setNotes(e.target.value)} />
-              <button className="btn-secondary px-3 py-2" onClick={copyWhatsappSummary}>Copy WhatsApp Summary</button>
+              <div className="flex flex-wrap gap-2">
+                <button className="btn-secondary px-3 py-2" onClick={copyWhatsappSummary}>Copy WhatsApp Summary</button>
+                <button className="btn-secondary px-3 py-2" onClick={exportPayrollPacketPdf}>Export PDF Packet</button>
+              </div>
             </div>
           </div>
         )}

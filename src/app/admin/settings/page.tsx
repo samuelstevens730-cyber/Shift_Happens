@@ -27,7 +27,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
-type Store = { id: string; name: string; expected_drawer_cents: number };
+type Store = {
+  id: string;
+  name: string;
+  expected_drawer_cents: number;
+  payroll_variance_warn_hours: number;
+  payroll_shift_drift_warn_hours: number;
+};
 type ChecklistItem = {
   id?: string;
   client_id: string;
@@ -63,6 +69,8 @@ export default function AdminSettingsPage() {
   const [stores, setStores] = useState<Store[]>([]);
   const [storeId, setStoreId] = useState<string>("");
   const [expectedDrawer, setExpectedDrawer] = useState<string>("");
+  const [payrollVarianceWarnHours, setPayrollVarianceWarnHours] = useState<string>("2");
+  const [payrollShiftDriftWarnHours, setPayrollShiftDriftWarnHours] = useState<string>("2");
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
   const [activeShift, setActiveShift] = useState<"open" | "close">("open");
   const [savingStore, setSavingStore] = useState(false);
@@ -115,7 +123,10 @@ export default function AdminSettingsPage() {
     setStoreId(selectedStoreId);
 
     const expected = nextStores.find(s => s.id === selectedStoreId)?.expected_drawer_cents ?? 0;
+    const selectedStore = nextStores.find(s => s.id === selectedStoreId);
     setExpectedDrawer((expected / 100).toFixed(2));
+    setPayrollVarianceWarnHours(String(selectedStore?.payroll_variance_warn_hours ?? 2));
+    setPayrollShiftDriftWarnHours(String(selectedStore?.payroll_shift_drift_warn_hours ?? 2));
 
     const withClientIds = (json.templates ?? []).map(t => ({
       ...t,
@@ -190,6 +201,16 @@ export default function AdminSettingsPage() {
         setError("Expected drawer must be a valid number.");
         return;
       }
+      const varianceWarn = Number(payrollVarianceWarnHours);
+      if (!Number.isFinite(varianceWarn) || varianceWarn < 0) {
+        setError("Payroll variance threshold must be 0 or higher.");
+        return;
+      }
+      const driftWarn = Number(payrollShiftDriftWarnHours);
+      if (!Number.isFinite(driftWarn) || driftWarn < 0) {
+        setError("Shift drift threshold must be 0 or higher.");
+        return;
+      }
 
       const res = await fetch("/api/admin/settings/store", {
         method: "PATCH",
@@ -200,6 +221,8 @@ export default function AdminSettingsPage() {
         body: JSON.stringify({
           storeId,
           expectedDrawerCents: Math.max(0, Math.round(dollars * 100)),
+          payrollVarianceWarnHours: varianceWarn,
+          payrollShiftDriftWarnHours: driftWarn,
         }),
       });
       const json = (await res.json()) as SimpleResponse;
@@ -295,6 +318,24 @@ export default function AdminSettingsPage() {
                 inputMode="decimal"
                 value={expectedDrawer}
                 onChange={e => setExpectedDrawer(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm muted">Payroll variance warn threshold (hours)</label>
+              <input
+                className="input"
+                inputMode="decimal"
+                value={payrollVarianceWarnHours}
+                onChange={e => setPayrollVarianceWarnHours(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm muted">Shift drift warn threshold (hours)</label>
+              <input
+                className="input"
+                inputMode="decimal"
+                value={payrollShiftDriftWarnHours}
+                onChange={e => setPayrollShiftDriftWarnHours(e.target.value)}
               />
             </div>
           </div>
