@@ -154,8 +154,8 @@ function RequestsContent() {
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-full border border-white/10 bg-white/5 p-1">
+        <div className="w-full overflow-x-auto pb-1">
+          <div className="inline-flex min-w-max rounded-full border border-white/10 bg-white/5 p-1">
             {TABS.map(tab => (
               <button
                 key={tab.id}
