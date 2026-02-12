@@ -73,9 +73,17 @@ function renderCheckDetail(checkKey: string, detail: Record<string, unknown>) {
     return `${detail.employee ?? "Unknown"} @ ${detail.store ?? "Unknown"} | open since ${detail.planned_start_at ?? "--"}`;
   }
   if (checkKey === "unexplained_variance") {
-    return `${detail.employee ?? "Unknown"} @ ${detail.store ?? "Unknown"} | drift ${detail.drift_hours ?? "--"}h | no override note`;
+    return `${detail.shift_date ?? "--"} | ${detail.employee ?? "Unknown"} @ ${detail.store ?? "Unknown"} | scheduled ${detail.scheduled_start ?? "--"}-${detail.scheduled_end ?? "--"} | planned ${detail.planned_start_at ?? "--"} to ${detail.planned_end_at ?? "--"} | drift ${detail.drift_hours ?? "--"}h | no override note`;
   }
   return JSON.stringify(detail);
+}
+
+function checkActionLink(checkKey: string) {
+  if (checkKey === "unapproved_shifts") return { href: "/admin/overrides", label: "Review Overrides" };
+  if (checkKey === "missing_coverage") return { href: "/admin/shifts", label: "Review Shifts" };
+  if (checkKey === "open_shifts") return { href: "/admin/open-shifts", label: "Review Open Shifts" };
+  if (checkKey === "unexplained_variance") return { href: "/admin/shifts", label: "Review Shift Variances" };
+  return null;
 }
 
 export default function PayrollReconciliationPage() {
@@ -246,6 +254,9 @@ export default function PayrollReconciliationPage() {
             <div className="card p-4 space-y-3">
               <div className="font-medium">Operational Checks</div>
               {report.operationalChecks.map(check => (
+                (() => {
+                  const action = !check.ok ? checkActionLink(check.key) : null;
+                  return (
                 <div
                   key={check.key}
                   className={`rounded border p-3 ${
@@ -254,7 +265,17 @@ export default function PayrollReconciliationPage() {
                 >
                   <div className="text-sm flex items-center justify-between gap-2">
                     <span>{check.ok ? "[OK]" : "[WARN]"} {check.label}</span>
-                    <span className="text-xs px-2 py-1 rounded bg-black/30">{check.count}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs px-2 py-1 rounded bg-black/30">{check.count}</span>
+                      {action && (
+                        <Link
+                          href={action.href}
+                          className="text-xs px-2 py-1 rounded bg-white/10 hover:bg-white/20"
+                        >
+                          {action.label}
+                        </Link>
+                      )}
+                    </div>
                   </div>
                   {!check.ok && check.details.length > 0 && (
                     <div className="text-xs mt-2 space-y-1">
@@ -269,6 +290,8 @@ export default function PayrollReconciliationPage() {
                     </div>
                   )}
                 </div>
+                  );
+                })()
               ))}
             </div>
 

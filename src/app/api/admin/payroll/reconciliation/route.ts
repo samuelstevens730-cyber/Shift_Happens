@@ -18,6 +18,7 @@ type ShiftRow = {
   id: string;
   profile_id: string;
   store_id: string;
+  shift_type: "open" | "close" | "double" | "other";
   planned_start_at: string;
   started_at: string | null;
   ended_at: string | null;
@@ -205,7 +206,7 @@ export async function GET(req: Request) {
 
     const { data: shiftRowsRaw, error: shiftErr } = await supabaseServer
       .from("shifts")
-      .select("id, profile_id, store_id, planned_start_at, started_at, ended_at, requires_override, override_at, override_note, manual_closed, manual_closed_reviewed_at, schedule_shift_id, store:store_id(name), profile:profile_id(name)")
+      .select("id, profile_id, store_id, shift_type, planned_start_at, started_at, ended_at, requires_override, override_at, override_note, manual_closed, manual_closed_reviewed_at, schedule_shift_id, store:store_id(name), profile:profile_id(name)")
       .in("store_id", scopeStoreIds)
       .neq("last_action", "removed")
       .gte("planned_start_at", fromUtcIso)
@@ -241,11 +242,32 @@ export async function GET(req: Request) {
     const matchedScheduleIds = new Set(
       shiftsWorkedThrough.map(r => r.schedule_shift_id).filter((v): v is string => Boolean(v))
     );
-    const missingCoverageRows = scheduledWorkedThrough.filter(r => !matchedScheduleIds.has(r.id));
+    const shiftsByCoverageKey = new Map<string, ShiftRow[]>();
+    for (const shift of shiftsWorkedThrough) {
+      const key = `${shift.profile_id}|${shift.store_id}|${getCstDateKey(shift.planned_start_at)}`;
+      const list = shiftsByCoverageKey.get(key) ?? [];
+      list.push(shift);
+      shiftsByCoverageKey.set(key, list);
+    }
+    const missingCoverageRows = scheduledWorkedThrough.filter(r => {
+      if (matchedScheduleIds.has(r.id)) return false;
+      if (!r.profile_id) return false;
+      const key = `${r.profile_id}|${r.store_id}|${r.shift_date}`;
+      const sameDayShifts = shiftsByCoverageKey.get(key) ?? [];
+      if (!sameDayShifts.length) return true;
+
+      const hasCompatibleShift = sameDayShifts.some(shift => {
+        if (shift.shift_type === r.shift_type) return true;
+        if (shift.shift_type === "double" && (r.shift_type === "open" || r.shift_type === "close" || r.shift_type === "double")) return true;
+        if (r.shift_type === "double" && (shift.shift_type === "open" || shift.shift_type === "close")) return true;
+        return false;
+      });
+      return !hasCompatibleShift;
+    });
 
     const unapprovedShifts = shiftsWorkedThrough.filter(r =>
       (Boolean(r.manual_closed) && !r.manual_closed_reviewed_at) ||
-      (Boolean(r.requires_override) && !r.override_at)
+      (Boolean(r.requires_override) && Boolean(r.ended_at) && !r.override_at)
     );
     const openShifts = shiftsWorkedThrough.filter(r => !r.ended_at);
 
@@ -254,12 +276,12 @@ export async function GET(req: Request) {
       .map(r => {
         const scheduled = r.schedule_shift_id ? scheduledById.get(r.schedule_shift_id) : null;
         if (!scheduled || !r.ended_at) return null;
-        const actualMinutes = calcActualMinutes(r.started_at || r.planned_start_at, r.ended_at);
+        const actualMinutes = calcActualMinutes(r.planned_start_at, r.ended_at);
         const scheduledMinutes = calcScheduledMinutes(scheduled.scheduled_start, scheduled.scheduled_end);
         const diffHours = Math.abs(actualMinutes - scheduledMinutes) / 60;
-        return { shift: r, diffHours };
+        return { shift: r, scheduled, diffHours };
       })
-      .filter((x): x is { shift: ShiftRow; diffHours: number } => Boolean(x))
+      .filter((x): x is { shift: ShiftRow; scheduled: ScheduledRow; diffHours: number } => Boolean(x))
       .filter(x => x.diffHours >= shiftDriftThresholdHours && !(x.shift.override_note || "").trim().length);
 
     type EmployeeCalc = {
@@ -398,6 +420,11 @@ export async function GET(req: Request) {
           shift_id: v.shift.id,
           employee: v.shift.profile?.name ?? "Unknown",
           store: v.shift.store?.name ?? "Unknown",
+          shift_date: getCstDateKey(v.shift.planned_start_at),
+          planned_start_at: v.shift.planned_start_at,
+          planned_end_at: v.shift.ended_at,
+          scheduled_start: v.scheduled.scheduled_start,
+          scheduled_end: v.scheduled.scheduled_end,
           drift_hours: Number(v.diffHours.toFixed(2)),
         })),
       },
