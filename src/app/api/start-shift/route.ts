@@ -195,8 +195,6 @@ export async function POST(req: Request) {
 
     const isWithinScheduledWindow = Boolean(matchedSchedule);
     const hasScheduledShift = Boolean(nearestSchedule);
-    const requiresTimingApproval = !isWithinScheduledWindow;
-
     // Block unscheduled clock-ins unless explicitly forced (user confirmed the popup)
     if (!hasScheduledShift && !body.force) {
       return NextResponse.json(
@@ -330,12 +328,9 @@ export async function POST(req: Request) {
           shift_type: resolvedShiftType,
           schedule_shift_id: nearestSchedule?.id ?? null,
           shift_source: hasScheduledShift ? "scheduled" : "manual",
-          requires_override: requiresTimingApproval,
-          override_note: !requiresTimingApproval
-            ? null
-            : hasScheduledShift
-              ? "Clock-in outside scheduled window"
-              : "Unscheduled clock-in",
+          // Override is now reserved for over-scheduled or >13h at clock-out.
+          requires_override: false,
+          override_note: null,
           planned_start_at: plannedRounded.toISOString(),
           started_at: new Date().toISOString(),
         })

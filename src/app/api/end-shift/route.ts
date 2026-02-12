@@ -75,42 +75,6 @@ function parseTimeToMinutes(timeValue: string): number | null {
   return (hour * 60) + minute;
 }
 
-function dateKeyToDayNumber(dateKey: string): number | null {
-  const parts = dateKey.split("-");
-  if (parts.length !== 3) return null;
-  const year = Number(parts[0]);
-  const month = Number(parts[1]);
-  const day = Number(parts[2]);
-  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null;
-  return Math.floor(Date.UTC(year, month - 1, day) / 86400000);
-}
-
-function isWithinScheduledEndWindow(endRounded: Date, scheduleShift: ScheduleShiftRow): boolean {
-  const endLocalDate = endRounded.toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
-  const endLocal = getCstDowMinutes(endRounded);
-  const scheduledStartMinutes = parseTimeToMinutes(scheduleShift.scheduled_start);
-  const scheduledEndMinutes = parseTimeToMinutes(scheduleShift.scheduled_end);
-  const endDayNumber = dateKeyToDayNumber(endLocalDate);
-  const scheduledDayNumber = dateKeyToDayNumber(scheduleShift.shift_date);
-
-  if (
-    !endLocal ||
-    scheduledStartMinutes == null ||
-    scheduledEndMinutes == null ||
-    endDayNumber == null ||
-    scheduledDayNumber == null
-  ) {
-    return false;
-  }
-
-  const overnightOffset = scheduledEndMinutes < scheduledStartMinutes ? 1 : 0;
-  const endAbsolute = (endDayNumber * 1440) + endLocal.minutes;
-  const scheduledAbsolute = ((scheduledDayNumber + overnightOffset) * 1440) + scheduledEndMinutes;
-  const diff = endAbsolute - scheduledAbsolute;
-
-  return diff >= -5 && diff <= 15;
-}
-
 function templatesForShiftType(st: ShiftType) {
   if (st === "open") return ["open"];
   if (st === "close") return ["close"];
@@ -327,7 +291,7 @@ export async function POST(req: Request) {
     const endRounded = roundTo30Minutes(endAt);
 
     let hasScheduledShift = false;
-    let isWithinScheduleWindow = false;
+    let scheduledDurationHours: number | null = null;
     if (shift.schedule_shift_id) {
       const { data: scheduleShift, error: scheduleShiftErr } = await supabaseServer
         .from("schedule_shifts")
@@ -336,11 +300,16 @@ export async function POST(req: Request) {
         .maybeSingle<ScheduleShiftRow>();
       if (!scheduleShiftErr && scheduleShift) {
         hasScheduledShift = true;
-        isWithinScheduleWindow = isWithinScheduledEndWindow(endRounded, scheduleShift);
+        const scheduledStartMinutes = parseTimeToMinutes(scheduleShift.scheduled_start);
+        const scheduledEndMinutes = parseTimeToMinutes(scheduleShift.scheduled_end);
+        if (scheduledStartMinutes != null && scheduledEndMinutes != null) {
+          const scheduledMinutes = scheduledEndMinutes >= scheduledStartMinutes
+            ? (scheduledEndMinutes - scheduledStartMinutes)
+            : ((24 * 60 - scheduledStartMinutes) + scheduledEndMinutes);
+          scheduledDurationHours = scheduledMinutes / 60;
+        }
       }
     }
-
-    const requiresTimingApproval = !isWithinScheduleWindow;
 
     if (shiftType === "close" && !hasScheduledShift) {
       const storeKey = toStoreKey(store.name);
@@ -369,18 +338,20 @@ export async function POST(req: Request) {
     const durationHours = Number.isNaN(startedAt.getTime())
       ? null
       : (endRounded.getTime() - startedAt.getTime()) / (1000 * 60 * 60);
+    const overScheduledDuration = hasScheduledShift
+      && durationHours != null
+      && scheduledDurationHours != null
+      && durationHours > scheduledDurationHours;
     const durationRequiresOverride = durationHours != null && durationHours > 13;
-    const requiresOverride = Boolean(shift.requires_override) || requiresTimingApproval || durationRequiresOverride;
+    const requiresOverride = Boolean(shift.requires_override) || durationRequiresOverride || overScheduledDuration;
 
     const updatePayload: Record<string, string | boolean | null> = {
       ended_at: endRounded.toISOString(),
       requires_override: requiresOverride,
     };
 
-    if (requiresTimingApproval) {
-      updatePayload.override_note = hasScheduledShift
-        ? "Clock-out outside scheduled window"
-        : "Unscheduled clock-out";
+    if (overScheduledDuration) {
+      updatePayload.override_note = "Clock-out exceeded scheduled hours";
     }
 
     if (body.manualClose) {

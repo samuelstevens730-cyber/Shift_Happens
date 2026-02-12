@@ -257,9 +257,17 @@ export async function GET(req: Request) {
       if (!sameDayShifts.length) return true;
 
       const hasCompatibleShift = sameDayShifts.some(shift => {
+        const shiftEndIso = shift.ended_at ?? shift.planned_start_at;
+        const shiftDurationHours = Math.max(
+          0,
+          (new Date(shiftEndIso).getTime() - new Date(shift.planned_start_at).getTime()) / (1000 * 60 * 60)
+        );
+        const isLongCoverageShift = shiftDurationHours >= 10;
+
         if (shift.shift_type === r.shift_type) return true;
         if (shift.shift_type === "double" && (r.shift_type === "open" || r.shift_type === "close" || r.shift_type === "double")) return true;
         if (r.shift_type === "double" && (shift.shift_type === "open" || shift.shift_type === "close")) return true;
+        if (isLongCoverageShift && (r.shift_type === "open" || r.shift_type === "close" || r.shift_type === "double")) return true;
         return false;
       });
       return !hasCompatibleShift;
