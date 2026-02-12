@@ -61,6 +61,11 @@ function renderGridTable(rows: GridRow[], dates: string[]) {
               <Text style={{ color: cell.profileId ? cell.colorText : "#6B7280", fontSize: 7 }}>
                 {cell.firstName}
               </Text>
+              {cell.profileId && cell.timeLabel && (
+                <Text style={{ color: cell.profileId ? cell.colorText : "#6B7280", fontSize: 6 }}>
+                  {cell.timeLabel}
+                </Text>
+              )}
             </View>
           ))}
         </View>

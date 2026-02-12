@@ -35,17 +35,19 @@ export default function IndividualSchedulePDF(props: Props) {
 
           <View style={[pdfStyles.table, { marginTop: 8 }]}>
             <View style={pdfStyles.tableRow}>
-              <View style={[pdfStyles.th, { width: 150 }]}><Text>DATE</Text></View>
-              <View style={[pdfStyles.th, { width: 110 }]}><Text>TIME IN</Text></View>
-              <View style={[pdfStyles.th, { width: 110 }]}><Text>TIME OUT</Text></View>
-              <View style={[pdfStyles.th, { width: 80, borderRightWidth: 0 }]}><Text>TOTAL HOURS</Text></View>
+              <View style={[pdfStyles.th, { width: 120 }]}><Text>DATE</Text></View>
+              <View style={[pdfStyles.th, { width: 120 }]}><Text>STORE</Text></View>
+              <View style={[pdfStyles.th, { width: 90 }]}><Text>TIME IN</Text></View>
+              <View style={[pdfStyles.th, { width: 90 }]}><Text>TIME OUT</Text></View>
+              <View style={[pdfStyles.th, { width: 90, borderRightWidth: 0 }]}><Text>TOTAL HOURS</Text></View>
             </View>
             {section.rows.map(row => (
               <View key={`${section.profileId}-${row.date}`} style={pdfStyles.tableRow}>
-                <View style={[pdfStyles.td, { width: 150 }]}><Text>{row.label}</Text></View>
-                <View style={[pdfStyles.td, { width: 110 }]}><Text>{row.timeIn}</Text></View>
-                <View style={[pdfStyles.td, { width: 110 }]}><Text>{row.timeOut}</Text></View>
-                <View style={[pdfStyles.td, { width: 80, borderRightWidth: 0 }]}><Text>{row.totalHours.toFixed(2)}</Text></View>
+                <View style={[pdfStyles.td, { width: 120 }]}><Text>{row.label}</Text></View>
+                <View style={[pdfStyles.td, { width: 120 }]}><Text>{row.store}</Text></View>
+                <View style={[pdfStyles.td, { width: 90 }]}><Text>{row.timeIn}</Text></View>
+                <View style={[pdfStyles.td, { width: 90 }]}><Text>{row.timeOut}</Text></View>
+                <View style={[pdfStyles.td, { width: 90, borderRightWidth: 0 }]}><Text>{row.totalHours.toFixed(2)}</Text></View>
               </View>
             ))}
           </View>
@@ -59,4 +61,3 @@ export default function IndividualSchedulePDF(props: Props) {
     </Document>
   );
 }
-

@@ -22,6 +22,7 @@ export type GridCell = {
   firstName: string;
   start?: string;
   end?: string;
+  timeLabel?: string;
   hours: number;
   colorBackground?: string;
   colorText?: string;
@@ -38,6 +39,7 @@ export type GridRow = {
 export type EmployeeDayRow = {
   date: string;
   label: string;
+  store: string;
   timeIn: string;
   timeOut: string;
   totalHours: number;
@@ -73,6 +75,17 @@ function formatTimeLabel(value?: string) {
   const hour12 = ((hour + 11) % 12) + 1;
   const suffix = hour >= 12 ? "PM" : "AM";
   return `${hour12}:${minute} ${suffix}`;
+}
+
+function formatCompactTime(value?: string) {
+  if (!value) return "";
+  const [rawHour, rawMinute] = value.split(":");
+  const hour = Number(rawHour);
+  if (Number.isNaN(hour)) return value;
+  const minute = (rawMinute ?? "00").slice(0, 2);
+  const hour12 = ((hour + 11) % 12) + 1;
+  const suffix = hour >= 12 ? "p" : "a";
+  return minute === "00" ? `${hour12}${suffix}` : `${hour12}:${minute}${suffix}`;
 }
 
 function sortTimesAsc(values: string[]) {
@@ -120,6 +133,29 @@ function getShiftTiming(
   return { start: template?.start_time, end: template?.end_time };
 }
 
+function getCombinedTimingForDouble(args: {
+  storeId: string;
+  dateStr: string;
+  profileId: string;
+  assignments: Record<string, Assignment>;
+  templates: TemplateRow[];
+}) {
+  const keys: Array<ShiftTypeKey> = ["open", "close"];
+  const timings: Array<{ start?: string; end?: string }> = [];
+  for (const shiftKey of keys) {
+    const key = assignmentKey(args.storeId, args.dateStr, shiftKey);
+    const assignment = args.assignments[key];
+    if (!assignment?.profileId || assignment.profileId !== args.profileId) continue;
+    const template = findTemplate(args.templates, args.storeId, args.dateStr, shiftKey);
+    const timing = getShiftTiming(assignment, template);
+    if (timing.start && timing.end) timings.push(timing);
+  }
+  if (!timings.length) return { start: undefined, end: undefined };
+  const starts = timings.map(t => t.start as string).sort((a, b) => toMinutes(a) - toMinutes(b));
+  const latestEnd = latestEndFromAssignments(timings.map(t => ({ ...t, hours: 0 })));
+  return { start: starts[0], end: latestEnd };
+}
+
 function firstName(name: string) {
   const base = (name || "").trim();
   if (!base) return "UNASSIGNED";
@@ -163,8 +199,20 @@ export function buildGridRows(args: {
         const profile = profileId ? profilesById[profileId] : null;
         const template = findTemplate(templates, store.id, dateStr, shift.key);
         const timing = getShiftTiming(assignment, template);
+        const combinedTiming = profileId && assignment?.shiftMode === "double"
+          ? getCombinedTimingForDouble({
+              storeId: store.id,
+              dateStr,
+              profileId,
+              assignments,
+              templates,
+            })
+          : timing;
         const hours = timing.start && timing.end ? calcHours(timing.start, timing.end) : 0;
         const colors = classToPdfColors(profileId ? colorClassByProfileId[profileId] : undefined);
+        const timeLabel = combinedTiming.start && combinedTiming.end
+          ? `${formatCompactTime(combinedTiming.start)}-${formatCompactTime(combinedTiming.end)}`
+          : "";
 
         return {
           key,
@@ -173,6 +221,7 @@ export function buildGridRows(args: {
           firstName: profile?.firstName ?? "UNASSIGNED",
           start: timing.start,
           end: timing.end,
+          timeLabel,
           hours,
           colorBackground: profileId ? colors.background : undefined,
           colorText: profileId ? colors.text : undefined,
@@ -230,7 +279,7 @@ export function buildEmployeeSections(args: {
 
   return profiles.map(profile => {
     const rows: EmployeeDayRow[] = dates.map(dateStr => {
-      const dayAssignments: Array<{ start?: string; end?: string; hours: number }> = [];
+      const dayAssignments: Array<{ start?: string; end?: string; hours: number; storeName: string }> = [];
 
       stores.forEach(store => {
         SHIFT_ROWS.forEach(shift => {
@@ -240,7 +289,7 @@ export function buildEmployeeSections(args: {
           const template = findTemplate(templates, store.id, dateStr, shift.key);
           const timing = getShiftTiming(assignment, template);
           const hours = timing.start && timing.end ? calcHours(timing.start, timing.end) : 0;
-          dayAssignments.push({ start: timing.start, end: timing.end, hours });
+          dayAssignments.push({ start: timing.start, end: timing.end, hours, storeName: store.name });
         });
       });
 
@@ -248,10 +297,12 @@ export function buildEmployeeSections(args: {
       const totalHours = dayAssignments.reduce((sum, entry) => sum + entry.hours, 0);
       const earliestStart = starts.length ? sortTimesAsc(starts)[0] : undefined;
       const latestEnd = latestEndFromAssignments(dayAssignments);
+      const storesForDay = Array.from(new Set(dayAssignments.map(x => x.storeName)));
 
       return {
         date: dateStr,
         label: format(parseISO(dateStr), "EEE, MMM d"),
+        store: storesForDay.length ? storesForDay.join(", ") : "-",
         timeIn: earliestStart ? formatTimeLabel(earliestStart) : "-",
         timeOut: latestEnd ? formatTimeLabel(latestEnd) : "-",
         totalHours,
