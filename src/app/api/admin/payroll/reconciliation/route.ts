@@ -243,20 +243,29 @@ export async function GET(req: Request) {
       shiftsWorkedThrough.map(r => r.schedule_shift_id).filter((v): v is string => Boolean(v))
     );
     const shiftsByCoverageKey = new Map<string, ShiftRow[]>();
+    const shiftsByStoreDayKey = new Map<string, ShiftRow[]>();
     for (const shift of shiftsWorkedThrough) {
-      const key = `${shift.profile_id}|${shift.store_id}|${getCstDateKey(shift.planned_start_at)}`;
+      const shiftDateKey = getCstDateKey(shift.planned_start_at);
+      const key = `${shift.profile_id}|${shift.store_id}|${shiftDateKey}`;
       const list = shiftsByCoverageKey.get(key) ?? [];
       list.push(shift);
       shiftsByCoverageKey.set(key, list);
+
+      const storeDayKey = `${shift.store_id}|${shiftDateKey}`;
+      const storeDayList = shiftsByStoreDayKey.get(storeDayKey) ?? [];
+      storeDayList.push(shift);
+      shiftsByStoreDayKey.set(storeDayKey, storeDayList);
     }
     const missingCoverageRows = scheduledWorkedThrough.filter(r => {
       if (matchedScheduleIds.has(r.id)) return false;
       if (!r.profile_id) return false;
       const key = `${r.profile_id}|${r.store_id}|${r.shift_date}`;
-      const sameDayShifts = shiftsByCoverageKey.get(key) ?? [];
-      if (!sameDayShifts.length) return true;
+      const sameEmployeeShifts = shiftsByCoverageKey.get(key) ?? [];
+      const storeDayKey = `${r.store_id}|${r.shift_date}`;
+      const anyEmployeeShifts = shiftsByStoreDayKey.get(storeDayKey) ?? [];
+      if (!sameEmployeeShifts.length && !anyEmployeeShifts.length) return true;
 
-      const hasCompatibleShift = sameDayShifts.some(shift => {
+      const isCompatible = (shift: ShiftRow) => {
         const shiftEndIso = shift.ended_at ?? shift.planned_start_at;
         const shiftDurationHours = Math.max(
           0,
@@ -269,8 +278,11 @@ export async function GET(req: Request) {
         if (r.shift_type === "double" && (shift.shift_type === "open" || shift.shift_type === "close")) return true;
         if (isLongCoverageShift && (r.shift_type === "open" || r.shift_type === "close" || r.shift_type === "double")) return true;
         return false;
-      });
-      return !hasCompatibleShift;
+      };
+
+      const hasCompatibleEmployeeShift = sameEmployeeShifts.some(isCompatible);
+      const hasCompatibleStoreCoverage = anyEmployeeShifts.some(isCompatible);
+      return !(hasCompatibleEmployeeShift || hasCompatibleStoreCoverage);
     });
 
     const unapprovedShifts = shiftsWorkedThrough.filter(r =>
