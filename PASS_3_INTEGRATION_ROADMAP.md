@@ -2,7 +2,7 @@
 
 > **Generated:** 2026-02-10 | **Role:** Technical Program Manager / Staff Engineer
 > **Inputs:** AUDIT_PHASE_1_FINDINGS.md (16 findings), AUDIT_PHASE_2_FRONTEND.md (22 findings), REFACTOR_PLAN_CLOCK_CLIENT.md (10 steps)
-> **Estimated Total Effort:** 28-36 hours across 6 phases, 21 steps
+> **Estimated Total Effort:** 28-36 hours across 6 phases, 25 steps
 
 ---
 
@@ -994,7 +994,7 @@ VERIFICATION:
    - Props: `{ open, profileName, shiftInfo, onClose, onReturnToShift, onEndAndStart: (data: StaleShiftCloseData) => Promise<void>, saving, error }`
    - The `onEndAndStart` callback receives structured data, parent handles the API call
    - Uses `StaleShiftConfirmations` component (from Step 3.1)
-   - Uses `DrawerCountFields`-like inline fields (or simple inline inputs until Step 9)
+   - Uses inline drawer inputs initially (replaced with `DrawerCountFields` component after Step 5.1)
 2. `ClockPageClient.tsx`:
    - Delete 9 `useState` variables for stale shift
    - Delete ~190 lines of modal JSX
@@ -1414,17 +1414,17 @@ VERIFICATION:
 
 ---
 
-### Step 5.1 — Extract useShiftActions Hook (Refactor Step 9)
+### Step 5.1 — Extract useShiftActions Hook + ShiftForm + DrawerCountFields (Refactor Steps 9)
 
 | Field | Value |
 |-------|-------|
 | **Priority** | HIGH |
-| **Findings** | Refactor Step 9 |
+| **Findings** | Refactor Step 9 (DrawerCountFields + ShiftForm extraction, plus API hook) |
 | **Dependencies** | Step 1.2 (calls the atomic shift RPC via start-shift API), Steps 3.1-3.5 (components exist) |
-| **Files** | CREATE `src/app/clock/hooks/useShiftActions.ts`, MODIFY `ClockPageClient.tsx` |
-| **References** | `ClockPageClient.tsx:600-733` (startShift function), `ClockPageClient.tsx:1105-1186` (stale shift end+start) |
+| **Files** | CREATE `src/app/clock/hooks/useShiftActions.ts`, CREATE `src/app/clock/components/ShiftForm.tsx`, CREATE `src/app/clock/components/DrawerCountFields.tsx`, MODIFY `ClockPageClient.tsx` |
+| **References** | `ClockPageClient.tsx:600-733` (startShift function), `ClockPageClient.tsx:1105-1186` (stale shift end+start), `ClockPageClient.tsx:830-958` (shift form + drawer fields JSX) |
 
-**Context:** The `startShift()` function (L600-733) and stale shift close handler are currently defined inside ClockPageClient's body. They contain API call logic, error code handling (`UNSCHEDULED`, `CLOCK_WINDOW_VIOLATION`, 409), and response parsing.
+**Context:** The `startShift()` function (L600-733) and stale shift close handler are currently defined inside ClockPageClient's body. They contain API call logic, error code handling (`UNSCHEDULED`, `CLOCK_WINDOW_VIOLATION`, 409), and response parsing. Additionally, the shift form rendering (store selector, time picker, drawer inputs) and drawer count input fields are inline JSX blocks that should be their own components per REFACTOR_PLAN Step 9.
 
 **Deliverables:**
 1. `useShiftActions.ts`:
@@ -1432,8 +1432,17 @@ VERIFICATION:
    - `endShift(data: EndShiftPayload): Promise<EndShiftResult>` — typed result
    - Centralizes error code handling (UNSCHEDULED, CLOCK_WINDOW_VIOLATION, 409)
    - Returns discriminated union results: `{ ok: true, shiftId, ... } | { ok: false, code: string, ... }`
-2. Modified `ClockPageClient.tsx`:
+2. `DrawerCountFields.tsx`:
+   - Props: `{ drawerLabel, amount, onAmountChange, changeAmount?, onChangeAmountChange?, thresholdWarning?, disabled }`
+   - Reusable for both start-shift and stale-shift-close drawer inputs
+   - Includes dollar-to-cents conversion logic and threshold display
+3. `ShiftForm.tsx`:
+   - Props: `{ storeId, profileId, profileName, storeName, shiftKind, plannedStartLocal, onPlannedStartChange, plannedStartRoundedLabel, requiresDrawer, onSubmit, submitting, disabled, error, children }` (children slot for DrawerCountFields)
+   - Contains the time picker, shift type display, and submit button
+   - Moves ~14 `useMemo` values for form state derivation into this component
+4. Modified `ClockPageClient.tsx`:
    - Replace inline `startShift()` function with `const { startShift, endShift } = useShiftActions(token)`
+   - Replace inline shift form JSX with `<ShiftForm>` + `<DrawerCountFields>`
    - Handle results via `if (result.ok)` instead of try/catch
 
 **Verification:**
@@ -1452,18 +1461,36 @@ npm run build
 PERSONA: Codex (TypeScript / React Hooks)
 PROJECT: Shift Happens — Workforce Management App
 
-TASK: Extract useShiftActions hook from ClockPageClient.tsx
+TASK: Extract useShiftActions hook, DrawerCountFields, and ShiftForm from ClockPageClient.tsx
 
 CONTEXT:
-- Refactor Step 9: The startShift() function (lines 600-733) and stale shift end-and-restart logic are defined inside ClockPageClient. They handle API calls, error codes, and response parsing.
+- Refactor Step 9: Extract DrawerCountFields + ShiftForm components AND the startShift/endShift API logic.
+- The startShift() function (lines 600-733) and stale shift end-and-restart logic handle API calls, error codes, and response parsing.
+- The shift form JSX (approximately lines 830-958) and drawer count input fields are inline blocks that should be their own components.
 - Step 1.2 modified the start-shift API to use an atomic RPC — the API response shape should be the same but the backend is now safer.
 
 INSTRUCTIONS:
 1. Read `src/app/clock/ClockPageClient.tsx` lines 600-733 (startShift function) completely.
 2. Read lines 1105-1186 (stale shift close submit handler).
-3. Identify all error codes handled: UNSCHEDULED, CLOCK_WINDOW_VIOLATION, HTTP 409, generic errors.
+3. Read lines 830-958 (shift form JSX with drawer inputs).
+4. Read REFACTOR_PLAN_CLOCK_CLIENT.md for DrawerCountFieldsProps and ShiftFormProps interfaces.
+5. Identify all error codes handled: UNSCHEDULED, CLOCK_WINDOW_VIOLATION, HTTP 409, generic errors.
 
-4. Create `src/app/clock/hooks/useShiftActions.ts`:
+6. Create `src/app/clock/components/DrawerCountFields.tsx`:
+   - "use client"
+   - Props: { drawerLabel: string, amount: string, onAmountChange: (v: string) => void, changeAmount?: string, onChangeAmountChange?: (v: string) => void, thresholdWarning?: string | null, disabled?: boolean }
+   - Renders the dollar-amount input(s) for start drawer and change drawer
+   - Includes the threshold warning display (isOutOfThreshold from kioskRules)
+   - Reusable — used in both ShiftForm and StaleShiftCloseModal
+
+7. Create `src/app/clock/components/ShiftForm.tsx`:
+   - "use client"
+   - Props: { storeId, profileId, profileName, storeName, shiftKind, plannedStartLocal, onPlannedStartChange, plannedStartRoundedLabel, requiresDrawer, onSubmit, submitting, disabled, error, children }
+   - Contains the datetime-local input, shift type display, submit button
+   - Children slot receives <DrawerCountFields> from parent
+   - Moves relevant useMemo derivations for form display into this component
+
+8. Create `src/app/clock/hooks/useShiftActions.ts`:
    - Define types:
      * StartShiftPayload (matching the JSON body sent to /api/start-shift)
      * StartShiftResult = { ok: true; shiftId: string; shiftType: string; reused: boolean } | { ok: false; code: 'UNSCHEDULED' | 'CLOCK_WINDOW_VIOLATION' | 'CONFLICT' | 'ERROR'; error: string; shiftId?: string; storeName?: string; plannedLabel?: string; windowLabel?: string }
@@ -1474,9 +1501,10 @@ INSTRUCTIONS:
      * Parses response and returns typed result (no throwing)
      * Handles all status codes and error shapes
 
-5. Modify ClockPageClient.tsx:
-   - Import useShiftActions
+9. Modify ClockPageClient.tsx:
+   - Import useShiftActions, ShiftForm, DrawerCountFields
    - Replace inline startShift function with hook call
+   - Replace inline shift form JSX with <ShiftForm><DrawerCountFields .../></ShiftForm>
    - Replace try/catch error handling with result pattern matching
    - Wire the stale shift close flow to use endShift + startShift in sequence
 
@@ -1484,6 +1512,7 @@ CONSTRAINTS:
 - The fetch URLs (/api/start-shift, /api/end-shift) and request shapes must remain identical
 - All existing error handling UI (modals, banners) must still trigger correctly
 - The token comes from either pinToken or managerAccessToken — pass the correct one
+- DrawerCountFields must be reusable across ShiftForm and StaleShiftCloseModal
 
 VERIFICATION:
 - npx tsc --noEmit
@@ -1965,7 +1994,7 @@ VERIFICATION:
 
 ## Success Criteria
 
-All 21 steps are complete when:
+All 25 steps are complete when:
 
 1. [ ] **`npx tsc --noEmit` passes** after every step
 2. [ ] **`npm run build` passes** after every step
@@ -2018,7 +2047,7 @@ All 21 steps are complete when:
    - Step 6 → Step 3.3
    - Step 7 → Step 3.4
    - Step 8 → Step 3.5
-   - Step 9 → Step 5.1
+   - Step 9 → Step 5.1 (DrawerCountFields + ShiftForm + useShiftActions)
    - Step 10 → Step 5.2
 6. [ ] **SQL migrations numbered 42-49** (no gaps, no conflicts)
 7. [ ] **ClockPageClient.tsx reduced from 1,518 lines to ~250 lines**

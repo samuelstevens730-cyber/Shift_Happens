@@ -56,6 +56,22 @@ type ShiftRow = {
   profile: { id: string; name: string | null } | null;
 };
 
+type SummaryShiftRow = {
+  profile_id: string;
+  planned_start_at: string;
+  ended_at: string;
+  store: { name: string } | null;
+  profile: { name: string | null } | null;
+};
+
+type EmployeeSummary = {
+  user_id: string;
+  full_name: string | null;
+  lv1_hours: number;
+  lv2_hours: number;
+  total_hours: number;
+};
+
 function calcMinutes(start: string, end: string) {
   const s = new Date(start);
   const e = new Date(end);
@@ -69,6 +85,13 @@ function roundMinutes(mins: number) {
   if (rem < 20) return hours;
   if (rem > 40) return hours + 1;
   return hours + 0.5;
+}
+
+function detectStoreBucket(storeName: string | null) {
+  const name = (storeName || "").toLowerCase();
+  if (/\blv\s*1\b/.test(name)) return "lv1";
+  if (/\blv\s*2\b/.test(name)) return "lv2";
+  return null;
 }
 
 export async function GET(req: Request) {
@@ -98,35 +121,46 @@ export async function GET(req: Request) {
     const isDateOnly = (value: string | null) =>
       Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
 
-    let query = supabaseServer
-      .from("shifts")
-      .select("id, store_id, profile_id, planned_start_at, started_at, ended_at, store:store_id(id,name), profile:profile_id(id,name)", { count: "exact" })
-      .in("store_id", managerStoreIds)
-      .not("ended_at", "is", null)
-      .neq("last_action", "removed");
-
-    if (from) {
-      query = query.gte("planned_start_at", isDateOnly(from) ? `${from}T00:00:00.000Z` : from);
-    }
-    if (to) {
-      if (isDateOnly(to)) {
-        const d = new Date(`${to}T00:00:00.000Z`);
-        d.setUTCDate(d.getUTCDate() + 1);
-        query = query.lt("ended_at", d.toISOString());
-      } else {
-        query = query.lte("ended_at", to);
+    const applyFilters = (query: any) => {
+      let next = query;
+      if (from) {
+        next = next.gte("planned_start_at", isDateOnly(from) ? `${from}T00:00:00.000Z` : from);
       }
-    }
-    if (storeId) query = query.eq("store_id", storeId);
-    if (profileId) query = query.eq("profile_id", profileId);
+      if (to) {
+        if (isDateOnly(to)) {
+          const d = new Date(`${to}T00:00:00.000Z`);
+          d.setUTCDate(d.getUTCDate() + 1);
+          next = next.lt("ended_at", d.toISOString());
+        } else {
+          next = next.lte("ended_at", to);
+        }
+      }
+      if (storeId) next = next.eq("store_id", storeId);
+      if (profileId) next = next.eq("profile_id", profileId);
+      return next;
+    };
+
+    const buildShiftQuery = (selectClause: string, withCount = false) =>
+      applyFilters(
+        supabaseServer
+          .from("shifts")
+          .select(selectClause, withCount ? { count: "exact" } : undefined)
+          .in("store_id", managerStoreIds)
+          .not("ended_at", "is", null)
+          .neq("last_action", "removed")
+      );
+
+    const query = buildShiftQuery(
+      "id, store_id, profile_id, planned_start_at, started_at, ended_at, store:store_id(id,name), profile:profile_id(id,name)",
+      true
+    );
 
     const { data, error, count } = await query
       .order("planned_start_at", { ascending: false })
-      .range(offset, offset + pageSize - 1)
-      .returns<ShiftRow[]>();
+      .range(offset, offset + pageSize - 1);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-    const rows = (data ?? []).map(r => {
+    const rows = ((data ?? []) as ShiftRow[]).map(r => {
       const mins = calcMinutes(r.planned_start_at, r.ended_at);
       return {
         id: r.id,
@@ -141,7 +175,62 @@ export async function GET(req: Request) {
       };
     });
 
-    return NextResponse.json({ rows, page, pageSize, total: count ?? 0 });
+    const byEmployee = new Map<string, EmployeeSummary>();
+    let totalLv1Hours = 0;
+    let totalLv2Hours = 0;
+
+    const summaryChunkSize = 500;
+    const summaryTotal = count ?? 0;
+    for (let start = 0; start < summaryTotal; start += summaryChunkSize) {
+      const { data: summaryRows, error: summaryErr } = await buildShiftQuery(
+        "profile_id, planned_start_at, ended_at, store:store_id(name), profile:profile_id(name)"
+      )
+        .order("id", { ascending: true })
+        .range(start, start + summaryChunkSize - 1);
+      if (summaryErr) {
+        return NextResponse.json({ error: summaryErr.message }, { status: 500 });
+      }
+
+      for (const row of (summaryRows ?? []) as SummaryShiftRow[]) {
+        const hours = roundMinutes(calcMinutes(row.planned_start_at, row.ended_at));
+        const bucket = detectStoreBucket(row.store?.name ?? null);
+        const key = row.profile_id;
+        const entry = byEmployee.get(key) ?? {
+          user_id: key,
+          full_name: row.profile?.name ?? null,
+          lv1_hours: 0,
+          lv2_hours: 0,
+          total_hours: 0,
+        };
+
+        if (bucket === "lv1") {
+          entry.lv1_hours += hours;
+          totalLv1Hours += hours;
+        } else if (bucket === "lv2") {
+          entry.lv2_hours += hours;
+          totalLv2Hours += hours;
+        }
+        entry.total_hours += hours;
+        byEmployee.set(key, entry);
+      }
+    }
+
+    return NextResponse.json({
+      rows,
+      page,
+      pageSize,
+      total: summaryTotal,
+      summary: {
+        byEmployee: Array.from(byEmployee.values()).sort((a, b) =>
+          (a.full_name || "Unknown").localeCompare(b.full_name || "Unknown")
+        ),
+        totals: {
+          lv1_hours: totalLv1Hours,
+          lv2_hours: totalLv2Hours,
+          total_hours: totalLv1Hours + totalLv2Hours,
+        },
+      },
+    });
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Failed to load payroll." }, { status: 500 });
   }

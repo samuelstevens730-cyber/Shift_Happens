@@ -41,7 +41,26 @@ interface ShiftRow {
 }
 
 type PayrollResponse =
-  | { rows: ShiftRow[]; page: number; pageSize: number; total: number }
+  | {
+      rows: ShiftRow[];
+      page: number;
+      pageSize: number;
+      total: number;
+      summary?: {
+        byEmployee: {
+          user_id: string;
+          full_name: string | null;
+          lv1_hours: number;
+          lv2_hours: number;
+          total_hours: number;
+        }[];
+        totals: {
+          lv1_hours: number;
+          lv2_hours: number;
+          total_hours: number;
+        };
+      };
+    }
   | { error: string };
 
 function formatWhen(value: string | null) {
@@ -84,6 +103,20 @@ export default function PayrollAdminPage() {
   const [err, setErr]                 = useState<string | null>(null);
   const [page, setPage]               = useState(1);
   const [total, setTotal]             = useState(0);
+  const [summary, setSummary]         = useState<{
+    byEmployee: {
+      user_id: string;
+      full_name: string | null;
+      lv1_hours: number;
+      lv2_hours: number;
+      total_hours: number;
+    }[];
+    totals: {
+      lv1_hours: number;
+      lv2_hours: number;
+      total_hours: number;
+    };
+  } | null>(null);
   const pageSize = 25;
 
   // dropdowns
@@ -135,10 +168,12 @@ export default function PayrollAdminPage() {
       setRows(json.rows);
       setPage(json.page);
       setTotal(json.total);
+      setSummary(json.summary ?? null);
     } catch (e: unknown) {
       console.error("Payroll run error:", e);
       setErr(e instanceof Error ? e.message : "Failed to run report");
       setRows([]);
+      setSummary(null);
     } finally {
       setLoading(false);
     }
@@ -213,6 +248,40 @@ export default function PayrollAdminPage() {
         </div>
 
         {err && <div className="banner banner-error text-sm">{err}</div>}
+
+        {summary && summary.byEmployee.length > 0 && (
+          <div className="card">
+            <div className="px-3 py-2 font-medium border-b border-white/10">Hours Summary</div>
+            <table className="w-full text-sm">
+              <thead className="bg-black/40">
+                <tr>
+                  <th className="text-left px-3 py-2">Name</th>
+                  <th className="text-right px-3 py-2">LV1 Hours</th>
+                  <th className="text-right px-3 py-2">LV2 Hours</th>
+                  <th className="text-right px-3 py-2">Total Hours</th>
+                </tr>
+              </thead>
+              <tbody>
+                {summary.byEmployee.map(row => (
+                  <tr key={row.user_id} className="border-t border-white/10">
+                    <td className="px-3 py-2">{row.full_name || "Unknown"}</td>
+                    <td className="px-3 py-2 text-right">{row.lv1_hours}</td>
+                    <td className="px-3 py-2 text-right">{row.lv2_hours}</td>
+                    <td className="px-3 py-2 text-right font-medium">{row.total_hours}</td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-black/40">
+                <tr className="font-semibold">
+                  <td className="px-3 py-2">Totals</td>
+                  <td className="px-3 py-2 text-right">{summary.totals.lv1_hours}</td>
+                  <td className="px-3 py-2 text-right">{summary.totals.lv2_hours}</td>
+                  <td className="px-3 py-2 text-right">{summary.totals.total_hours}</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
 
         <div className="card">
           <div className="px-3 py-2 font-medium border-b border-white/10">Shifts</div>
