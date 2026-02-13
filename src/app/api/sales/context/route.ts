@@ -114,6 +114,7 @@ export async function GET(req: Request) {
       pendingRollover,
       pendingRolloverDate: pendingRollover ? previousDateOnly(businessDate) : null,
       closerEntryExists: Boolean(prev?.closer_rollover_cents != null),
+      currentCloserEntryExists: Boolean(dailyRecordRes.data?.closer_rollover_cents != null),
       closeEntryExists: Boolean(
         dailyRecordRes.data?.close_sales_cents != null &&
         dailyRecordRes.data?.z_report_cents != null

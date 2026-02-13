@@ -104,6 +104,7 @@ type SalesContextState = {
   pendingRollover: boolean;
   pendingRolloverDate: string | null;
   closerEntryExists: boolean;
+  currentCloserEntryExists: boolean;
   closeEntryExists: boolean;
 };
 
@@ -420,6 +421,7 @@ export default function ShiftPage() {
         pendingRollover: Boolean(json?.pendingRollover),
         pendingRolloverDate: typeof json?.pendingRolloverDate === "string" ? json.pendingRolloverDate : null,
         closerEntryExists: Boolean(json?.closerEntryExists),
+        currentCloserEntryExists: Boolean(json?.currentCloserEntryExists),
         closeEntryExists: Boolean(json?.closeEntryExists),
       });
     } catch (e: unknown) {
@@ -760,6 +762,19 @@ export default function ShiftPage() {
             {salesContextErr}
           </div>
         )}
+        {(shiftType === "close" || shiftType === "double") && salesContext?.isRolloverNight && (
+          <div className="card card-pad rounded-2xl border-cyan-400/40 bg-[#0b1220] text-slate-100 shadow-[0_0_0_1px_rgba(6,182,212,0.08)]">
+            <div className="text-sm font-medium mb-2">Rollover Status</div>
+            <div className="flex flex-wrap gap-2 text-xs">
+              <span className={`px-2 py-1 rounded-full border ${salesContext.closeEntryExists ? "border-emerald-400/50 text-emerald-300" : "border-amber-400/50 text-amber-300"}`}>
+                10pm sales: {salesContext.closeEntryExists ? "saved" : "pending"}
+              </span>
+              <span className={`px-2 py-1 rounded-full border ${salesContext.currentCloserEntryExists ? "border-emerald-400/50 text-emerald-300" : "border-amber-400/50 text-amber-300"}`}>
+                Midnight report: {salesContext.currentCloserEntryExists ? "saved" : "pending"}
+              </span>
+            </div>
+          </div>
+        )}
         {state.shift.shift_type === "open" && salesContext?.pendingRollover && salesContext.pendingRolloverDate && (
           <RolloverEntryCard
             storeId={state.store.id}
@@ -848,15 +863,15 @@ export default function ShiftPage() {
           salesContext?.salesTrackingEnabled &&
           salesContext.isRolloverNight &&
           !salesContext.closeEntryExists && (
-            <div className="card card-pad rounded-2xl border-amber-300/60 bg-amber-50 text-black space-y-3">
+            <div className="card card-pad rounded-2xl border-cyan-400/40 bg-[#0b1220] text-slate-100 shadow-[0_0_0_1px_rgba(6,182,212,0.08)] space-y-3">
               <div className="text-sm font-semibold">10:00 PM Sales Checkpoint</div>
-              <div className="text-xs text-amber-800">
+              <div className="text-xs text-slate-300">
                 Enter Z report and prior X at 10pm. Midnight rollover is entered at clock out.
               </div>
               <div className="space-y-2">
                 <label className="text-sm">Prior X Report ($)</label>
                 <input
-                  className="w-full border rounded p-2"
+                  className="w-full border border-cyan-400/30 bg-slate-900/50 text-slate-100 rounded p-2"
                   inputMode="decimal"
                   value={closeCheckpointPriorX}
                   onChange={e => setCloseCheckpointPriorX(e.target.value)}
@@ -864,7 +879,7 @@ export default function ShiftPage() {
                 />
                 <label className="text-sm">Z Report Total ($)</label>
                 <input
-                  className="w-full border rounded p-2"
+                  className="w-full border border-cyan-400/30 bg-slate-900/50 text-slate-100 rounded p-2"
                   inputMode="decimal"
                   value={closeCheckpointZ}
                   onChange={e => setCloseCheckpointZ(e.target.value)}
@@ -876,8 +891,8 @@ export default function ShiftPage() {
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
-                    checked={closeCheckpointConfirm}
-                    onChange={e => setCloseCheckpointConfirm(e.target.checked)}
+                  checked={closeCheckpointConfirm}
+                  onChange={e => setCloseCheckpointConfirm(e.target.checked)}
                   />
                   I confirm these sales numbers are correct
                   {closeCheckpointVarianceCents != null ? ` (variance $${(closeCheckpointVarianceCents / 100).toFixed(2)})` : ""}
@@ -885,14 +900,14 @@ export default function ShiftPage() {
               )}
 
               {closeCheckpointErr && (
-                <div className="text-sm border border-amber-300 rounded p-2 text-amber-800 bg-white">
+                <div className="text-sm border border-red-300/50 rounded p-2 text-red-300 bg-red-900/20">
                   {closeCheckpointErr}
                 </div>
               )}
 
               <div className="flex justify-end">
                 <button
-                  className="px-3 py-1.5 rounded bg-black text-white disabled:opacity-50"
+                  className="px-3 py-1.5 rounded bg-emerald-500 text-black font-medium disabled:opacity-50"
                   disabled={closeCheckpointSaving || (closeCheckpointNeedsConfirm && !closeCheckpointConfirm)}
                   onClick={() => {
                     void submitCloseCheckpoint();
@@ -1439,7 +1454,7 @@ function ClockOutModal({
         <div className="w-full max-w-md bg-white text-black rounded-2xl p-4 space-y-3">
           <h2 className="text-lg font-semibold">Midnight X Report</h2>
           <div className="text-sm">
-            Enter the midnight X report total before you leave. This will be compared to the opener's entry.
+            Enter the midnight X report total before you leave. This is compared against the opener's blind entry tomorrow morning.
           </div>
           <label className="text-sm">Midnight X Report Total ($)</label>
           <input
@@ -1604,7 +1619,7 @@ function ClockOutModal({
               </>
             )}
 
-            {(shiftType === "close" || shiftType === "double") && (
+            {(shiftType === "close" || shiftType === "double") && !isRolloverNight && (
               <>
                 <label className="text-sm">Prior X Report ($)</label>
                 <input
@@ -1622,12 +1637,12 @@ function ClockOutModal({
                   onChange={e => setSalesZReport(e.target.value)}
                   placeholder="0.00"
                 />
-                {isRolloverNight && (
-                  <div className="text-xs border rounded p-2 text-blue-700 border-blue-300">
-                    Register stays open. You will enter the midnight count next.
-                  </div>
-                )}
               </>
+            )}
+            {(shiftType === "close" || shiftType === "double") && isRolloverNight && (
+              <div className="text-xs border rounded p-2 text-blue-700 border-blue-300">
+                10pm Z/Prior-X is entered from the shift page. At clock out, you will only enter the midnight X report next.
+              </div>
             )}
           </div>
         )}
