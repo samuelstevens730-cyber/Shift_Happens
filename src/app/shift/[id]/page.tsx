@@ -36,6 +36,7 @@ type ShiftState = {
   shift: {
     id: string;
     shift_type: ShiftType;
+    planned_start_at: string;
     started_at: string;
     ended_at: string | null;
   };
@@ -147,6 +148,29 @@ function formatDateTime(value: string) {
     minute: "2-digit",
     hour12: true,
   });
+}
+
+function getCstDateKey(value: string): string | null {
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(dt);
+  const y = parts.find(p => p.type === "year")?.value;
+  const m = parts.find(p => p.type === "month")?.value;
+  const d = parts.find(p => p.type === "day")?.value;
+  if (!y || !m || !d) return null;
+  return `${y}-${m}-${d}`;
+}
+
+function parseMoneyInputToCents(value: string): number | null {
+  if (value.trim() === "") return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(n * 100);
 }
 
 function SkeletonCard() {
@@ -845,9 +869,11 @@ export default function ShiftPage() {
           <ClockOutModal
             shiftId={shiftId}
             qrToken={qrToken}
+            storeId={state.store.id}
             expectedCents={state.store.expected_drawer_cents}
             storeName={state.store.name}
             shiftType={state.shift.shift_type}
+            plannedStartAt={state.shift.planned_start_at}
             isOther={shiftType === "other"}
             onClose={() => setShowClockOut(false)}
             onSuccess={() => {
@@ -1070,9 +1096,11 @@ function ChangeoverPanel({
 function ClockOutModal({
   shiftId,
   qrToken,
+  storeId,
   expectedCents,
   storeName,
   shiftType,
+  plannedStartAt,
   isOther,
   onClose,
   onSuccess,
@@ -1082,9 +1110,11 @@ function ClockOutModal({
 }: {
   shiftId: string;
   qrToken: string;
+  storeId: string;
   expectedCents: number;
   storeName: string;
   shiftType: ShiftType;
+  plannedStartAt: string;
   isOther: boolean;
   pinToken: string | null;
   managerAccessToken: string | null;
@@ -1105,6 +1135,15 @@ function ClockOutModal({
     open: false,
     label: "",
   });
+  const [salesTrackingEnabled, setSalesTrackingEnabled] = useState(false);
+  const [salesContextLoading, setSalesContextLoading] = useState(false);
+  const [salesXReport, setSalesXReport] = useState("");
+  const [salesZReport, setSalesZReport] = useState("");
+  const [salesPriorX, setSalesPriorX] = useState("");
+  const [salesNeedsConfirm, setSalesNeedsConfirm] = useState(false);
+  const [salesConfirmChecked, setSalesConfirmChecked] = useState(false);
+  const [salesVarianceCents, setSalesVarianceCents] = useState<number | null>(null);
+  const [isRolloverNight, setIsRolloverNight] = useState(false);
 
   const storeKey = toStoreKey(storeName);
 
@@ -1121,6 +1160,54 @@ function ClockOutModal({
   const outOfThreshold = hasValidDrawer ? shouldShowVarianceControls(cents, expectedCents) : false;
   const changeNot200 = hasValidChange ? changeCents !== 20000 : false;
 
+  const authToken = managerSession ? managerAccessToken : pinToken;
+  const businessDate = getCstDateKey(plannedStartAt);
+
+  useEffect(() => {
+    let alive = true;
+    const loadSalesContext = async () => {
+      if (!authToken || !businessDate || isOther) return;
+      setSalesContextLoading(true);
+      try {
+        const query = new URLSearchParams({
+          storeId,
+          businessDate,
+          shiftType,
+        });
+        const res = await fetch(`/api/sales/context?${query.toString()}`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.error || "Failed to load sales context.");
+        if (!alive) return;
+        setSalesTrackingEnabled(Boolean(json?.salesTrackingEnabled));
+        setIsRolloverNight(Boolean(json?.isRolloverNight));
+        const prior = json?.priorXReportCents;
+        if (typeof prior === "number" && Number.isFinite(prior)) {
+          setSalesPriorX((prior / 100).toFixed(2));
+        }
+      } catch (e: unknown) {
+        if (!alive) return;
+        setErr(e instanceof Error ? e.message : "Failed to load sales context.");
+      } finally {
+        if (alive) setSalesContextLoading(false);
+      }
+    };
+    void loadSalesContext();
+    return () => {
+      alive = false;
+    };
+  }, [authToken, businessDate, isOther, shiftType, storeId]);
+
+  const salesXReportCents = parseMoneyInputToCents(salesXReport);
+  const salesZReportCents = parseMoneyInputToCents(salesZReport);
+  const salesPriorXCents = parseMoneyInputToCents(salesPriorX);
+  const requiresSalesForOpen = salesTrackingEnabled && shiftType === "open";
+  const requiresSalesForClose = salesTrackingEnabled && (shiftType === "close" || shiftType === "double");
+  const salesInputsValid =
+    (!requiresSalesForOpen || salesXReportCents != null) &&
+    (!requiresSalesForClose || (salesZReportCents != null && salesPriorXCents != null));
+
   // Reset confirmations when drawer goes back in range
   useEffect(() => {
     if (!outOfThreshold && !changeNot200) {
@@ -1133,6 +1220,8 @@ function ClockOutModal({
     !saving &&
     doubleCheck &&
     (isOther ? true : hasValidDrawer && hasValidChange) &&
+    (!salesTrackingEnabled || salesInputsValid) &&
+    (!salesNeedsConfirm || salesConfirmChecked) &&
     (outOfThreshold ? confirm : true) &&
     (changeNot200 ? notify : true);
 
@@ -1197,6 +1286,69 @@ function ClockOutModal({
         <label className="text-sm">Note (optional)</label>
         <input className="w-full border rounded p-2" value={note} onChange={e => setNote(e.target.value)} />
 
+        {!isOther && salesTrackingEnabled && (
+          <div className="space-y-2 border rounded p-3">
+            <div className="text-sm font-medium">Sales Report</div>
+            {salesContextLoading && <div className="text-xs text-slate-500">Loading sales context...</div>}
+
+            {shiftType === "open" && (
+              <>
+                <label className="text-sm">X Report Total ($)</label>
+                <input
+                  className="w-full border rounded p-2"
+                  inputMode="decimal"
+                  value={salesXReport}
+                  onChange={e => setSalesXReport(e.target.value)}
+                  placeholder="0.00"
+                />
+              </>
+            )}
+
+            {(shiftType === "close" || shiftType === "double") && (
+              <>
+                <label className="text-sm">Prior X Report ($)</label>
+                <input
+                  className="w-full border rounded p-2"
+                  inputMode="decimal"
+                  value={salesPriorX}
+                  onChange={e => setSalesPriorX(e.target.value)}
+                  placeholder="0.00"
+                />
+                <label className="text-sm">Z Report Total ($)</label>
+                <input
+                  className="w-full border rounded p-2"
+                  inputMode="decimal"
+                  value={salesZReport}
+                  onChange={e => setSalesZReport(e.target.value)}
+                  placeholder="0.00"
+                />
+                {isRolloverNight && (
+                  <div className="text-xs border rounded p-2 text-blue-700 border-blue-300">
+                    Register stays open. You will enter the midnight count next.
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
+
+        {salesNeedsConfirm && (
+          <div className="space-y-2 border rounded p-3 border-amber-300 bg-amber-50">
+            <div className="text-sm text-amber-800">
+              Sales numbers do not balance.
+              {salesVarianceCents != null ? ` Variance: $${(salesVarianceCents / 100).toFixed(2)}.` : ""}
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={salesConfirmChecked}
+                onChange={e => setSalesConfirmChecked(e.target.checked)}
+              />
+              I confirm these sales numbers are correct (this will be flagged for review)
+            </label>
+          </div>
+        )}
+
         {/* Final confirmation to prevent accidental clock-outs */}
         <label className="flex items-center gap-2 text-sm">
           <input type="checkbox" checked={doubleCheck} onChange={e => setDoubleCheck(e.target.checked)} />
@@ -1240,7 +1392,6 @@ function ClockOutModal({
               }
 
               // Determine auth token
-              const authToken = managerSession ? managerAccessToken : pinToken;
               if (!authToken) {
                 setErr(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
                 return;
@@ -1260,6 +1411,10 @@ function ClockOutModal({
                     endAt: d.toISOString(),
                     endDrawerCents: isOther ? (hasValidDrawer ? cents : null) : cents,
                     changeDrawerCents: isOther ? (hasValidChange ? changeCents : null) : changeCents,
+                    salesXReportCents: requiresSalesForOpen ? salesXReportCents : null,
+                    salesZReportCents: requiresSalesForClose ? salesZReportCents : null,
+                    salesPriorXCents: requiresSalesForClose ? salesPriorXCents : null,
+                    salesConfirmed: salesNeedsConfirm ? salesConfirmChecked : false,
                     confirmed: outOfThreshold ? confirm : false,
                     notifiedManager: (outOfThreshold || changeNot200) ? notify : false,
                     note: note || null,
@@ -1268,12 +1423,21 @@ function ClockOutModal({
 
                 const json = await res.json();
                 if (!res.ok) {
+                  if (json?.requiresSalesConfirm) {
+                    setSalesNeedsConfirm(true);
+                    setSalesVarianceCents(typeof json?.salesVarianceCents === "number" ? json.salesVarianceCents : null);
+                    return;
+                  }
                   if (json?.code === "CLOCK_WINDOW_VIOLATION") {
                     triggerClockWindowModal(json?.windowLabel ?? "Outside allowed clock window");
                     return;
                   }
                   throw new Error(json?.error || "Failed to end shift.");
                 }
+
+                setSalesNeedsConfirm(false);
+                setSalesConfirmChecked(false);
+                setSalesVarianceCents(null);
 
                 onClose();
                 onSuccess();

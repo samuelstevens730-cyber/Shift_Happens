@@ -46,6 +46,10 @@ type Body = {
   endAt: string; // ISO
   endDrawerCents?: number | null; // optional for "other" if you want
   changeDrawerCents?: number | null; // change drawer count in cents
+  salesXReportCents?: number | null;
+  salesZReportCents?: number | null;
+  salesPriorXCents?: number | null;
+  salesConfirmed?: boolean;
   confirmed?: boolean;
   notifiedManager?: boolean;
   note?: string | null;
@@ -57,6 +61,12 @@ type ScheduleShiftRow = {
   shift_date: string;
   scheduled_start: string;
   scheduled_end: string;
+};
+
+type SalesDailyRecordRow = {
+  id: string;
+  out_of_balance: boolean | null;
+  balance_variance_cents: number | null;
 };
 
 function parseClockWindowError(message: string) {
@@ -73,6 +83,22 @@ function parseTimeToMinutes(timeValue: string): number | null {
   const minute = Number(parts[1]);
   if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
   return (hour * 60) + minute;
+}
+
+function getCstDateKey(value: string): string | null {
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(dt);
+  const y = parts.find(p => p.type === "year")?.value;
+  const m = parts.find(p => p.type === "month")?.value;
+  const d = parts.find(p => p.type === "day")?.value;
+  if (!y || !m || !d) return null;
+  return `${y}-${m}-${d}`;
 }
 
 function templatesForShiftType(st: ShiftType) {
@@ -118,7 +144,7 @@ export async function POST(req: Request) {
 
     const { data: shift, error: shiftErr } = await supabaseServer
       .from("shifts")
-      .select("id, store_id, profile_id, shift_type, ended_at, started_at, schedule_shift_id, shift_source, requires_override")
+      .select("id, store_id, profile_id, shift_type, planned_start_at, ended_at, started_at, schedule_shift_id, shift_source, requires_override")
       .eq("id", body.shiftId)
       .maybeSingle();
 
@@ -285,6 +311,138 @@ export async function POST(req: Request) {
       if (endCountErr) return NextResponse.json({ error: endCountErr.message }, { status: 500 });
     }
 
+    // 2.5) Optional sales tracking (hours-safe, no behavior change when disabled)
+    let salesWarning = false;
+    let salesVarianceCents: number | null = null;
+    const { data: storeSettings, error: storeSettingsErr } = await supabaseServer
+      .from("store_settings")
+      .select("sales_tracking_enabled")
+      .eq("store_id", shift.store_id)
+      .maybeSingle<{ sales_tracking_enabled: boolean | null }>();
+    if (storeSettingsErr) return NextResponse.json({ error: storeSettingsErr.message }, { status: 500 });
+    const salesTrackingEnabled = Boolean(storeSettings?.sales_tracking_enabled);
+
+    if (salesTrackingEnabled && shiftType !== "other") {
+      const businessDate = getCstDateKey(shift.planned_start_at);
+      if (!businessDate) {
+        return NextResponse.json({ error: "Invalid shift planned_start_at for sales tracking." }, { status: 400 });
+      }
+
+      const isOpenSales = shiftType === "open";
+      const isCloseSales = shiftType === "close" || shiftType === "double";
+
+      if (isOpenSales) {
+        if (!Number.isFinite(body.salesXReportCents ?? null) || (body.salesXReportCents ?? 0) < 0) {
+          return NextResponse.json({ error: "Missing or invalid X report total." }, { status: 400 });
+        }
+
+        const xReportCents = Math.round(body.salesXReportCents ?? 0);
+        const { data: dailyUpsert, error: dailyErr } = await supabaseServer
+          .from("daily_sales_records")
+          .upsert(
+            {
+              store_id: shift.store_id,
+              business_date: businessDate,
+              open_shift_id: shift.id,
+              open_x_report_cents: xReportCents,
+            },
+            { onConflict: "store_id,business_date" }
+          )
+          .select("id, out_of_balance, balance_variance_cents")
+          .maybeSingle<SalesDailyRecordRow>();
+        if (dailyErr) return NextResponse.json({ error: dailyErr.message }, { status: 500 });
+
+        const dailyRecordId = dailyUpsert?.id ?? null;
+        if (!dailyRecordId) {
+          return NextResponse.json({ error: "Failed to upsert daily sales record." }, { status: 500 });
+        }
+
+        const { error: shiftSalesErr } = await supabaseServer
+          .from("shift_sales_counts")
+          .upsert(
+            {
+              shift_id: shift.id,
+              daily_sales_record_id: dailyRecordId,
+              entry_type: "x_report",
+              amount_cents: xReportCents,
+              confirmed: Boolean(body.salesConfirmed),
+              note: body.note ?? null,
+            },
+            { onConflict: "shift_id,entry_type" }
+          );
+        if (shiftSalesErr) return NextResponse.json({ error: shiftSalesErr.message }, { status: 500 });
+
+        salesWarning = Boolean(dailyUpsert?.out_of_balance);
+        salesVarianceCents = dailyUpsert?.balance_variance_cents ?? null;
+      }
+
+      if (isCloseSales) {
+        const zReport = body.salesZReportCents;
+        const priorX = body.salesPriorXCents;
+        if (!Number.isFinite(zReport ?? null) || (zReport ?? 0) < 0) {
+          return NextResponse.json({ error: "Missing or invalid Z report total." }, { status: 400 });
+        }
+        if (!Number.isFinite(priorX ?? null) || (priorX ?? 0) < 0) {
+          return NextResponse.json({ error: "Missing or invalid prior X report total." }, { status: 400 });
+        }
+
+        const zReportCents = Math.round(zReport ?? 0);
+        const priorXReportCents = Math.round(priorX ?? 0);
+        const closeSalesCents = zReportCents - priorXReportCents;
+
+        const { data: dailyUpsert, error: dailyErr } = await supabaseServer
+          .from("daily_sales_records")
+          .upsert(
+            {
+              store_id: shift.store_id,
+              business_date: businessDate,
+              close_shift_id: shift.id,
+              close_sales_cents: closeSalesCents,
+              z_report_cents: zReportCents,
+            },
+            { onConflict: "store_id,business_date" }
+          )
+          .select("id, out_of_balance, balance_variance_cents")
+          .maybeSingle<SalesDailyRecordRow>();
+        if (dailyErr) return NextResponse.json({ error: dailyErr.message }, { status: 500 });
+
+        const dailyRecordId = dailyUpsert?.id ?? null;
+        if (!dailyRecordId) {
+          return NextResponse.json({ error: "Failed to upsert daily sales record." }, { status: 500 });
+        }
+
+        const { error: shiftSalesErr } = await supabaseServer
+          .from("shift_sales_counts")
+          .upsert(
+            {
+              shift_id: shift.id,
+              daily_sales_record_id: dailyRecordId,
+              entry_type: "z_report",
+              amount_cents: zReportCents,
+              prior_x_report_cents: priorXReportCents,
+              confirmed: Boolean(body.salesConfirmed),
+              note: body.note ?? null,
+            },
+            { onConflict: "shift_id,entry_type" }
+          );
+        if (shiftSalesErr) return NextResponse.json({ error: shiftSalesErr.message }, { status: 500 });
+
+        salesWarning = Boolean(dailyUpsert?.out_of_balance);
+        salesVarianceCents = dailyUpsert?.balance_variance_cents ?? null;
+      }
+
+      if (salesWarning && !body.salesConfirmed) {
+        return NextResponse.json(
+          {
+            error: "Sales mismatch detected. Please confirm to continue.",
+            requiresSalesConfirm: true,
+            salesVarianceCents,
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     // 3) Round end time, set ended_at
     const endAt = new Date(body.endAt);
     if (Number.isNaN(endAt.getTime())) return NextResponse.json({ error: "Invalid endAt." }, { status: 400 });
@@ -380,7 +538,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: endShiftErr.message }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({
+      ok: true,
+      salesWarning: salesWarning || undefined,
+      salesVarianceCents: salesVarianceCents ?? undefined,
+    });
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "End shift failed." }, { status: 500 });
   }
