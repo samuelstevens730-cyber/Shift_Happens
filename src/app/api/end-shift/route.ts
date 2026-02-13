@@ -101,6 +101,12 @@ function getCstDateKey(value: string): string | null {
   return `${y}-${m}-${d}`;
 }
 
+function dayOfWeekFromDateOnly(dateOnly: string): number {
+  const [year, month, day] = dateOnly.split("-").map(Number);
+  const dt = new Date(Date.UTC(year, month - 1, day, 0, 0, 0));
+  return dt.getUTCDay();
+}
+
 function templatesForShiftType(st: ShiftType) {
   if (st === "open") return ["open"];
   if (st === "close") return ["close"];
@@ -314,20 +320,31 @@ export async function POST(req: Request) {
     // 2.5) Optional sales tracking (hours-safe, no behavior change when disabled)
     let salesWarning = false;
     let salesVarianceCents: number | null = null;
-    const { data: storeSettings, error: storeSettingsErr } = await supabaseServer
-      .from("store_settings")
-      .select("sales_tracking_enabled")
-      .eq("store_id", shift.store_id)
-      .maybeSingle<{ sales_tracking_enabled: boolean | null }>();
-    if (storeSettingsErr) return NextResponse.json({ error: storeSettingsErr.message }, { status: 500 });
-    const salesTrackingEnabled = Boolean(storeSettings?.sales_tracking_enabled);
+    const businessDate = getCstDateKey(shift.planned_start_at);
+    if (!businessDate) {
+      return NextResponse.json({ error: "Invalid shift planned_start_at for sales tracking." }, { status: 400 });
+    }
+
+    const [storeSettingsRes, rolloverConfigRes] = await Promise.all([
+      supabaseServer
+        .from("store_settings")
+        .select("sales_tracking_enabled, sales_rollover_enabled")
+        .eq("store_id", shift.store_id)
+        .maybeSingle<{ sales_tracking_enabled: boolean | null; sales_rollover_enabled: boolean | null }>(),
+      supabaseServer
+        .from("store_rollover_config")
+        .select("has_rollover")
+        .eq("store_id", shift.store_id)
+        .eq("day_of_week", dayOfWeekFromDateOnly(businessDate))
+        .maybeSingle<{ has_rollover: boolean | null }>(),
+    ]);
+    if (storeSettingsRes.error) return NextResponse.json({ error: storeSettingsRes.error.message }, { status: 500 });
+    if (rolloverConfigRes.error) return NextResponse.json({ error: rolloverConfigRes.error.message }, { status: 500 });
+    const salesTrackingEnabled = Boolean(storeSettingsRes.data?.sales_tracking_enabled);
+    const salesRolloverEnabled = storeSettingsRes.data?.sales_rollover_enabled ?? true;
+    const isRolloverNight = Boolean(rolloverConfigRes.data?.has_rollover) && Boolean(salesRolloverEnabled);
 
     if (salesTrackingEnabled && shiftType !== "other") {
-      const businessDate = getCstDateKey(shift.planned_start_at);
-      if (!businessDate) {
-        return NextResponse.json({ error: "Invalid shift planned_start_at for sales tracking." }, { status: 400 });
-      }
-
       const isOpenSales = shiftType === "open";
       const isCloseSales = shiftType === "close" || shiftType === "double";
 
@@ -376,7 +393,7 @@ export async function POST(req: Request) {
         salesVarianceCents = dailyUpsert?.balance_variance_cents ?? null;
       }
 
-      if (isCloseSales) {
+      if (isCloseSales && !isRolloverNight) {
         const zReport = body.salesZReportCents;
         const priorX = body.salesPriorXCents;
         if (!Number.isFinite(zReport ?? null) || (zReport ?? 0) < 0) {
@@ -429,6 +446,21 @@ export async function POST(req: Request) {
 
         salesWarning = Boolean(dailyUpsert?.out_of_balance);
         salesVarianceCents = dailyUpsert?.balance_variance_cents ?? null;
+      }
+
+      if (isCloseSales && isRolloverNight) {
+        const { error: markRolloverErr } = await supabaseServer
+          .from("daily_sales_records")
+          .upsert(
+            {
+              store_id: shift.store_id,
+              business_date: businessDate,
+              close_shift_id: shift.id,
+              is_rollover_night: true,
+            },
+            { onConflict: "store_id,business_date" }
+          );
+        if (markRolloverErr) return NextResponse.json({ error: markRolloverErr.message }, { status: 500 });
       }
 
       if (salesWarning && !body.salesConfirmed) {

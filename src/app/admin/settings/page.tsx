@@ -33,6 +33,7 @@ type Store = {
   expected_drawer_cents: number;
   payroll_variance_warn_hours: number;
   payroll_shift_drift_warn_hours: number;
+  sales_rollover_enabled: boolean;
 };
 type ChecklistItem = {
   id?: string;
@@ -71,6 +72,7 @@ export default function AdminSettingsPage() {
   const [expectedDrawer, setExpectedDrawer] = useState<string>("");
   const [payrollVarianceWarnHours, setPayrollVarianceWarnHours] = useState<string>("2");
   const [payrollShiftDriftWarnHours, setPayrollShiftDriftWarnHours] = useState<string>("2");
+  const [salesRolloverEnabled, setSalesRolloverEnabled] = useState(true);
   const [templates, setTemplates] = useState<ChecklistTemplate[]>([]);
   const [activeShift, setActiveShift] = useState<"open" | "close">("open");
   const [savingStore, setSavingStore] = useState(false);
@@ -127,6 +129,7 @@ export default function AdminSettingsPage() {
     setExpectedDrawer((expected / 100).toFixed(2));
     setPayrollVarianceWarnHours(String(selectedStore?.payroll_variance_warn_hours ?? 2));
     setPayrollShiftDriftWarnHours(String(selectedStore?.payroll_shift_drift_warn_hours ?? 2));
+    setSalesRolloverEnabled(Boolean(selectedStore?.sales_rollover_enabled ?? true));
 
     const withClientIds = (json.templates ?? []).map(t => ({
       ...t,
@@ -223,6 +226,7 @@ export default function AdminSettingsPage() {
           expectedDrawerCents: Math.max(0, Math.round(dollars * 100)),
           payrollVarianceWarnHours: varianceWarn,
           payrollShiftDriftWarnHours: driftWarn,
+          salesRolloverEnabled,
         }),
       });
       const json = (await res.json()) as SimpleResponse;
@@ -337,6 +341,17 @@ export default function AdminSettingsPage() {
                 value={payrollShiftDriftWarnHours}
                 onChange={e => setPayrollShiftDriftWarnHours(e.target.value)}
               />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <label className="text-sm muted">Rollover flow (store)</label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={salesRolloverEnabled}
+                  onChange={e => setSalesRolloverEnabled(e.target.checked)}
+                />
+                Enable rollover sales flow for this store
+              </label>
             </div>
           </div>
           <button

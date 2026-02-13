@@ -104,6 +104,7 @@ type SalesContextState = {
   pendingRollover: boolean;
   pendingRolloverDate: string | null;
   closerEntryExists: boolean;
+  closeEntryExists: boolean;
 };
 
 function toLocalInputValue(d = new Date()) {
@@ -224,6 +225,13 @@ export default function ShiftPage() {
   const [salesContext, setSalesContext] = useState<SalesContextState | null>(null);
   const [salesContextLoading, setSalesContextLoading] = useState(false);
   const [salesContextErr, setSalesContextErr] = useState<string | null>(null);
+  const [closeCheckpointPriorX, setCloseCheckpointPriorX] = useState("");
+  const [closeCheckpointZ, setCloseCheckpointZ] = useState("");
+  const [closeCheckpointConfirm, setCloseCheckpointConfirm] = useState(false);
+  const [closeCheckpointNeedsConfirm, setCloseCheckpointNeedsConfirm] = useState(false);
+  const [closeCheckpointVarianceCents, setCloseCheckpointVarianceCents] = useState<number | null>(null);
+  const [closeCheckpointSaving, setCloseCheckpointSaving] = useState(false);
+  const [closeCheckpointErr, setCloseCheckpointErr] = useState<string | null>(null);
 
   // Auth state for API calls
   const [pinToken, setPinToken] = useState<string | null>(null);
@@ -412,6 +420,7 @@ export default function ShiftPage() {
         pendingRollover: Boolean(json?.pendingRollover),
         pendingRolloverDate: typeof json?.pendingRolloverDate === "string" ? json.pendingRolloverDate : null,
         closerEntryExists: Boolean(json?.closerEntryExists),
+        closeEntryExists: Boolean(json?.closeEntryExists),
       });
     } catch (e: unknown) {
       setSalesContextErr(e instanceof Error ? e.message : "Failed to load sales context.");
@@ -470,6 +479,13 @@ export default function ShiftPage() {
     if (!authBootstrapped || !state?.shift?.id) return;
     void loadSalesContext();
   }, [authBootstrapped, state?.shift?.id, loadSalesContext]);
+
+  useEffect(() => {
+    if (!salesContext) return;
+    if (typeof salesContext.priorXReportCents === "number") {
+      setCloseCheckpointPriorX((salesContext.priorXReportCents / 100).toFixed(2));
+    }
+  }, [salesContext]);
 
   const shiftType = state?.shift.shift_type;
 
@@ -637,6 +653,59 @@ export default function ShiftPage() {
     // await reloadShift();
   }
 
+  async function submitCloseCheckpoint() {
+    if (!state) return;
+    setCloseCheckpointErr(null);
+    const authToken = await resolveAuthToken();
+    if (!authToken) {
+      setCloseCheckpointErr(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
+      return;
+    }
+
+    const priorXCents = parseMoneyInputToCents(closeCheckpointPriorX);
+    const zCents = parseMoneyInputToCents(closeCheckpointZ);
+    if (priorXCents == null || zCents == null) {
+      setCloseCheckpointErr("Enter valid non-negative sales amounts.");
+      return;
+    }
+
+    setCloseCheckpointSaving(true);
+    try {
+      const res = await fetch("/api/sales/close-checkpoint", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${authToken}`,
+        },
+        body: JSON.stringify({
+          shiftId,
+          salesPriorXCents: priorXCents,
+          salesZReportCents: zCents,
+          salesConfirmed: closeCheckpointNeedsConfirm ? closeCheckpointConfirm : false,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        if (json?.requiresSalesConfirm) {
+          setCloseCheckpointNeedsConfirm(true);
+          setCloseCheckpointVarianceCents(typeof json?.salesVarianceCents === "number" ? json.salesVarianceCents : null);
+          return;
+        }
+        throw new Error(json?.error || "Failed to save 10pm sales.");
+      }
+
+      setCloseCheckpointNeedsConfirm(false);
+      setCloseCheckpointConfirm(false);
+      setCloseCheckpointVarianceCents(null);
+      setCloseCheckpointErr(null);
+      await loadSalesContext();
+    } catch (e: unknown) {
+      setCloseCheckpointErr(e instanceof Error ? e.message : "Failed to save 10pm sales.");
+    } finally {
+      setCloseCheckpointSaving(false);
+    }
+  }
+
   const reuseLabel = reusedStartedAt
     ? formatDateTime(reusedStartedAt)
     : "an earlier time";
@@ -773,6 +842,67 @@ export default function ShiftPage() {
             )}
           </div>
         )}
+
+        {shiftType !== "other" &&
+          (shiftType === "close" || shiftType === "double") &&
+          salesContext?.salesTrackingEnabled &&
+          salesContext.isRolloverNight &&
+          !salesContext.closeEntryExists && (
+            <div className="card card-pad rounded-2xl border-amber-300/60 bg-amber-50 text-black space-y-3">
+              <div className="text-sm font-semibold">10:00 PM Sales Checkpoint</div>
+              <div className="text-xs text-amber-800">
+                Enter Z report and prior X at 10pm. Midnight rollover is entered at clock out.
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm">Prior X Report ($)</label>
+                <input
+                  className="w-full border rounded p-2"
+                  inputMode="decimal"
+                  value={closeCheckpointPriorX}
+                  onChange={e => setCloseCheckpointPriorX(e.target.value)}
+                  placeholder="0.00"
+                />
+                <label className="text-sm">Z Report Total ($)</label>
+                <input
+                  className="w-full border rounded p-2"
+                  inputMode="decimal"
+                  value={closeCheckpointZ}
+                  onChange={e => setCloseCheckpointZ(e.target.value)}
+                  placeholder="0.00"
+                />
+              </div>
+
+              {closeCheckpointNeedsConfirm && (
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={closeCheckpointConfirm}
+                    onChange={e => setCloseCheckpointConfirm(e.target.checked)}
+                  />
+                  I confirm these sales numbers are correct
+                  {closeCheckpointVarianceCents != null ? ` (variance $${(closeCheckpointVarianceCents / 100).toFixed(2)})` : ""}
+                </label>
+              )}
+
+              {closeCheckpointErr && (
+                <div className="text-sm border border-amber-300 rounded p-2 text-amber-800 bg-white">
+                  {closeCheckpointErr}
+                </div>
+              )}
+
+              <div className="flex justify-end">
+                <button
+                  className="px-3 py-1.5 rounded bg-black text-white disabled:opacity-50"
+                  disabled={closeCheckpointSaving || (closeCheckpointNeedsConfirm && !closeCheckpointConfirm)}
+                  onClick={() => {
+                    void submitCloseCheckpoint();
+                  }}
+                >
+                  {closeCheckpointSaving ? "Saving..." : "Save 10pm Sales"}
+                </button>
+              </div>
+            </div>
+          )}
 
         {/* Cleaning tasks section (separate from operational checklist) */}
         {shiftType !== "other" && (
@@ -1280,7 +1410,7 @@ function ClockOutModal({
   const salesZReportCents = parseMoneyInputToCents(salesZReport);
   const salesPriorXCents = parseMoneyInputToCents(salesPriorX);
   const requiresSalesForOpen = salesTrackingEnabled && shiftType === "open";
-  const requiresSalesForClose = salesTrackingEnabled && (shiftType === "close" || shiftType === "double");
+  const requiresSalesForClose = salesTrackingEnabled && (shiftType === "close" || shiftType === "double") && !isRolloverNight;
   const salesInputsValid =
     (!requiresSalesForOpen || salesXReportCents != null) &&
     (!requiresSalesForClose || (salesZReportCents != null && salesPriorXCents != null));
@@ -1609,7 +1739,7 @@ function ClockOutModal({
                 setSalesConfirmChecked(false);
                 setSalesVarianceCents(null);
 
-                if (requiresSalesForClose && isRolloverNight && businessDate) {
+                if (salesTrackingEnabled && (shiftType === "close" || shiftType === "double") && isRolloverNight && businessDate) {
                   setShowRolloverPrompt(true);
                   return;
                 }

@@ -7,6 +7,8 @@ type ShiftType = "open" | "close" | "double" | "other";
 type DailySalesRecordRow = {
   id: string;
   open_x_report_cents: number | null;
+  close_sales_cents: number | null;
+  z_report_cents: number | null;
   closer_rollover_cents: number | null;
   opener_rollover_cents: number | null;
   is_rollover_night: boolean | null;
@@ -64,9 +66,9 @@ export async function GET(req: Request) {
     const [settingsRes, rolloverConfigRes, dailyRecordRes, prevRecordRes] = await Promise.all([
       supabaseServer
         .from("store_settings")
-        .select("sales_tracking_enabled")
+        .select("sales_tracking_enabled, sales_rollover_enabled")
         .eq("store_id", storeId)
-        .maybeSingle<{ sales_tracking_enabled: boolean | null }>(),
+        .maybeSingle<{ sales_tracking_enabled: boolean | null; sales_rollover_enabled: boolean | null }>(),
       supabaseServer
         .from("store_rollover_config")
         .select("has_rollover")
@@ -75,13 +77,13 @@ export async function GET(req: Request) {
         .maybeSingle<{ has_rollover: boolean | null }>(),
       supabaseServer
         .from("daily_sales_records")
-        .select("id, open_x_report_cents, closer_rollover_cents, opener_rollover_cents, is_rollover_night")
+        .select("id, open_x_report_cents, close_sales_cents, z_report_cents, closer_rollover_cents, opener_rollover_cents, is_rollover_night")
         .eq("store_id", storeId)
         .eq("business_date", businessDate)
         .maybeSingle<DailySalesRecordRow>(),
       supabaseServer
         .from("daily_sales_records")
-        .select("id, open_x_report_cents, closer_rollover_cents, opener_rollover_cents, is_rollover_night")
+        .select("id, open_x_report_cents, close_sales_cents, z_report_cents, closer_rollover_cents, opener_rollover_cents, is_rollover_night")
         .eq("store_id", storeId)
         .eq("business_date", previousDateOnly(businessDate))
         .maybeSingle<DailySalesRecordRow>(),
@@ -93,10 +95,11 @@ export async function GET(req: Request) {
     if (prevRecordRes.error) return NextResponse.json({ error: prevRecordRes.error.message }, { status: 500 });
 
     const salesTrackingEnabled = Boolean(settingsRes.data?.sales_tracking_enabled);
+    const salesRolloverEnabled = settingsRes.data?.sales_rollover_enabled ?? true;
     const priorXReportCents = shiftType === "close" || shiftType === "double"
       ? (dailyRecordRes.data?.open_x_report_cents ?? null)
       : null;
-    const isRolloverNight = Boolean(rolloverConfigRes.data?.has_rollover);
+    const isRolloverNight = Boolean(rolloverConfigRes.data?.has_rollover) && Boolean(salesRolloverEnabled);
 
     const prev = prevRecordRes.data;
     const pendingRollover = Boolean(
@@ -111,6 +114,10 @@ export async function GET(req: Request) {
       pendingRollover,
       pendingRolloverDate: pendingRollover ? previousDateOnly(businessDate) : null,
       closerEntryExists: Boolean(prev?.closer_rollover_cents != null),
+      closeEntryExists: Boolean(
+        dailyRecordRes.data?.close_sales_cents != null &&
+        dailyRecordRes.data?.z_report_cents != null
+      ),
     });
   } catch (e: unknown) {
     return NextResponse.json(
@@ -119,4 +126,3 @@ export async function GET(req: Request) {
     );
   }
 }
-

@@ -7,6 +7,7 @@ type Body = {
   expectedDrawerCents?: number;
   payrollVarianceWarnHours?: number;
   payrollShiftDriftWarnHours?: number;
+  salesRolloverEnabled?: boolean;
 };
 
 export async function PATCH(req: Request) {
@@ -27,11 +28,15 @@ export async function PATCH(req: Request) {
     }
     const payrollVarianceWarnHours = Number(body.payrollVarianceWarnHours ?? 2);
     const payrollShiftDriftWarnHours = Number(body.payrollShiftDriftWarnHours ?? 2);
+    const salesRolloverEnabled = body.salesRolloverEnabled ?? true;
     if (!Number.isFinite(payrollVarianceWarnHours) || payrollVarianceWarnHours < 0) {
       return NextResponse.json({ error: "Invalid payroll variance threshold." }, { status: 400 });
     }
     if (!Number.isFinite(payrollShiftDriftWarnHours) || payrollShiftDriftWarnHours < 0) {
       return NextResponse.json({ error: "Invalid shift drift threshold." }, { status: 400 });
+    }
+    if (typeof salesRolloverEnabled !== "boolean") {
+      return NextResponse.json({ error: "Invalid rollover setting." }, { status: 400 });
     }
 
     const managerStoreIds = await getManagerStoreIds(user.id);
@@ -51,6 +56,7 @@ export async function PATCH(req: Request) {
         store_id: storeId,
         payroll_variance_warn_hours: payrollVarianceWarnHours,
         payroll_shift_drift_warn_hours: payrollShiftDriftWarnHours,
+        sales_rollover_enabled: salesRolloverEnabled,
         updated_at: new Date().toISOString(),
         updated_by: user.id,
       });

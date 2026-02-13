@@ -45,12 +45,14 @@ type StoreRow = {
   expected_drawer_cents: number;
   payroll_variance_warn_hours: number;
   payroll_shift_drift_warn_hours: number;
+  sales_rollover_enabled: boolean;
 };
 type StoreBaseRow = { id: string; name: string; expected_drawer_cents: number };
 type StoreSettingsRow = {
   store_id: string;
   payroll_variance_warn_hours: number | null;
   payroll_shift_drift_warn_hours: number | null;
+  sales_rollover_enabled: boolean | null;
 };
 type TemplateRow = { id: string; store_id: string | null; shift_type: string; name: string };
 type ItemRow = { id: string; template_id: string; label: string; sort_order: number; required: boolean };
@@ -178,7 +180,7 @@ export async function GET(req: Request) {
 
     const { data: settingsRows, error: settingsErr } = await supabaseServer
       .from("store_settings")
-      .select("store_id, payroll_variance_warn_hours, payroll_shift_drift_warn_hours")
+      .select("store_id, payroll_variance_warn_hours, payroll_shift_drift_warn_hours, sales_rollover_enabled")
       .in("store_id", managerStoreIds)
       .returns<StoreSettingsRow[]>();
     if (settingsErr) return NextResponse.json({ error: settingsErr.message }, { status: 500 });
@@ -190,6 +192,7 @@ export async function GET(req: Request) {
         ...s,
         payroll_variance_warn_hours: Number(row?.payroll_variance_warn_hours ?? 2),
         payroll_shift_drift_warn_hours: Number(row?.payroll_shift_drift_warn_hours ?? 2),
+        sales_rollover_enabled: row?.sales_rollover_enabled ?? true,
       };
     });
 
