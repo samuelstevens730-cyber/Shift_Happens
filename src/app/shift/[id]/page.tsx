@@ -26,6 +26,7 @@ import { getCstDowMinutes, isTimeWithinWindow, toStoreKey, WindowShiftType } fro
 import { playAlarm, stopAlarm } from "@/lib/alarm";
 import { supabase } from "@/lib/supabaseClient";
 import HomeHeader from "@/components/HomeHeader";
+import RolloverEntryCard from "./components/RolloverEntryCard";
 
 const PIN_TOKEN_KEY = "sh_pin_token";
 
@@ -94,6 +95,15 @@ type CleaningTaskRow = {
   completed_at: string | null;
   skipped_reason: string | null;
   completed_by: string | null;
+};
+
+type SalesContextState = {
+  salesTrackingEnabled: boolean;
+  priorXReportCents: number | null;
+  isRolloverNight: boolean;
+  pendingRollover: boolean;
+  pendingRolloverDate: string | null;
+  closerEntryExists: boolean;
 };
 
 function toLocalInputValue(d = new Date()) {
@@ -211,6 +221,9 @@ export default function ShiftPage() {
   const [skipModalTask, setSkipModalTask] = useState<CleaningTaskRow | null>(null);
   const [checklistExpanded, setChecklistExpanded] = useState(false);
   const [cleaningExpanded, setCleaningExpanded] = useState(false);
+  const [salesContext, setSalesContext] = useState<SalesContextState | null>(null);
+  const [salesContextLoading, setSalesContextLoading] = useState(false);
+  const [salesContextErr, setSalesContextErr] = useState<string | null>(null);
 
   // Auth state for API calls
   const [pinToken, setPinToken] = useState<string | null>(null);
@@ -372,6 +385,41 @@ export default function ShiftPage() {
     }
   }, [resolveAuthToken, shiftId, state?.shift?.shift_type]);
 
+  const loadSalesContext = useCallback(async () => {
+    if (!state) return;
+    const businessDate = getCstDateKey(state.shift.planned_start_at);
+    if (!businessDate) return;
+    const authToken = await resolveAuthToken();
+    if (!authToken) return;
+
+    setSalesContextLoading(true);
+    setSalesContextErr(null);
+    try {
+      const query = new URLSearchParams({
+        storeId: state.store.id,
+        businessDate,
+        shiftType: state.shift.shift_type,
+      });
+      const res = await fetch(`/api/sales/context?${query.toString()}`, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to load sales context.");
+      setSalesContext({
+        salesTrackingEnabled: Boolean(json?.salesTrackingEnabled),
+        priorXReportCents: typeof json?.priorXReportCents === "number" ? json.priorXReportCents : null,
+        isRolloverNight: Boolean(json?.isRolloverNight),
+        pendingRollover: Boolean(json?.pendingRollover),
+        pendingRolloverDate: typeof json?.pendingRolloverDate === "string" ? json.pendingRolloverDate : null,
+        closerEntryExists: Boolean(json?.closerEntryExists),
+      });
+    } catch (e: unknown) {
+      setSalesContextErr(e instanceof Error ? e.message : "Failed to load sales context.");
+    } finally {
+      setSalesContextLoading(false);
+    }
+  }, [resolveAuthToken, state]);
+
   useEffect(() => {
     let alive = true;
     const loadKey = `${shiftId}|${qrToken}`;
@@ -417,6 +465,11 @@ export default function ShiftPage() {
     if (!state?.shift?.id) return;
     void loadCleaningTasks();
   }, [state?.shift?.id, loadCleaningTasks]);
+
+  useEffect(() => {
+    if (!authBootstrapped || !state?.shift?.id) return;
+    void loadSalesContext();
+  }, [authBootstrapped, state?.shift?.id, loadSalesContext]);
 
   const shiftType = state?.shift.shift_type;
 
@@ -629,6 +682,25 @@ export default function ShiftPage() {
           Store: <b>{state.store.name}</b> · Employee: <b>{state.employee || "Unknown"}</b> · Type:{" "}
           <b>{state.shift.shift_type}</b>
         </div>
+
+        {salesContextLoading && (
+          <div className="text-xs text-slate-500">Loading sales rollover context...</div>
+        )}
+        {salesContextErr && (
+          <div className="text-sm border border-amber-300 rounded p-2 text-amber-700 bg-amber-50">
+            {salesContextErr}
+          </div>
+        )}
+        {state.shift.shift_type === "open" && salesContext?.pendingRollover && salesContext.pendingRolloverDate && (
+          <RolloverEntryCard
+            storeId={state.store.id}
+            previousBusinessDate={salesContext.pendingRolloverDate}
+            resolveAuthToken={resolveAuthToken}
+            onSubmitted={() => {
+              void loadSalesContext();
+            }}
+          />
+        )}
 
         {endNote && (
           <div className="text-sm border rounded p-3">
@@ -1144,6 +1216,11 @@ function ClockOutModal({
   const [salesConfirmChecked, setSalesConfirmChecked] = useState(false);
   const [salesVarianceCents, setSalesVarianceCents] = useState<number | null>(null);
   const [isRolloverNight, setIsRolloverNight] = useState(false);
+  const [showRolloverPrompt, setShowRolloverPrompt] = useState(false);
+  const [rolloverAmount, setRolloverAmount] = useState("");
+  const [rolloverSaving, setRolloverSaving] = useState(false);
+  const [rolloverErr, setRolloverErr] = useState<string | null>(null);
+  const [rolloverMismatchNeedsConfirm, setRolloverMismatchNeedsConfirm] = useState(false);
 
   const storeKey = toStoreKey(storeName);
 
@@ -1224,6 +1301,99 @@ function ClockOutModal({
     (!salesNeedsConfirm || salesConfirmChecked) &&
     (outOfThreshold ? confirm : true) &&
     (changeNot200 ? notify : true);
+
+  if (showRolloverPrompt) {
+    const rolloverCents = parseMoneyInputToCents(rolloverAmount);
+    return (
+      <div className="fixed inset-0 bg-black/40 flex items-start justify-center p-4 overflow-y-auto modal-under-header">
+        <div className="w-full max-w-md bg-white text-black rounded-2xl p-4 space-y-3">
+          <h2 className="text-lg font-semibold">Midnight X Report</h2>
+          <div className="text-sm">
+            Enter the midnight X report total before you leave. This will be compared to the opener's entry.
+          </div>
+          <label className="text-sm">Midnight X Report Total ($)</label>
+          <input
+            className="w-full border rounded p-2"
+            inputMode="decimal"
+            value={rolloverAmount}
+            onChange={e => setRolloverAmount(e.target.value)}
+            placeholder="0.00"
+          />
+          {rolloverErr && (
+            <div className="text-sm border border-amber-300 rounded p-2 text-amber-700 bg-amber-50">
+              {rolloverErr}
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <button
+              className="px-3 py-1.5 rounded border"
+              disabled={rolloverSaving}
+              onClick={() => {
+                onClose();
+                onSuccess();
+              }}
+            >
+              Skip for now
+            </button>
+            <button
+              className="px-3 py-1.5 rounded bg-black text-white disabled:opacity-50"
+              disabled={rolloverSaving || rolloverCents == null || !businessDate || !authToken}
+              onClick={async () => {
+                setRolloverErr(null);
+                if (!authToken) {
+                  setRolloverErr("Session expired. Please refresh.");
+                  return;
+                }
+                if (!businessDate) {
+                  setRolloverErr("Unable to determine business date.");
+                  return;
+                }
+                if (rolloverCents == null) {
+                  setRolloverErr("Enter a valid non-negative amount.");
+                  return;
+                }
+                setRolloverSaving(true);
+                try {
+                  const res = await fetch("/api/sales/rollover", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      Authorization: `Bearer ${authToken}`,
+                    },
+                    body: JSON.stringify({
+                      storeId,
+                      date: businessDate,
+                      amount: rolloverCents,
+                      source: "closer",
+                      forceMismatch: rolloverMismatchNeedsConfirm,
+                    }),
+                  });
+                  const json = await res.json();
+                  if (res.status === 409 && json?.requiresConfirmation) {
+                    setRolloverMismatchNeedsConfirm(true);
+                    setRolloverErr("Mismatch detected. Submit again to save mismatch for manager review.");
+                    return;
+                  }
+                  if (!res.ok) {
+                    throw new Error(json?.error || "Failed to submit rollover.");
+                  }
+
+                  onClose();
+                  onSuccess();
+                } catch (e: unknown) {
+                  setRolloverErr(e instanceof Error ? e.message : "Failed to submit rollover.");
+                } finally {
+                  setRolloverSaving(false);
+                }
+              }}
+            >
+              {rolloverSaving ? "Submitting..." : rolloverMismatchNeedsConfirm ? "Save Mismatch" : "Submit"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center p-4 overflow-y-auto modal-under-header">
@@ -1438,6 +1608,11 @@ function ClockOutModal({
                 setSalesNeedsConfirm(false);
                 setSalesConfirmChecked(false);
                 setSalesVarianceCents(null);
+
+                if (requiresSalesForClose && isRolloverNight && businessDate) {
+                  setShowRolloverPrompt(true);
+                  return;
+                }
 
                 onClose();
                 onSuccess();
