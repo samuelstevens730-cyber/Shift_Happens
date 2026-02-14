@@ -327,8 +327,7 @@ function HomePageInner() {
         .eq("profile_id", targetProfileId)
         .gte("shift_date", yesterday)
         .lte("shift_date", nextWeek)
-        .order("shift_date", { ascending: true })
-        .limit(10);
+        .order("shift_date", { ascending: true });
 
       if (!alive) return;
       if (shifts) setScheduleShifts((shifts as unknown) as ScheduleShift[]);

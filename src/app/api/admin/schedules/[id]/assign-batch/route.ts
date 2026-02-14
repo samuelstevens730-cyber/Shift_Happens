@@ -105,8 +105,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const dow = getDow(a.date);
     const tpl = templateMap.get(`${dow}:${a.shiftType}`);
-    const start = a.scheduledStart ?? tpl?.start_time;
-    const end = a.scheduledEnd ?? tpl?.end_time;
+    const start = a.shiftMode === "other" ? (a.scheduledStart ?? tpl?.start_time) : tpl?.start_time;
+    const end = a.shiftMode === "other" ? (a.scheduledEnd ?? tpl?.end_time) : tpl?.end_time;
     if (!start || !end) {
       return NextResponse.json({ error: "Missing template times." }, { status: 400 });
     }
@@ -125,8 +125,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (a.shiftMode === "double") {
       const otherType = a.shiftType === "open" ? "close" : "open";
       const otherTpl = templateMap.get(`${dow}:${otherType}`);
-      const otherStart = a.scheduledStart ?? otherTpl?.start_time;
-      const otherEnd = a.scheduledEnd ?? otherTpl?.end_time;
+      const otherStart = otherTpl?.start_time;
+      const otherEnd = otherTpl?.end_time;
       if (!otherStart || !otherEnd) {
         return NextResponse.json({ error: "Missing template times for double." }, { status: 400 });
       }
