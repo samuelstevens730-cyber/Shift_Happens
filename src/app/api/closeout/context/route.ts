@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { authenticateShiftRequest, validateStoreAccess } from "@/lib/shiftAuth";
 import { supabaseServer } from "@/lib/supabaseServer";
-import type { SafeCloseoutRow } from "@/types/safeLedger";
+import type { SafeCloseoutExpenseRow, SafeCloseoutPhotoRow, SafeCloseoutRow } from "@/types/safeLedger";
 
 type StoreSettings = {
   store_id: string;
@@ -67,10 +67,43 @@ export async function GET(req: Request) {
       safe_photo_retention_days: 38,
       safe_photo_purge_day_of_month: 8,
     };
+    const closeout = closeoutRes.data ?? null;
+
+    let expenses: SafeCloseoutExpenseRow[] = [];
+    let photos: SafeCloseoutPhotoRow[] = [];
+
+    if (closeout?.id) {
+      const [expensesRes, photosRes] = await Promise.all([
+        supabaseServer
+          .from("safe_closeout_expenses")
+          .select("*")
+          .eq("closeout_id", closeout.id)
+          .order("created_at", { ascending: true })
+          .returns<SafeCloseoutExpenseRow[]>(),
+        supabaseServer
+          .from("safe_closeout_photos")
+          .select("*")
+          .eq("closeout_id", closeout.id)
+          .order("created_at", { ascending: true })
+          .returns<SafeCloseoutPhotoRow[]>(),
+      ]);
+
+      if (expensesRes.error) {
+        return NextResponse.json({ error: expensesRes.error.message }, { status: 500 });
+      }
+      if (photosRes.error) {
+        return NextResponse.json({ error: photosRes.error.message }, { status: 500 });
+      }
+
+      expenses = expensesRes.data ?? [];
+      photos = photosRes.data ?? [];
+    }
 
     return NextResponse.json({
       settings,
-      closeout: closeoutRes.data ?? null,
+      closeout,
+      expenses,
+      photos,
     });
   } catch (e: unknown) {
     return NextResponse.json(

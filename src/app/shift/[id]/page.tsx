@@ -27,6 +27,8 @@ import { playAlarm, stopAlarm } from "@/lib/alarm";
 import { supabase } from "@/lib/supabaseClient";
 import HomeHeader from "@/components/HomeHeader";
 import RolloverEntryCard from "./components/RolloverEntryCard";
+import SafeCloseoutWizard from "./components/SafeCloseoutWizard";
+import { useSafeCloseout } from "@/hooks/useSafeCloseout";
 
 const PIN_TOKEN_KEY = "sh_pin_token";
 
@@ -233,6 +235,7 @@ export default function ShiftPage() {
   const [closeCheckpointVarianceCents, setCloseCheckpointVarianceCents] = useState<number | null>(null);
   const [closeCheckpointSaving, setCloseCheckpointSaving] = useState(false);
   const [closeCheckpointErr, setCloseCheckpointErr] = useState<string | null>(null);
+  const [safeCloseoutFlash, setSafeCloseoutFlash] = useState<{ tone: "success" | "warn" | "error"; message: string } | null>(null);
 
   // Auth state for API calls
   const [pinToken, setPinToken] = useState<string | null>(null);
@@ -490,6 +493,28 @@ export default function ShiftPage() {
   }, [salesContext]);
 
   const shiftType = state?.shift.shift_type;
+  const shiftBusinessDate = state?.shift?.planned_start_at ? getCstDateKey(state.shift.planned_start_at) : null;
+  const safeCloseoutToken = managerAccessToken ?? pinToken;
+  const splitSafeCloseoutFromClockoutFlow = Boolean(
+    (shiftType === "close" || shiftType === "double") &&
+    salesContext?.salesTrackingEnabled &&
+    salesContext?.isRolloverNight
+  );
+
+  const safeCloseout = useSafeCloseout({
+    storeId: state?.store?.id ?? null,
+    shiftId,
+    businessDate: shiftBusinessDate,
+    authToken: safeCloseoutToken,
+    canUseSafeCloseout: shiftType === "close" || shiftType === "double",
+    splitFromClockoutFlow: splitSafeCloseoutFromClockoutFlow,
+  });
+
+  useEffect(() => {
+    if (!safeCloseoutFlash) return;
+    const timer = window.setTimeout(() => setSafeCloseoutFlash(null), 4500);
+    return () => window.clearTimeout(timer);
+  }, [safeCloseoutFlash]);
 
   // Check if changeover count already exists (for double shifts)
   const hasChangeover = useMemo(() => {
@@ -772,6 +797,62 @@ export default function ShiftPage() {
               <span className={`px-2 py-1 rounded-full border ${salesContext.currentCloserEntryExists ? "border-emerald-400/50 text-emerald-300" : "border-amber-400/50 text-amber-300"}`}>
                 Midnight report: {salesContext.currentCloserEntryExists ? "saved" : "pending"}
               </span>
+            </div>
+          </div>
+        )}
+        {safeCloseoutFlash && (
+          <div
+            className={`rounded border p-2 text-sm ${
+              safeCloseoutFlash.tone === "success"
+                ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                : safeCloseoutFlash.tone === "warn"
+                  ? "border-amber-300 bg-amber-50 text-amber-800"
+                  : "border-red-300 bg-red-50 text-red-700"
+            }`}
+          >
+            {safeCloseoutFlash.message}
+          </div>
+        )}
+        {(shiftType === "close" || shiftType === "double") && (
+          <div className="card card-pad rounded-2xl border-cyan-400/40 bg-[#0b1220] text-slate-100 shadow-[0_0_0_1px_rgba(6,182,212,0.08)] space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-sm font-semibold">Safe Ledger Closeout</div>
+              <span
+                className={`text-xs rounded-full border px-2 py-1 ${
+                  safeCloseout.isPassed
+                    ? "border-emerald-400/50 text-emerald-300"
+                    : safeCloseout.isEnabled
+                      ? "border-amber-400/50 text-amber-300"
+                      : "border-slate-500/40 text-slate-300"
+                }`}
+              >
+                {safeCloseout.isPassed ? "✅ Passed" : safeCloseout.isEnabled ? "⚠️ Pending" : "Not enabled"}
+              </span>
+            </div>
+            {safeCloseout.loading && (
+              <div className="text-xs text-slate-400">Loading safe closeout context...</div>
+            )}
+            {safeCloseout.error && (
+              <div className="text-xs border border-red-400/40 rounded p-2 text-red-300 bg-red-900/20">❌ {safeCloseout.error}</div>
+            )}
+            {safeCloseout.isEnabled && splitSafeCloseoutFromClockoutFlow && (
+              <div className="text-xs text-cyan-200">
+                Friday/Saturday late-night mode: safe closeout is entered separately before clock out.
+              </div>
+            )}
+            {safeCloseout.isEnabled && safeCloseout.hasDraft && !safeCloseout.isPassed && (
+              <div className="text-xs text-amber-200">
+                Draft in progress. Continue to finish before leaving.
+              </div>
+            )}
+            <div className="flex justify-end">
+              <button
+                className="px-3 py-1.5 rounded bg-cyan-400 text-black font-semibold disabled:opacity-50"
+                disabled={!safeCloseout.isEnabled || safeCloseout.loading}
+                onClick={() => safeCloseout.openWizard("task")}
+              >
+                {safeCloseout.hasDraft && !safeCloseout.isPassed ? "Continue Safe Closeout" : "Perform Safe Closeout"}
+              </button>
             </div>
           </div>
         )}
@@ -1076,7 +1157,13 @@ export default function ShiftPage() {
               pendingMessages.length > 0 ||
               pendingTasks.length > 0
             }
-            onClick={() => setShowClockOut(true)}
+            onClick={() => {
+              if (safeCloseout.shouldGateClockOut) {
+                safeCloseout.openWizard("gate");
+                return;
+              }
+              setShowClockOut(true);
+            }}
           >
             Clock Out
           </button>
@@ -1099,6 +1186,49 @@ export default function ShiftPage() {
             pinToken={pinToken}
             managerAccessToken={managerAccessToken}
             managerSession={managerSession}
+          />
+        )}
+        {safeCloseout.isOpen && (
+          <SafeCloseoutWizard
+            open={safeCloseout.isOpen}
+            mode={safeCloseout.mode}
+            authToken={safeCloseoutToken}
+            storeId={state.store.id}
+            shiftId={shiftId}
+            businessDate={shiftBusinessDate}
+            context={safeCloseout.context}
+            onClose={safeCloseout.closeWizard}
+            onRefreshContext={safeCloseout.refresh}
+            onSubmitted={(status) => {
+              if (status === "pass") {
+                if (safeCloseout.mode === "gate") {
+                  safeCloseout.closeWizard();
+                  setShowClockOut(true);
+                  setSafeCloseoutFlash({
+                    tone: "success",
+                    message: "✅ Safe closeout passed. You can clock out now.",
+                  });
+                } else {
+                  safeCloseout.closeWizard();
+                  setSafeCloseoutFlash({
+                    tone: "success",
+                    message: "✅ Safe closeout submitted successfully.",
+                  });
+                }
+                return;
+              }
+              if (status === "warn") {
+                setSafeCloseoutFlash({
+                  tone: "warn",
+                  message: "⚠️ Closeout submitted with variance warning.",
+                });
+                return;
+              }
+              setSafeCloseoutFlash({
+                tone: "error",
+                message: "❌ Closeout failed validation. Please review and resubmit.",
+              });
+            }}
           />
         )}
 
