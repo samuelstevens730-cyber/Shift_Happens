@@ -1148,8 +1148,26 @@ export default function ShiftPage() {
           </div>
         )}
 
-        {/* Clock out button - disabled until all requirements met */}
-        <div className="sticky-cta">
+        {/* Safe closeout + clock out actions */}
+        <div className="sticky-cta space-y-2">
+          {(shiftType === "close" || shiftType === "double") && (
+            <button
+              className="w-full rounded bg-cyan-400 text-black py-2 font-semibold disabled:opacity-50"
+              disabled={safeCloseout.loading}
+              onClick={() => {
+                if (!safeCloseout.isEnabled) {
+                  setSafeCloseoutFlash({
+                    tone: "error",
+                    message: "❌ Safe closeout is not enabled for this store yet.",
+                  });
+                  return;
+                }
+                safeCloseout.openWizard("task");
+              }}
+            >
+              Perform Safe Closeout
+            </button>
+          )}
           <button
             className="w-full rounded bg-black text-white py-2 disabled:opacity-50"
             disabled={
