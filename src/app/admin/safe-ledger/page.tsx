@@ -71,6 +71,16 @@ function toDateKey(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+function fromDateKey(key: string): Date {
+  return new Date(`${key}T00:00:00`);
+}
+
+function weekdayLabel(dateKey: string): string {
+  const day = fromDateKey(dateKey).getDay();
+  const labels = ["SUN", "MON", "TUES", "WEDS", "THU", "FRI", "SAT"];
+  return labels[day] ?? "UNK";
+}
+
 export default function SafeLedgerDashboardPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -90,6 +100,49 @@ export default function SafeLedgerDashboardPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState(false);
+  const [quickViewMode, setQuickViewMode] = useState<"week" | "month">("week");
+  const [selectedWeek, setSelectedWeek] = useState<string>("1");
+
+  const weekRanges = useMemo(() => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = today.getMonth();
+    const lastDayOfMonth = new Date(year, month + 1, 0).getDate();
+    const monthStart = new Date(year, month, 1);
+    const monthEnd = new Date(year, month, lastDayOfMonth);
+    const cappedMonthEnd = today < monthEnd ? today : monthEnd;
+    const ranges: Array<{ value: string; label: string; from: string; to: string }> = [];
+
+    for (let week = 1; week <= 5; week += 1) {
+      const startDay = (week - 1) * 7 + 1;
+      const endDay = Math.min(week * 7, lastDayOfMonth);
+      if (startDay > lastDayOfMonth) break;
+
+      const start = new Date(year, month, startDay);
+      let end = new Date(year, month, endDay);
+      if (end > cappedMonthEnd) end = cappedMonthEnd;
+      if (start > end) continue;
+
+      ranges.push({
+        value: String(week),
+        label: `Week ${week} (${toDateKey(start)} to ${toDateKey(end)})`,
+        from: toDateKey(start),
+        to: toDateKey(end),
+      });
+    }
+
+    // fallback so selector always has at least one option
+    if (ranges.length === 0) {
+      ranges.push({
+        value: "1",
+        label: `Week 1 (${toDateKey(monthStart)} to ${toDateKey(cappedMonthEnd)})`,
+        from: toDateKey(monthStart),
+        to: toDateKey(cappedMonthEnd),
+      });
+    }
+
+    return ranges;
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -197,28 +250,41 @@ export default function SafeLedgerDashboardPage() {
   }
 
   function buildSalesTsv() {
-    const lines = ["Date\tCash\tCard"];
-    for (const row of filteredRows) {
-      lines.push(`${row.business_date}\t${(row.cash_sales_cents / 100).toFixed(2)}\t${(row.card_sales_cents / 100).toFixed(2)}`);
+    const orderedRows = [...filteredRows].sort((a, b) => a.business_date.localeCompare(b.business_date));
+    const lines: string[] = [];
+    for (const row of orderedRows) {
+      lines.push(`${weekdayLabel(row.business_date)}\t${(row.cash_sales_cents / 100).toFixed(2)}\t${(row.card_sales_cents / 100).toFixed(2)}`);
     }
     return lines.join("\n");
   }
 
   function buildDenomTsv() {
-    const keys: Array<"100" | "50" | "20" | "10" | "5" | "1"> = ["100", "50", "20", "10", "5", "1"];
-    const totals: Record<string, number> = { "100": 0, "50": 0, "20": 0, "10": 0, "5": 0, "1": 0 };
+    const keys: Array<"1" | "5" | "10" | "20" | "50" | "100"> = ["1", "5", "10", "20", "50", "100"];
+    const totals: Record<string, number> = { "1": 0, "5": 0, "10": 0, "20": 0, "50": 0, "100": 0 };
     for (const row of filteredRows) {
       for (const key of keys) {
         totals[key] += Number(row.denoms_jsonb?.[key] ?? 0);
       }
     }
-    const lines = ["Denom\tQty\tAmount"];
+    const lines = ["NOTE\tQTY"];
     for (const key of keys) {
-      const qty = totals[key];
-      const amount = qty * Number(key);
-      lines.push(`$${key}\t${qty}\t${amount.toFixed(2)}`);
+      lines.push(`${key}\t${totals[key]}`);
     }
     return lines.join("\n");
+  }
+
+  function applyQuickView() {
+    if (quickViewMode === "month") {
+      const today = new Date();
+      const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+      setFrom(toDateKey(monthStart));
+      setTo(toDateKey(today));
+      return;
+    }
+
+    const selectedRange = weekRanges.find((range) => range.value === selectedWeek) ?? weekRanges[0];
+    setFrom(selectedRange.from);
+    setTo(selectedRange.to);
   }
 
   async function markReviewed() {
@@ -258,7 +324,7 @@ export default function SafeLedgerDashboardPage() {
       </div>
 
       <div className="rounded-xl border border-cyan-400/30 bg-[#0b1220] p-4">
-        <div className="grid gap-3 md:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-5">
           <DatePicker label="Start Date" value={from} onChange={setFrom} max={to} />
           <DatePicker label="End Date" value={to} onChange={setTo} min={from} />
           <label className="flex flex-col gap-1 text-sm">
@@ -274,6 +340,35 @@ export default function SafeLedgerDashboardPage() {
               ))}
             </select>
           </label>
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="text-slate-300">Quick View</span>
+            <div className="flex items-center gap-2">
+              <select
+                className="rounded-md border border-cyan-400/30 bg-slate-900/60 px-2 py-1.5"
+                value={quickViewMode}
+                onChange={(e) => setQuickViewMode(e.target.value as "week" | "month")}
+              >
+                <option value="week">Weekly (Current Month)</option>
+                <option value="month">Month to Date</option>
+              </select>
+              {quickViewMode === "week" && (
+                <select
+                  className="rounded-md border border-cyan-400/30 bg-slate-900/60 px-2 py-1.5"
+                  value={selectedWeek}
+                  onChange={(e) => setSelectedWeek(e.target.value)}
+                >
+                  {weekRanges.map((range) => (
+                    <option key={range.value} value={range.value}>
+                      {range.label}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <Button className="bg-purple-600 text-white hover:bg-purple-700" onClick={applyQuickView}>
+                Apply
+              </Button>
+            </div>
+          </div>
           <label className="flex items-center gap-2 self-end pb-1 text-sm">
             <input type="checkbox" checked={showIssuesOnly} onChange={(e) => setShowIssuesOnly(e.target.checked)} />
             Show Issues Only
