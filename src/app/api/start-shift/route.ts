@@ -172,8 +172,12 @@ export async function POST(req: Request) {
     let matchedSchedule: { id: string; shift_type: ShiftType } | null = null;
     let bestWithinWindowScore: number | null = null;
     let nearestSchedule: { id: string; shift_type: ShiftType; score: number } | null = null;
+    let doubleSchedule: { id: string; shift_type: ShiftType } | null = null;
     if (plannedMinutes != null && scheduledRows?.length) {
       for (const row of scheduledRows) {
+        if (!doubleSchedule && row.shift_type === "double") {
+          doubleSchedule = { id: row.id, shift_type: "double" };
+        }
         const [h, m] = row.scheduled_start.split(":");
         const schedMinutes = Number(h) * 60 + Number(m);
         const diff = plannedMinutes - schedMinutes;
@@ -191,6 +195,10 @@ export async function POST(req: Request) {
     } else if (scheduledRows?.length) {
       const first = scheduledRows[0];
       nearestSchedule = { id: first.id, shift_type: first.shift_type as ShiftType, score: 0 };
+      const foundDouble = scheduledRows.find(row => row.shift_type === "double");
+      if (foundDouble) {
+        doubleSchedule = { id: foundDouble.id, shift_type: "double" };
+      }
     }
 
     const isWithinScheduledWindow = Boolean(matchedSchedule);
@@ -208,7 +216,18 @@ export async function POST(req: Request) {
       );
     }
 
-    let resolvedShiftType: ShiftType = nearestSchedule?.shift_type ?? "other";
+    let resolvedShiftType: ShiftType =
+      matchedSchedule?.shift_type ??
+      doubleSchedule?.shift_type ??
+      nearestSchedule?.shift_type ??
+      "other";
+
+    const resolvedScheduleId =
+      matchedSchedule?.id ??
+      doubleSchedule?.id ??
+      nearestSchedule?.id ??
+      null;
+
     if (!hasScheduledShift) {
       if (plannedCst) {
         const { data: templates } = await supabaseServer
@@ -326,7 +345,7 @@ export async function POST(req: Request) {
           store_id: store.id,
           profile_id: body.profileId,
           shift_type: resolvedShiftType,
-          schedule_shift_id: nearestSchedule?.id ?? null,
+          schedule_shift_id: resolvedScheduleId,
           shift_source: hasScheduledShift ? "scheduled" : "manual",
           // Override is now reserved for over-scheduled or >13h at clock-out.
           requires_override: false,

@@ -494,11 +494,18 @@ export default function ShiftPage() {
 
   const shiftType = state?.shift.shift_type;
   const shiftBusinessDate = state?.shift?.planned_start_at ? getCstDateKey(state.shift.planned_start_at) : null;
+  const currentCstDateKey = getCstDateKey(new Date().toISOString());
+  const isAfterBusinessDateMidnight = Boolean(
+    shiftBusinessDate &&
+    currentCstDateKey &&
+    currentCstDateKey !== shiftBusinessDate
+  );
   const safeCloseoutToken = managerAccessToken ?? pinToken;
   const splitSafeCloseoutFromClockoutFlow = Boolean(
     (shiftType === "close" || shiftType === "double") &&
     salesContext?.salesTrackingEnabled &&
-    salesContext?.isRolloverNight
+    salesContext?.isRolloverNight &&
+    isAfterBusinessDateMidnight
   );
 
   const safeCloseout = useSafeCloseout({
@@ -509,6 +516,12 @@ export default function ShiftPage() {
     canUseSafeCloseout: shiftType === "close" || shiftType === "double",
     splitFromClockoutFlow: splitSafeCloseoutFromClockoutFlow,
   });
+
+  const requiresSafeCloseoutBeforeClockOut = Boolean(
+    (shiftType === "close" || shiftType === "double") &&
+    safeCloseout.isEnabled &&
+    !safeCloseout.isPassed
+  );
 
   useEffect(() => {
     if (!safeCloseoutFlash) return;
@@ -1168,18 +1181,20 @@ export default function ShiftPage() {
               Perform Safe Closeout
             </button>
           )}
+          {requiresSafeCloseoutBeforeClockOut && (
+            <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              ⚠️ Complete Safe Closeout before clocking out.
+            </div>
+          )}
           <button
             className="w-full rounded bg-black text-white py-2 disabled:opacity-50"
             disabled={
               (shiftType !== "other" && remainingRequired > 0) ||
               pendingMessages.length > 0 ||
-              pendingTasks.length > 0
+              pendingTasks.length > 0 ||
+              requiresSafeCloseoutBeforeClockOut
             }
             onClick={() => {
-              if (safeCloseout.shouldGateClockOut) {
-                safeCloseout.openWizard("gate");
-                return;
-              }
               setShowClockOut(true);
             }}
           >
