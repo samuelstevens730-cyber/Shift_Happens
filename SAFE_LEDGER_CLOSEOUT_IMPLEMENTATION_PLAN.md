@@ -140,7 +140,8 @@ Goal: two pastes per week per store.
 
 - `safe_deposit_tolerance_cents int default 100` (±$1)
 - `safe_denom_tolerance_cents int default 0` (usually exact)
-- `safe_photo_retention_days int default 45`
+- `safe_photo_retention_days int default 38`
+- `safe_photo_purge_day_of_month int default 8` (optional calendar purge mode)
 - `safe_ledger_enabled boolean default false`
 
 ### 4.3 Canonical status model (single source of truth)
@@ -334,7 +335,11 @@ On Safe Ledger page:
 - Employee routes use `authenticateShiftRequest`
 - Manager routes enforce managed store scope
 - Store photo paths only; no public bucket listing
-- V1 purge timing: `created_at + safe_photo_retention_days` (month-close dependency deferred to Phase 2)
+- V1 purge defaults to calendar mode:
+  - On the 8th of each month, purge media from the full previous month
+  - This provides a built-in reconciliation buffer after month end
+- If calendar purge mode is disabled later, fallback to rolling retention:
+  - `created_at + safe_photo_retention_days` (default 38)
 - Keep audit metadata for manager edits
 
 Photo purge implementation rule:
@@ -410,12 +415,19 @@ Timezone:
 
 ## 13) Open Decisions (confirm before build)
 
-1. One closeout per store/day, or per close shift with daily rollup?
-2. Coin handling detail (single `coin_cents` vs detailed coin breakdown)?
-   - V1 default: single `coin_cents`
-3. Warn vs fail thresholds by store (default OK, custom allowed)?
-4. Month close authority: manager-only or admin-only?
-5. Photo purge timing: fixed days after close vs configurable per store?
+Resolved decisions:
+
+1. Closeout granularity:
+   - One closeout per store, per day (canonical row).
+2. Coin handling:
+   - V1 uses single `coin_cents`.
+3. Warn/fail thresholds:
+   - Configurable per store via settings.
+4. Month-close authority:
+   - Enabled (authority model to follow existing admin/manager scope rules in this codebase).
+5. Photo purge policy:
+   - Default monthly purge on the 8th for previous month media.
+   - Retention settings remain configurable per store for future adjustments.
 
 ---
 
