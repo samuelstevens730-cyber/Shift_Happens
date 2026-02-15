@@ -11,8 +11,11 @@ export function Dialog({
 }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 p-4" onClick={() => onOpenChange(false)}>
-      <div className="mx-auto mt-10 w-full max-w-4xl rounded-xl bg-white text-slate-900 shadow-xl" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => onOpenChange(false)}>
+      <div
+        className="mx-auto mt-10 w-full max-w-4xl rounded-xl border border-cyan-400/30 bg-[#0b1220] text-slate-100 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         {children}
       </div>
     </div>
@@ -24,7 +27,7 @@ export function DialogContent({ children }: { children: ReactNode }) {
 }
 
 export function DialogHeader({ children }: { children: ReactNode }) {
-  return <div className="mb-4 border-b border-slate-200 pb-3">{children}</div>;
+  return <div className="mb-4 border-b border-cyan-400/20 pb-3">{children}</div>;
 }
 
 export function DialogTitle({ children }: { children: ReactNode }) {
@@ -32,5 +35,5 @@ export function DialogTitle({ children }: { children: ReactNode }) {
 }
 
 export function DialogDescription({ children }: { children: ReactNode }) {
-  return <div className="text-sm text-slate-600">{children}</div>;
+  return <div className="text-sm text-slate-300">{children}</div>;
 }
