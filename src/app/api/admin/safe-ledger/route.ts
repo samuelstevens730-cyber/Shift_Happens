@@ -7,8 +7,6 @@ type SafeCloseoutStatusFilter = "pass" | "warn" | "fail";
 
 type CloseoutJoinRow = SafeCloseoutRow & {
   profile: {
-    first_name?: string | null;
-    last_name?: string | null;
     name?: string | null;
   } | null;
   store: {
@@ -31,10 +29,6 @@ function normalizeStatus(value: string | null): SafeCloseoutStatusFilter | null 
 
 function fullName(profile: CloseoutJoinRow["profile"]): string | null {
   if (!profile) return null;
-  const first = (profile.first_name ?? "").trim();
-  const last = (profile.last_name ?? "").trim();
-  const combined = `${first} ${last}`.trim();
-  if (combined) return combined;
   const fallback = (profile.name ?? "").trim();
   return fallback || null;
 }
@@ -81,7 +75,7 @@ export async function GET(req: Request) {
       .from("safe_closeouts")
       .select(`
         *,
-        profile:profile_id(first_name,last_name,name),
+        profile:profile_id(name),
         store:store_id(name)
       `)
       .in("store_id", managerStoreIds)
