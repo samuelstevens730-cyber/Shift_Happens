@@ -25,5 +25,5 @@ export function TableCell({ className = "", ...props }: TdHTMLAttributes<HTMLTab
 }
 
 export function TableContainer({ children }: { children: ReactNode }) {
-  return <div className="w-full overflow-auto rounded-md border border-slate-200 bg-white">{children}</div>;
+  return <div className="w-full overflow-auto rounded-md border border-cyan-400/30 bg-[#0b1220]">{children}</div>;
 }

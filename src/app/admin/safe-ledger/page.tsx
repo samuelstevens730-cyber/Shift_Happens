@@ -248,23 +248,23 @@ export default function SafeLedgerDashboardPage() {
   }
 
   return (
-    <div className="space-y-4 p-6">
+    <div className="space-y-4 p-6 text-slate-100">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <h1 className="text-2xl font-semibold">Safe Ledger Dashboard</h1>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => void copyText(buildSalesTsv(), "Copied Sales TSV")}>Copy Sales TSV</Button>
-          <Button variant="outline" onClick={() => void copyText(buildDenomTsv(), "Copied Denom TSV")}>Copy Denom TSV</Button>
+          <Button className="bg-purple-600 text-white hover:bg-purple-700" onClick={() => void copyText(buildSalesTsv(), "Copied Sales TSV")}>Copy Sales TSV</Button>
+          <Button className="bg-purple-600 text-white hover:bg-purple-700" onClick={() => void copyText(buildDenomTsv(), "Copied Denom TSV")}>Copy Denom TSV</Button>
         </div>
       </div>
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="rounded-xl border border-cyan-400/30 bg-[#0b1220] p-4">
         <div className="grid gap-3 md:grid-cols-4">
           <DatePicker label="Start Date" value={from} onChange={setFrom} max={to} />
           <DatePicker label="End Date" value={to} onChange={setTo} min={from} />
           <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-600">Store</span>
+            <span className="text-slate-300">Store</span>
             <select
-              className="rounded-md border border-slate-300 bg-white px-2 py-1.5"
+              className="rounded-md border border-cyan-400/30 bg-slate-900/60 px-2 py-1.5"
               value={storeId}
               onChange={(e) => setStoreId(e.target.value)}
             >
@@ -281,9 +281,9 @@ export default function SafeLedgerDashboardPage() {
         </div>
       </div>
 
-      {error && <div className="rounded border border-red-300 bg-red-50 p-2 text-sm text-red-700">{error}</div>}
+      {error && <div className="rounded border border-red-400/50 bg-red-900/30 p-2 text-sm text-red-200">{error}</div>}
       {loading ? (
-        <div className="rounded border border-slate-200 bg-white p-4 text-sm text-slate-600">Loading safe ledger...</div>
+        <div className="rounded border border-cyan-400/30 bg-[#0b1220] p-4 text-sm text-slate-300">Loading safe ledger...</div>
       ) : (
         <TableContainer>
           <Table>
@@ -312,7 +312,7 @@ export default function SafeLedgerDashboardPage() {
               ))}
               {filteredRows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-slate-500">No closeouts for selected filters.</TableCell>
+                  <TableCell colSpan={6} className="text-center text-slate-400">No closeouts for selected filters.</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -330,28 +330,28 @@ export default function SafeLedgerDashboardPage() {
           </DialogHeader>
 
           {detailLoading || !detail ? (
-            <div className="text-sm text-slate-600">Loading detail...</div>
+            <div className="text-sm text-slate-300">Loading detail...</div>
           ) : (
             <div className="space-y-4">
               <div className="grid gap-3 md:grid-cols-3">
-                <div className="rounded border border-slate-200 p-3 text-sm">
+                <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
                   <div className="font-medium">Cash Sales</div>
                   <div>{money(detail.closeout.cash_sales_cents)}</div>
                 </div>
-                <div className="rounded border border-slate-200 p-3 text-sm">
+                <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
                   <div className="font-medium">Card Sales</div>
                   <div>{money(detail.closeout.card_sales_cents)}</div>
                 </div>
-                <div className="rounded border border-slate-200 p-3 text-sm">
+                <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
                   <div className="font-medium">Drawer Count (Float)</div>
                   <div>{money(detail.closeout.drawer_count_cents)}</div>
                 </div>
               </div>
 
-              <div className="rounded border border-slate-200 p-3 text-sm">
+              <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
                 <div className="mb-2 font-medium">Expenses</div>
                 {detail.expenses.length === 0 ? (
-                  <div className="text-slate-500">No expenses.</div>
+                  <div className="text-slate-400">No expenses.</div>
                 ) : (
                   <ul className="space-y-1">
                     {detail.expenses.map((expense) => (
@@ -365,29 +365,29 @@ export default function SafeLedgerDashboardPage() {
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded border border-slate-200 p-3 text-sm">
+                <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
                   <div className="font-medium">Expected Deposit</div>
                   <div>{money(detail.closeout.expected_deposit_cents)}</div>
                 </div>
-                <div className="rounded border border-slate-200 p-3 text-sm">
+                <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
                   <div className="font-medium">Actual Deposit</div>
                   <div>{money(detail.closeout.actual_deposit_cents)}</div>
                 </div>
               </div>
 
-              <div className="rounded border border-slate-200 p-3 text-sm">
+              <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
                 <div className="mb-2 font-medium">Evidence</div>
                 {detail.photos.length === 0 ? (
-                  <div className="text-slate-500">No photos uploaded.</div>
+                  <div className="text-slate-400">No photos uploaded.</div>
                 ) : (
                   <div className="grid gap-3 md:grid-cols-2">
                     {detail.photos.map((photo) => (
                       <div key={photo.id} className="space-y-1">
-                        <div className="text-xs uppercase text-slate-500">{photo.photo_type.replace("_", " ")}</div>
+                        <div className="text-xs uppercase text-slate-400">{photo.photo_type.replace("_", " ")}</div>
                         {photo.signed_url ? (
-                          <img src={photo.signed_url} alt={photo.photo_type} className="h-48 w-full rounded border border-slate-200 object-cover" />
+                          <img src={photo.signed_url} alt={photo.photo_type} className="h-48 w-full rounded border border-cyan-400/30 object-cover" />
                         ) : (
-                          <div className="rounded border border-slate-200 p-3 text-xs text-slate-500">Photo unavailable.</div>
+                          <div className="rounded border border-cyan-400/30 p-3 text-xs text-slate-400">Photo unavailable.</div>
                         )}
                       </div>
                     ))}
@@ -396,8 +396,8 @@ export default function SafeLedgerDashboardPage() {
               </div>
 
               <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setSelectedId(null)}>Close</Button>
-                <Button onClick={() => void markReviewed()} disabled={reviewing}>
+                <Button className="border border-cyan-400/40 bg-slate-900/60 text-slate-100 hover:bg-slate-800" onClick={() => setSelectedId(null)}>Close</Button>
+                <Button className="bg-emerald-500 text-black hover:bg-emerald-400" onClick={() => void markReviewed()} disabled={reviewing}>
                   {reviewing ? "Saving..." : "Mark as Reviewed"}
                 </Button>
               </div>
@@ -407,7 +407,7 @@ export default function SafeLedgerDashboardPage() {
       </Dialog>
 
       {toast && (
-        <div className="fixed right-4 top-4 z-50 rounded border border-slate-300 bg-white px-3 py-2 text-sm shadow">
+        <div className="fixed right-4 top-4 z-50 rounded border border-cyan-400/40 bg-[#0b1220] px-3 py-2 text-sm text-slate-100 shadow">
           {toast}
         </div>
       )}
