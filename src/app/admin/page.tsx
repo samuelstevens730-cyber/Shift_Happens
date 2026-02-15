@@ -154,6 +154,17 @@ export default function AdminIndex() {
             </p>
           </Link>
 
+          {/* Safe Ledger - audit closeouts, evidence, and review workflow */}
+          <Link href="/admin/safe-ledger" className="tile">
+            <div className="flex items-center gap-2">
+              <span className="tile-dot" />
+              <div className="text-lg font-medium">Safe Ledger</div>
+            </div>
+            <p className="mt-2 text-sm muted">
+              Audit safe closeouts, view evidence, and export ledger data.
+            </p>
+          </Link>
+
           {/* Manual Shift Closures - review employee-ended shifts */}
           <Link href="/admin/shifts?review=manual" className="tile">
             <div className="flex items-center gap-2">

@@ -89,6 +89,17 @@ export async function GET(
     if (expensesRes.error) return NextResponse.json({ error: expensesRes.error.message }, { status: 500 });
     if (photosRes.error) return NextResponse.json({ error: photosRes.error.message }, { status: 500 });
 
+    const photosWithUrls = await Promise.all(
+      (photosRes.data ?? []).map(async (photo) => {
+        if (!photo.storage_path) return { ...photo, signed_url: null };
+        const { data: signed, error: signErr } = await supabaseServer.storage
+          .from("safe-photos")
+          .createSignedUrl(photo.storage_path, 60 * 30);
+        if (signErr) return { ...photo, signed_url: null };
+        return { ...photo, signed_url: signed.signedUrl };
+      })
+    );
+
     return NextResponse.json({
       closeout: {
         ...closeout,
@@ -96,7 +107,7 @@ export async function GET(
         store_name: closeout.store?.name ?? null,
       },
       expenses: expensesRes.data ?? [],
-      photos: photosRes.data ?? [],
+      photos: photosWithUrls,
     });
   } catch (e: unknown) {
     return NextResponse.json(
