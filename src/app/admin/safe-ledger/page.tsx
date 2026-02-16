@@ -22,6 +22,7 @@ type ListRow = {
   cash_sales_cents: number;
   card_sales_cents: number;
   other_sales_cents: number;
+  expense_total_cents: number;
   variance_cents: number;
   expected_deposit_cents: number;
   actual_deposit_cents: number;
@@ -443,7 +444,7 @@ export default function SafeLedgerDashboardPage() {
         });
       }
       const summary = byStore.get(key)!;
-      summary.expectedTotalCents += row.expected_deposit_cents;
+      summary.expectedTotalCents += row.cash_sales_cents - row.expense_total_cents;
       summary.actualTotalCents += row.denom_total_cents;
       summary.denomTotalCents += row.denom_total_cents;
       summary.denoms["1"] += Number(row.denoms_jsonb?.["1"] ?? 0);

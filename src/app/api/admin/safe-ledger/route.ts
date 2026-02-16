@@ -167,7 +167,27 @@ export async function GET(req: Request) {
       is_historical_backfill: row.is_historical_backfill,
     }));
 
-    return NextResponse.json({ rows });
+    const closeoutIds = rows.map((row) => row.id);
+    const expenseTotalByCloseoutId = new Map<string, number>();
+    if (closeoutIds.length > 0) {
+      const { data: expenses, error: expensesErr } = await supabaseServer
+        .from("safe_closeout_expenses")
+        .select("closeout_id, amount_cents")
+        .in("closeout_id", closeoutIds)
+        .returns<Array<{ closeout_id: string; amount_cents: number }>>();
+      if (expensesErr) return NextResponse.json({ error: expensesErr.message }, { status: 500 });
+      for (const expense of expenses ?? []) {
+        const prev = expenseTotalByCloseoutId.get(expense.closeout_id) ?? 0;
+        expenseTotalByCloseoutId.set(expense.closeout_id, prev + Number(expense.amount_cents ?? 0));
+      }
+    }
+
+    return NextResponse.json({
+      rows: rows.map((row) => ({
+        ...row,
+        expense_total_cents: expenseTotalByCloseoutId.get(row.id) ?? 0,
+      })),
+    });
   } catch (e: unknown) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Failed to load safe ledger." },
