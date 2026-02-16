@@ -449,15 +449,15 @@ export async function GET(req: Request) {
           .is("manual_closed_review_status", null),
         supabaseServer
           .from("shift_drawer_counts")
-          .select("id,shift!inner(store_id)")
-          .eq("shift.store_id", sid)
+          .select("id,shifts!inner(store_id)")
+          .eq("shifts.store_id", sid)
           .gte("counted_at", rangeFromIso)
           .lte("counted_at", rangeToIso)
           .returns<Array<{ id: string }>>(),
         supabaseServer
           .from("shift_drawer_counts")
-          .select("id,shift!inner(store_id)")
-          .eq("shift.store_id", sid)
+          .select("id,shifts!inner(store_id)")
+          .eq("shifts.store_id", sid)
           .eq("out_of_threshold", true)
           .gte("counted_at", rangeFromIso)
           .lte("counted_at", rangeToIso)
@@ -519,8 +519,8 @@ export async function GET(req: Request) {
           .returns<Array<{ schedule_shift_id: string }>>(),
         supabaseServer
           .from("cleaning_task_completions")
-          .select("status,shift!inner(store_id)")
-          .eq("shift.store_id", sid)
+          .select("status,shifts!inner(store_id)")
+          .eq("shifts.store_id", sid)
           .gte("completed_at", rangeFromIso)
           .lte("completed_at", rangeToIso)
           .returns<Array<{ status: "completed" | "skipped" }>>(),

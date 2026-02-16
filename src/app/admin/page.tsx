@@ -94,6 +94,17 @@ export default function AdminIndex() {
         </header>
 
         <section className="grid gap-4 sm:grid-cols-2">
+          {/* Command Center Dashboard - primary at-a-glance operations view */}
+          <Link href="/admin/dashboard" className="tile">
+            <div className="flex items-center gap-2">
+              <span className="tile-dot" />
+              <div className="text-lg font-medium">Command Center</div>
+            </div>
+            <p className="mt-2 text-sm muted">
+              Live dashboard for sales, health, and priority actions.
+            </p>
+          </Link>
+
           {/* Requests - approval queue for swaps, time off, timesheets */}
           <Link href="/admin/requests" className="tile">
             <div className="flex items-center gap-2">
