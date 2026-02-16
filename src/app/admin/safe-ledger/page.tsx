@@ -297,29 +297,43 @@ export default function SafeLedgerDashboardPage() {
     return rows.filter((r) => r.requires_manager_review || r.status === "warn" || r.status === "fail");
   }, [rows, showIssuesOnly]);
 
-  const reconciliation = useMemo(() => {
-    if (!detail?.closeout) return null;
-    const denoms = detail.closeout.denoms_jsonb ?? {};
-    const denomRows: Array<{ note: "1" | "5" | "10" | "20" | "50" | "100"; qty: number; amountCents: number }> = [
-      { note: "1", qty: Number(denoms["1"] ?? 0), amountCents: Number(denoms["1"] ?? 0) * 100 },
-      { note: "5", qty: Number(denoms["5"] ?? 0), amountCents: Number(denoms["5"] ?? 0) * 500 },
-      { note: "10", qty: Number(denoms["10"] ?? 0), amountCents: Number(denoms["10"] ?? 0) * 1000 },
-      { note: "20", qty: Number(denoms["20"] ?? 0), amountCents: Number(denoms["20"] ?? 0) * 2000 },
-      { note: "50", qty: Number(denoms["50"] ?? 0), amountCents: Number(denoms["50"] ?? 0) * 5000 },
-      { note: "100", qty: Number(denoms["100"] ?? 0), amountCents: Number(denoms["100"] ?? 0) * 10000 },
-    ];
-    const shouldBeInSafeCents = detail.closeout.expected_deposit_cents + (detail.closeout.drawer_count_cents ?? 0);
-    const billsCountedCents = detail.closeout.denom_total_cents;
-    const countedEnteredCents = detail.closeout.actual_deposit_cents;
-    const safeVarianceCents = billsCountedCents - shouldBeInSafeCents;
-    return {
-      denomRows,
-      shouldBeInSafeCents,
-      billsCountedCents,
-      countedEnteredCents,
-      safeVarianceCents,
-    };
-  }, [detail]);
+  const storeReconciliationSummaries = useMemo(() => {
+    const byStore = new Map<string, {
+      storeId: string;
+      storeName: string;
+      expectedTotalCents: number;
+      actualTotalCents: number;
+      denomTotalCents: number;
+      denoms: Record<"1" | "2" | "5" | "10" | "20" | "50" | "100", number>;
+    }>();
+
+    for (const row of filteredRows) {
+      const key = row.store_id;
+      if (!byStore.has(key)) {
+        byStore.set(key, {
+          storeId: row.store_id,
+          storeName: (row.store_name ?? "Unknown Store").toUpperCase(),
+          expectedTotalCents: 0,
+          actualTotalCents: 0,
+          denomTotalCents: 0,
+          denoms: { "1": 0, "2": 0, "5": 0, "10": 0, "20": 0, "50": 0, "100": 0 },
+        });
+      }
+      const summary = byStore.get(key)!;
+      summary.expectedTotalCents += row.expected_deposit_cents;
+      summary.actualTotalCents += row.actual_deposit_cents;
+      summary.denomTotalCents += row.denom_total_cents;
+      summary.denoms["1"] += Number(row.denoms_jsonb?.["1"] ?? 0);
+      summary.denoms["2"] += Number(row.denoms_jsonb?.["2"] ?? 0);
+      summary.denoms["5"] += Number(row.denoms_jsonb?.["5"] ?? 0);
+      summary.denoms["10"] += Number(row.denoms_jsonb?.["10"] ?? 0);
+      summary.denoms["20"] += Number(row.denoms_jsonb?.["20"] ?? 0);
+      summary.denoms["50"] += Number(row.denoms_jsonb?.["50"] ?? 0);
+      summary.denoms["100"] += Number(row.denoms_jsonb?.["100"] ?? 0);
+    }
+
+    return Array.from(byStore.values()).sort((a, b) => a.storeName.localeCompare(b.storeName));
+  }, [filteredRows]);
 
   async function copyText(text: string, successMsg: string) {
     try {
@@ -512,6 +526,44 @@ export default function SafeLedgerDashboardPage() {
           Show Issues Only
         </label>
       </div>
+      <div className="rounded-xl border border-cyan-400/30 bg-[#0b1220] p-4">
+        <div className="mb-3 text-sm font-semibold text-slate-200">Overall Store Reconciliation (Filtered Results)</div>
+        {storeReconciliationSummaries.length === 0 ? (
+          <div className="text-sm text-slate-400">No closeouts in current filter range.</div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {storeReconciliationSummaries.map((summary) => {
+              const safeVariance = summary.denomTotalCents - summary.expectedTotalCents;
+              return (
+                <div key={summary.storeId} className="rounded border border-cyan-400/30 bg-slate-900/40 p-3">
+                  <div className="mb-2 text-sm font-semibold text-cyan-200">{summary.storeName}</div>
+                  <div className="grid gap-2 text-sm md:grid-cols-2">
+                    <div>
+                      <div className="text-xs uppercase text-slate-400">Expected Total</div>
+                      <div>{money(summary.expectedTotalCents)}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase text-slate-400">Actual Total</div>
+                      <div>{money(summary.actualTotalCents)}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase text-slate-400">Denomination Total</div>
+                      <div>{money(summary.denomTotalCents)}</div>
+                    </div>
+                    <div className={`rounded border px-2 py-1 ${varianceTone(Math.abs(safeVariance))}`}>
+                      <div className="text-xs uppercase">Variance (Denom vs Expected)</div>
+                      <div className="font-semibold">{money(safeVariance)}</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-xs text-slate-300">
+                    Denomination count: 1({summary.denoms["1"]}) 2({summary.denoms["2"]}) 5({summary.denoms["5"]}) 10({summary.denoms["10"]}) 20({summary.denoms["20"]}) 50({summary.denoms["50"]}) 100({summary.denoms["100"]})
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {error && <div className="rounded border border-red-400/50 bg-red-900/30 p-2 text-sm text-red-200">{error}</div>}
       {loading ? (
@@ -677,50 +729,6 @@ export default function SafeLedgerDashboardPage() {
                   )}
                 </div>
               </div>
-              {reconciliation && (
-                <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
-                  <div className="mb-2 font-medium">Safe Reconciliation</div>
-                  <div className="grid gap-3 md:grid-cols-4">
-                    <div className="rounded border border-cyan-400/30 bg-slate-900/60 p-2">
-                      <div className="text-xs uppercase text-slate-400">Should Be In Safe</div>
-                      <div className="text-base font-semibold">{money(reconciliation.shouldBeInSafeCents)}</div>
-                      <div className="text-xs text-slate-400">Expected Deposit + Float</div>
-                    </div>
-                    <div className="rounded border border-cyan-400/30 bg-slate-900/60 p-2">
-                      <div className="text-xs uppercase text-slate-400">Bills Counted In Safe</div>
-                      <div className="text-base font-semibold">{money(reconciliation.billsCountedCents)}</div>
-                    </div>
-                    <div className="rounded border border-cyan-400/30 bg-slate-900/60 p-2">
-                      <div className="text-xs uppercase text-slate-400">Counted Total Entered</div>
-                      <div className="text-base font-semibold">{money(reconciliation.countedEnteredCents)}</div>
-                    </div>
-                    <div className={`rounded border p-2 ${varianceTone(Math.abs(reconciliation.safeVarianceCents))}`}>
-                      <div className="text-xs uppercase">Variance (Bills vs Should)</div>
-                      <div className="text-base font-semibold">{money(reconciliation.safeVarianceCents)}</div>
-                    </div>
-                  </div>
-                  <div className="mt-3 overflow-x-auto rounded border border-cyan-400/30">
-                    <table className="w-full text-left text-xs">
-                      <thead className="bg-slate-900/80 text-slate-300">
-                        <tr>
-                          <th className="px-2 py-1 font-medium">Denom</th>
-                          <th className="px-2 py-1 font-medium">Qty</th>
-                          <th className="px-2 py-1 font-medium">Amount</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {reconciliation.denomRows.map((row) => (
-                          <tr key={row.note} className="border-t border-cyan-400/20">
-                            <td className="px-2 py-1">${row.note}</td>
-                            <td className="px-2 py-1">{row.qty}</td>
-                            <td className="px-2 py-1">{money(row.amountCents)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
               {isEditing && (
                 <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
                   <div className="font-medium">Status</div>
