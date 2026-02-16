@@ -69,9 +69,9 @@ function parseMoneyInputToCents(value: string): number | null {
   return Math.round(parsed * 100);
 }
 
-function varianceTone(absVarianceCents: number): string {
-  if (absVarianceCents === 0) return "border-emerald-400/40 bg-emerald-900/20 text-emerald-200";
-  if (absVarianceCents <= 100) return "border-amber-400/40 bg-amber-900/20 text-amber-200";
+function varianceTone(varianceCents: number): string {
+  if (Math.abs(varianceCents) <= 300) return "border-emerald-400/40 bg-emerald-900/20 text-emerald-200";
+  if (varianceCents > 0) return "border-sky-400/40 bg-sky-900/20 text-sky-200";
   return "border-red-400/40 bg-red-900/20 text-red-200";
 }
 
@@ -548,7 +548,7 @@ export default function SafeLedgerDashboardPage() {
                       <div>{money(summary.actualTotalCents)}</div>
                       <div className="text-xs text-slate-500">Sum of Denomination Counts</div>
                     </div>
-                    <div className={`rounded border px-2 py-1 ${varianceTone(Math.abs(safeVariance))}`}>
+                    <div className={`rounded border px-2 py-1 ${varianceTone(safeVariance)}`}>
                       <div className="text-xs uppercase">Variance (Actual - Expected)</div>
                       <div className="font-semibold">{money(safeVariance)}</div>
                     </div>
