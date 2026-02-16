@@ -540,6 +540,12 @@ export async function POST(req: Request) {
       requires_override: requiresOverride,
     };
 
+    // Keep legacy rows (schedule_shift_id present but shift_source null/manual)
+    // from being treated as unscheduled by DB fallback clock-window trigger.
+    if (shift.schedule_shift_id) {
+      updatePayload.shift_source = "scheduled";
+    }
+
     if (overScheduledDuration) {
       updatePayload.override_note = "Clock-out exceeded scheduled hours";
     }
