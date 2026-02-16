@@ -94,20 +94,26 @@ function statusChip(row: ListRow) {
   const historicalBadge = row.is_historical_backfill ? (
     <span className="rounded-full border border-sky-300 bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700">HISTORICAL</span>
   ) : null;
+  const denomMismatchCents = row.actual_deposit_cents - row.denom_total_cents;
+  const denomMismatchBadge = denomMismatchCents !== 0 ? (
+    <span className="rounded-full border border-fuchsia-300 bg-fuchsia-100 px-2 py-0.5 text-xs font-semibold text-fuchsia-700">
+      DENOM MISMATCH {money(denomMismatchCents)}
+    </span>
+  ) : null;
 
   if (row.requires_manager_review) {
-    return <div className="flex flex-wrap items-center gap-1"><span className="rounded-full border border-orange-300 bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-700">REVIEW NEEDED</span>{historicalBadge}</div>;
+    return <div className="flex flex-wrap items-center gap-1"><span className="rounded-full border border-orange-300 bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-700">REVIEW NEEDED</span>{denomMismatchBadge}{historicalBadge}</div>;
   }
   if (row.status === "pass") {
-    return <div className="flex flex-wrap items-center gap-1"><span className="rounded-full border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">PASS</span>{historicalBadge}</div>;
+    return <div className="flex flex-wrap items-center gap-1"><span className="rounded-full border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">PASS</span>{denomMismatchBadge}{historicalBadge}</div>;
   }
   if (row.status === "warn") {
-    return <div className="flex flex-wrap items-center gap-1"><span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">WARN {money(row.variance_cents)}</span>{historicalBadge}</div>;
+    return <div className="flex flex-wrap items-center gap-1"><span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">WARN {money(row.variance_cents)}</span>{denomMismatchBadge}{historicalBadge}</div>;
   }
   if (row.status === "fail") {
-    return <div className="flex flex-wrap items-center gap-1"><span className="rounded-full border border-red-300 bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">FAIL {money(row.variance_cents)}</span>{historicalBadge}</div>;
+    return <div className="flex flex-wrap items-center gap-1"><span className="rounded-full border border-red-300 bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">FAIL {money(row.variance_cents)}</span>{denomMismatchBadge}{historicalBadge}</div>;
   }
-  return <div className="flex flex-wrap items-center gap-1"><span className="rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">{row.status.toUpperCase()}</span>{historicalBadge}</div>;
+  return <div className="flex flex-wrap items-center gap-1"><span className="rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">{row.status.toUpperCase()}</span>{denomMismatchBadge}{historicalBadge}</div>;
 }
 
 function toDateKey(d: Date): string {
