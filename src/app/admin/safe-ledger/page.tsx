@@ -38,6 +38,7 @@ type ListRow = {
 };
 
 type Store = { id: string; name: string };
+type AdminUser = { id: string; name: string; active: boolean; storeIds: string[] };
 
 type DetailResponse = {
   closeout: ListRow & {
@@ -49,6 +50,20 @@ type DetailResponse = {
   };
   expenses: Array<{ id: string; amount_cents: number; category: string; note: string | null; created_at: string }>;
   photos: Array<{ id: string; photo_type: "deposit_required" | "pos_optional"; storage_path: string | null; signed_url: string | null }>;
+};
+
+type PhotoUploadInput = {
+  photo_type: "deposit_required" | "pos_optional";
+  storage_path: string;
+  thumb_path?: string | null;
+  purge_after?: string | null;
+};
+
+type ExpenseDraft = {
+  id?: string;
+  amount: string;
+  category: string;
+  note: string;
 };
 
 function money(cents: number | null | undefined): string {
@@ -115,6 +130,7 @@ export default function SafeLedgerDashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<ListRow[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [storeId, setStoreId] = useState<string>("all");
   const [from, setFrom] = useState<string>(() => {
     const d = new Date();
@@ -130,6 +146,13 @@ export default function SafeLedgerDashboardPage() {
   const [reviewing, setReviewing] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [savingAdd, setSavingAdd] = useState(false);
+  const [editDepositPhotoFile, setEditDepositPhotoFile] = useState<File | null>(null);
+  const [editPosPhotoFile, setEditPosPhotoFile] = useState<File | null>(null);
+  const [addDepositPhotoFile, setAddDepositPhotoFile] = useState<File | null>(null);
+  const [addPosPhotoFile, setAddPosPhotoFile] = useState<File | null>(null);
+  const [editExpenses, setEditExpenses] = useState<ExpenseDraft[]>([]);
   const [editForm, setEditForm] = useState({
     status: "pass",
     cashSales: "",
@@ -138,6 +161,32 @@ export default function SafeLedgerDashboardPage() {
     expectedDeposit: "",
     actualDeposit: "",
     drawerCount: "",
+    d100: "0",
+    d50: "0",
+    d20: "0",
+    d10: "0",
+    d5: "0",
+    d2: "0",
+    d1: "0",
+  });
+  const [addForm, setAddForm] = useState({
+    storeId: "",
+    profileId: "",
+    businessDate: toDateKey(new Date()),
+    cashSales: "",
+    cardSales: "",
+    otherSales: "0",
+    actualDeposit: "",
+    drawerCount: "200.00",
+    expenses: "0",
+    depositOverrideReason: "",
+    d100: "0",
+    d50: "0",
+    d20: "0",
+    d10: "0",
+    d5: "0",
+    d2: "0",
+    d1: "0",
   });
   const [quickViewMode, setQuickViewMode] = useState<"week" | "month">("week");
   const [selectedWeek, setSelectedWeek] = useState<string>("1");
@@ -211,6 +260,13 @@ export default function SafeLedgerDashboardPage() {
     }
   }
 
+  async function loadUsers(token: string) {
+    const res = await fetch("/api/admin/users", { headers: { Authorization: `Bearer ${token}` } });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json?.error || "Failed to load users.");
+    setUsers((json?.users ?? []) as AdminUser[]);
+  }
+
   async function loadRows(token: string) {
     const qs = new URLSearchParams({ from, to });
     if (storeId !== "all") qs.set("storeId", storeId);
@@ -232,6 +288,27 @@ export default function SafeLedgerDashboardPage() {
     setDetail(json as DetailResponse);
   }
 
+  async function uploadPhoto(token: string, file: File): Promise<string> {
+    const signedRes = await fetch("/api/admin/safe-ledger/upload-url", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        filename: file.name,
+        fileType: file.type || "image/jpeg",
+      }),
+    });
+    const signedJson = await signedRes.json();
+    if (!signedRes.ok) throw new Error(signedJson?.error || "Failed to create photo upload URL.");
+
+    const { path, token: uploadToken } = signedJson as { path: string; token: string };
+    const { error } = await supabase.storage.from("safe-photos").uploadToSignedUrl(path, uploadToken, file);
+    if (error) throw new Error(error.message);
+    return path;
+  }
+
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -240,7 +317,7 @@ export default function SafeLedgerDashboardPage() {
         setLoading(true);
         const token = await withToken();
         if (!token || !alive) return;
-        await Promise.all([loadStores(token), loadRows(token)]);
+        await Promise.all([loadStores(token), loadUsers(token), loadRows(token)]);
       } catch (e: unknown) {
         if (!alive) return;
         setError(e instanceof Error ? e.message : "Failed to load safe ledger.");
@@ -257,6 +334,9 @@ export default function SafeLedgerDashboardPage() {
     if (!selectedId) {
       setDetail(null);
       setIsEditing(false);
+      setEditDepositPhotoFile(null);
+      setEditPosPhotoFile(null);
+      setEditExpenses([]);
       return;
     }
     let alive = true;
@@ -289,13 +369,49 @@ export default function SafeLedgerDashboardPage() {
       expectedDeposit: toMoneyInput(detail.closeout.expected_deposit_cents),
       actualDeposit: toMoneyInput(detail.closeout.actual_deposit_cents),
       drawerCount: toMoneyInput(detail.closeout.drawer_count_cents),
+      d100: String(Number(detail.closeout.denoms_jsonb?.["100"] ?? 0)),
+      d50: String(Number(detail.closeout.denoms_jsonb?.["50"] ?? 0)),
+      d20: String(Number(detail.closeout.denoms_jsonb?.["20"] ?? 0)),
+      d10: String(Number(detail.closeout.denoms_jsonb?.["10"] ?? 0)),
+      d5: String(Number(detail.closeout.denoms_jsonb?.["5"] ?? 0)),
+      d2: String(Number(detail.closeout.denoms_jsonb?.["2"] ?? 0)),
+      d1: String(Number(detail.closeout.denoms_jsonb?.["1"] ?? 0)),
     });
+    setEditExpenses(
+      detail.expenses.map((expense) => ({
+        id: expense.id,
+        amount: toMoneyInput(expense.amount_cents),
+        category: expense.category,
+        note: expense.note ?? "",
+      }))
+    );
   }, [detail]);
 
   const filteredRows = useMemo(() => {
     if (!showIssuesOnly) return rows;
     return rows.filter((r) => r.requires_manager_review || r.status === "warn" || r.status === "fail");
   }, [rows, showIssuesOnly]);
+
+  const addFormUsers = useMemo(() => {
+    if (!addForm.storeId) return users;
+    return users.filter((user) => user.storeIds.includes(addForm.storeId));
+  }, [addForm.storeId, users]);
+
+  useEffect(() => {
+    if (!isAddOpen) return;
+    if (!addForm.storeId && stores.length > 0) {
+      setAddForm((prev) => ({ ...prev, storeId: stores[0].id }));
+    }
+  }, [isAddOpen, addForm.storeId, stores]);
+
+  useEffect(() => {
+    if (!isAddOpen || !addForm.storeId) return;
+    const validUsers = users.filter((user) => user.storeIds.includes(addForm.storeId));
+    if (validUsers.length === 0) return;
+    if (!validUsers.some((user) => user.id === addForm.profileId)) {
+      setAddForm((prev) => ({ ...prev, profileId: validUsers[0].id }));
+    }
+  }, [isAddOpen, addForm.storeId, addForm.profileId, users]);
 
   const storeReconciliationSummaries = useMemo(() => {
     const byStore = new Map<string, {
@@ -417,6 +533,30 @@ export default function SafeLedgerDashboardPage() {
     const expectedDepositCents = parseMoneyInputToCents(editForm.expectedDeposit);
     const actualDepositCents = parseMoneyInputToCents(editForm.actualDeposit);
     const drawerCountCents = editForm.drawerCount.trim() ? parseMoneyInputToCents(editForm.drawerCount) : null;
+    const denomValues = {
+      "100": Number(editForm.d100 || "0"),
+      "50": Number(editForm.d50 || "0"),
+      "20": Number(editForm.d20 || "0"),
+      "10": Number(editForm.d10 || "0"),
+      "5": Number(editForm.d5 || "0"),
+      "2": Number(editForm.d2 || "0"),
+      "1": Number(editForm.d1 || "0"),
+    };
+    const denomsInvalid = Object.values(denomValues).some((qty) => !Number.isInteger(qty) || qty < 0);
+    const expensePayload: Array<{ amount_cents: number; category: string; note?: string | null }> = [];
+    for (const expense of editExpenses) {
+      const amountCents = parseMoneyInputToCents(expense.amount);
+      const category = expense.category.trim();
+      if (amountCents == null || !category) {
+        setError("Each expense needs a valid amount and category.");
+        return;
+      }
+      expensePayload.push({
+        amount_cents: amountCents,
+        category,
+        note: expense.note.trim() || null,
+      });
+    }
 
     if (
       cashSalesCents == null ||
@@ -424,7 +564,8 @@ export default function SafeLedgerDashboardPage() {
       otherSalesCents == null ||
       expectedDepositCents == null ||
       actualDepositCents == null ||
-      (editForm.drawerCount.trim() && drawerCountCents == null)
+      (editForm.drawerCount.trim() && drawerCountCents == null) ||
+      denomsInvalid
     ) {
       setError("Edit values must be valid non-negative dollar amounts.");
       return;
@@ -434,6 +575,15 @@ export default function SafeLedgerDashboardPage() {
       setSavingEdit(true);
       const token = await withToken();
       if (!token) return;
+      const photosToAppend: PhotoUploadInput[] = [];
+      if (editDepositPhotoFile) {
+        const storagePath = await uploadPhoto(token, editDepositPhotoFile);
+        photosToAppend.push({ photo_type: "deposit_required", storage_path: storagePath });
+      }
+      if (editPosPhotoFile) {
+        const storagePath = await uploadPhoto(token, editPosPhotoFile);
+        photosToAppend.push({ photo_type: "pos_optional", storage_path: storagePath });
+      }
 
       const res = await fetch(`/api/admin/safe-ledger/${detail.closeout.id}`, {
         method: "PATCH",
@@ -449,6 +599,10 @@ export default function SafeLedgerDashboardPage() {
           expected_deposit_cents: expectedDepositCents,
           actual_deposit_cents: actualDepositCents,
           drawer_count_cents: drawerCountCents,
+          denoms_jsonb: denomValues,
+          expenses_replace: true,
+          expenses: expensePayload,
+          photos: photosToAppend,
         }),
       });
       const json = await res.json();
@@ -456,6 +610,8 @@ export default function SafeLedgerDashboardPage() {
 
       await Promise.all([loadRows(token), loadDetail(token, detail.closeout.id)]);
       setIsEditing(false);
+      setEditDepositPhotoFile(null);
+      setEditPosPhotoFile(null);
       setToast("Closeout updated.");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save closeout edits.");
@@ -464,11 +620,117 @@ export default function SafeLedgerDashboardPage() {
     }
   }
 
+  async function createManualCloseout() {
+    const cashSalesCents = parseMoneyInputToCents(addForm.cashSales);
+    const cardSalesCents = parseMoneyInputToCents(addForm.cardSales);
+    const otherSalesCents = parseMoneyInputToCents(addForm.otherSales);
+    const actualDepositCents = parseMoneyInputToCents(addForm.actualDeposit);
+    const drawerCountCents = parseMoneyInputToCents(addForm.drawerCount);
+    const expensesCents = parseMoneyInputToCents(addForm.expenses);
+
+    const denoms = {
+      "100": Number(addForm.d100 || "0"),
+      "50": Number(addForm.d50 || "0"),
+      "20": Number(addForm.d20 || "0"),
+      "10": Number(addForm.d10 || "0"),
+      "5": Number(addForm.d5 || "0"),
+      "2": Number(addForm.d2 || "0"),
+      "1": Number(addForm.d1 || "0"),
+    };
+
+    const denomInvalid = Object.values(denoms).some((qty) => !Number.isInteger(qty) || qty < 0);
+
+    if (
+      !addForm.storeId ||
+      !addForm.profileId ||
+      !addForm.businessDate ||
+      cashSalesCents == null ||
+      cardSalesCents == null ||
+      otherSalesCents == null ||
+      actualDepositCents == null ||
+      drawerCountCents == null ||
+      expensesCents == null ||
+      denomInvalid
+    ) {
+      setError("Fill all manual closeout fields with valid non-negative values.");
+      return;
+    }
+
+    try {
+      setSavingAdd(true);
+      const token = await withToken();
+      if (!token) return;
+
+      const photos: PhotoUploadInput[] = [];
+      if (addDepositPhotoFile) {
+        const storagePath = await uploadPhoto(token, addDepositPhotoFile);
+        photos.push({ photo_type: "deposit_required", storage_path: storagePath });
+      }
+      if (addPosPhotoFile) {
+        const storagePath = await uploadPhoto(token, addPosPhotoFile);
+        photos.push({ photo_type: "pos_optional", storage_path: storagePath });
+      }
+
+      const res = await fetch("/api/admin/safe-ledger", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          store_id: addForm.storeId,
+          profile_id: addForm.profileId,
+          business_date: addForm.businessDate,
+          cash_sales_cents: cashSalesCents,
+          card_sales_cents: cardSalesCents,
+          other_sales_cents: otherSalesCents,
+          actual_deposit_cents: actualDepositCents,
+          drawer_count_cents: drawerCountCents,
+          denoms_jsonb: denoms,
+          expenses: expensesCents > 0 ? [{ amount_cents: expensesCents, category: "manual_entry", note: "Manual admin entry" }] : [],
+          photos,
+          deposit_override_reason: addForm.depositOverrideReason.trim() || null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to create manual closeout.");
+
+      await loadRows(token);
+      setIsAddOpen(false);
+      setAddDepositPhotoFile(null);
+      setAddPosPhotoFile(null);
+      setAddForm((prev) => ({
+        ...prev,
+        businessDate: toDateKey(new Date()),
+        cashSales: "",
+        cardSales: "",
+        otherSales: "0",
+        actualDeposit: "",
+        drawerCount: "200.00",
+        expenses: "0",
+        depositOverrideReason: "",
+        d100: "0",
+        d50: "0",
+        d20: "0",
+        d10: "0",
+        d5: "0",
+        d2: "0",
+        d1: "0",
+      }));
+      setToast("Manual closeout added.");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to create manual closeout.");
+    } finally {
+      setSavingAdd(false);
+    }
+  }
+
   return (
     <div className="space-y-4 p-6 text-slate-100">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <h1 className="text-2xl font-semibold">Safe Ledger Dashboard</h1>
         <div className="flex items-center gap-2">
+          <Button className="bg-cyan-600 text-white hover:bg-cyan-700" onClick={() => setIsAddOpen(true)}>Add Manual Closeout</Button>
           <Button className="bg-purple-600 text-white hover:bg-purple-700" onClick={() => void copyText(buildSalesTsv(), "Copied Sales TSV")}>Copy Sales TSV</Button>
           <Button className="bg-purple-600 text-white hover:bg-purple-700" onClick={() => void copyText(buildDenomTsv(), "Copied Denom TSV")}>Copy Denom TSV</Button>
         </div>
@@ -687,7 +949,44 @@ export default function SafeLedgerDashboardPage() {
 
               <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
                 <div className="mb-2 font-medium">Expenses</div>
-                {detail.expenses.length === 0 ? (
+                {isEditing ? (
+                  <div className="space-y-2">
+                    {editExpenses.map((expense, idx) => (
+                      <div key={`${expense.id ?? "new"}-${idx}`} className="grid gap-2 md:grid-cols-12">
+                        <input
+                          className="md:col-span-3 rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                          placeholder="Amount ($)"
+                          value={expense.amount}
+                          onChange={(e) => setEditExpenses((prev) => prev.map((x, i) => (i === idx ? { ...x, amount: e.target.value } : x)))}
+                        />
+                        <input
+                          className="md:col-span-3 rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                          placeholder="Category"
+                          value={expense.category}
+                          onChange={(e) => setEditExpenses((prev) => prev.map((x, i) => (i === idx ? { ...x, category: e.target.value } : x)))}
+                        />
+                        <input
+                          className="md:col-span-5 rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                          placeholder="Note (optional)"
+                          value={expense.note}
+                          onChange={(e) => setEditExpenses((prev) => prev.map((x, i) => (i === idx ? { ...x, note: e.target.value } : x)))}
+                        />
+                        <Button
+                          className="md:col-span-1 bg-slate-700 text-slate-100 hover:bg-slate-600"
+                          onClick={() => setEditExpenses((prev) => prev.filter((_, i) => i !== idx))}
+                        >
+                          X
+                        </Button>
+                      </div>
+                    ))}
+                    <Button
+                      className="bg-slate-700 text-slate-100 hover:bg-slate-600"
+                      onClick={() => setEditExpenses((prev) => [...prev, { amount: "0.00", category: "", note: "" }])}
+                    >
+                      Add Expense
+                    </Button>
+                  </div>
+                ) : detail.expenses.length === 0 ? (
                   <div className="text-slate-400">No expenses.</div>
                 ) : (
                   <ul className="space-y-1">
@@ -699,6 +998,28 @@ export default function SafeLedgerDashboardPage() {
                     ))}
                   </ul>
                 )}
+              </div>
+
+              <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
+                <div className="mb-2 font-medium">Denominations (Qty)</div>
+                <div className="grid gap-2 md:grid-cols-7">
+                  {(["d100", "d50", "d20", "d10", "d5", "d2", "d1"] as const).map((key) => (
+                    <label key={key} className="text-xs text-slate-300">
+                      {key.replace("d", "$")}
+                      {isEditing ? (
+                        <input
+                          className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                          value={editForm[key]}
+                          onChange={(e) => setEditForm((prev) => ({ ...prev, [key]: e.target.value }))}
+                        />
+                      ) : (
+                        <div className="mt-1 rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1">
+                          {Number(detail.closeout.denoms_jsonb?.[key.replace("d", "")] ?? 0)}
+                        </div>
+                      )}
+                    </label>
+                  ))}
+                </div>
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">
@@ -745,6 +1066,28 @@ export default function SafeLedgerDashboardPage() {
 
               <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
                 <div className="mb-2 font-medium">Evidence</div>
+                {isEditing && (
+                  <div className="mb-3 grid gap-3 md:grid-cols-2">
+                    <label className="flex flex-col gap-1 text-xs text-slate-300">
+                      Add Deposit Slip Photo
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                        onChange={(e) => setEditDepositPhotoFile(e.target.files?.[0] ?? null)}
+                      />
+                    </label>
+                    <label className="flex flex-col gap-1 text-xs text-slate-300">
+                      Add POS/Z-Report Photo
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                        onChange={(e) => setEditPosPhotoFile(e.target.files?.[0] ?? null)}
+                      />
+                    </label>
+                  </div>
+                )}
                 {detail.photos.length === 0 ? (
                   <div className="text-slate-400">No photos uploaded.</div>
                 ) : (
@@ -787,6 +1130,133 @@ export default function SafeLedgerDashboardPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isAddOpen}
+        onOpenChange={(open) => {
+          setIsAddOpen(open);
+          if (!open) {
+            setAddDepositPhotoFile(null);
+            setAddPosPhotoFile(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add Manual Safe Closeout</DialogTitle>
+            <DialogDescription>Create a closeout and optionally attach photos.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="flex flex-col gap-1 text-xs text-slate-300">
+                Store
+                <select
+                  className="rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                  value={addForm.storeId}
+                  onChange={(e) => setAddForm((prev) => ({ ...prev, storeId: e.target.value }))}
+                >
+                  <option value="">Select store</option>
+                  {stores.map((store) => (
+                    <option key={store.id} value={store.id}>{store.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-slate-300">
+                Closer
+                <select
+                  className="rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                  value={addForm.profileId}
+                  onChange={(e) => setAddForm((prev) => ({ ...prev, profileId: e.target.value }))}
+                >
+                  <option value="">Select closer</option>
+                  {addFormUsers.map((user) => (
+                    <option key={user.id} value={user.id}>{user.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-slate-300">
+                Business Date
+                <input
+                  type="date"
+                  className="rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                  value={addForm.businessDate}
+                  onChange={(e) => setAddForm((prev) => ({ ...prev, businessDate: e.target.value }))}
+                />
+              </label>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-4">
+              <label className="flex flex-col gap-1 text-xs text-slate-300">Cash Sales ($)
+                <input className="rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1" value={addForm.cashSales} onChange={(e) => setAddForm((prev) => ({ ...prev, cashSales: e.target.value }))} />
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-slate-300">Card Sales ($)
+                <input className="rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1" value={addForm.cardSales} onChange={(e) => setAddForm((prev) => ({ ...prev, cardSales: e.target.value }))} />
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-slate-300">Actual Deposit ($)
+                <input className="rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1" value={addForm.actualDeposit} onChange={(e) => setAddForm((prev) => ({ ...prev, actualDeposit: e.target.value }))} />
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-slate-300">Expenses ($)
+                <input className="rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1" value={addForm.expenses} onChange={(e) => setAddForm((prev) => ({ ...prev, expenses: e.target.value }))} />
+              </label>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="flex flex-col gap-1 text-xs text-slate-300">Other Sales ($)
+                <input className="rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1" value={addForm.otherSales} onChange={(e) => setAddForm((prev) => ({ ...prev, otherSales: e.target.value }))} />
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-slate-300">Drawer Float ($)
+                <input className="rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1" value={addForm.drawerCount} onChange={(e) => setAddForm((prev) => ({ ...prev, drawerCount: e.target.value }))} />
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-slate-300">Override Reason (Optional)
+                <input className="rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1" value={addForm.depositOverrideReason} onChange={(e) => setAddForm((prev) => ({ ...prev, depositOverrideReason: e.target.value }))} />
+              </label>
+            </div>
+
+            <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3">
+              <div className="mb-2 text-xs font-semibold text-slate-200">Denominations (Qty)</div>
+              <div className="grid gap-2 md:grid-cols-7">
+                <label className="text-xs text-slate-300">$100<input className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1" value={addForm.d100} onChange={(e) => setAddForm((prev) => ({ ...prev, d100: e.target.value }))} /></label>
+                <label className="text-xs text-slate-300">$50<input className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1" value={addForm.d50} onChange={(e) => setAddForm((prev) => ({ ...prev, d50: e.target.value }))} /></label>
+                <label className="text-xs text-slate-300">$20<input className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1" value={addForm.d20} onChange={(e) => setAddForm((prev) => ({ ...prev, d20: e.target.value }))} /></label>
+                <label className="text-xs text-slate-300">$10<input className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1" value={addForm.d10} onChange={(e) => setAddForm((prev) => ({ ...prev, d10: e.target.value }))} /></label>
+                <label className="text-xs text-slate-300">$5<input className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1" value={addForm.d5} onChange={(e) => setAddForm((prev) => ({ ...prev, d5: e.target.value }))} /></label>
+                <label className="text-xs text-slate-300">$2<input className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1" value={addForm.d2} onChange={(e) => setAddForm((prev) => ({ ...prev, d2: e.target.value }))} /></label>
+                <label className="text-xs text-slate-300">$1<input className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1" value={addForm.d1} onChange={(e) => setAddForm((prev) => ({ ...prev, d1: e.target.value }))} /></label>
+              </div>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-2">
+              <label className="flex flex-col gap-1 text-xs text-slate-300">
+                Deposit Slip Photo (Optional)
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                  onChange={(e) => setAddDepositPhotoFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-slate-300">
+                POS/Z-Report Photo (Optional)
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                  onChange={(e) => setAddPosPhotoFile(e.target.files?.[0] ?? null)}
+                />
+              </label>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button className="border border-cyan-400/40 bg-slate-900/60 text-slate-100 hover:bg-slate-800" onClick={() => setIsAddOpen(false)} disabled={savingAdd}>
+                Cancel
+              </Button>
+              <Button className="bg-cyan-600 text-white hover:bg-cyan-700" onClick={() => void createManualCloseout()} disabled={savingAdd}>
+                {savingAdd ? "Saving..." : "Create Closeout"}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

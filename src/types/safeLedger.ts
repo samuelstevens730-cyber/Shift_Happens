@@ -6,6 +6,7 @@ export type SafeCloseoutDenoms = {
   "20"?: number;
   "10"?: number;
   "5"?: number;
+  "2"?: number;
   "1"?: number;
   coin_cents?: number;
 };

@@ -33,21 +33,21 @@
    - Reformat denom summary line in reconciliation cards into a compact grid for easier scan.
 
 ## Admin Dashboard Build Plan (Next Major Project)
-1. Sales block (table/chart toggle, default 7 days, filterable range)
-2. Immediate Action Items (expandable + scrollable), include:
+1. Store Health Grade (A/B/C/D with green/yellow/orange/red)
+2. Sales block (table/chart toggle, default 7 days, filterable range)
+3. Immediate Action Items (expandable + scrollable), include:
    - Open shifts > 13h
    - Late/missed clock-ins
    - Swap requests
    - Time-off requests
    - Safe closeouts warn/review
    - Manual closes
-3. Message / Assign Tasks composer (store or individual)
-4. Open shifts by store
-5. Overtime watchlist (40h/80h)
-6. Store Health Grade (A/B/C/D with green/yellow/orange/red)
-7. Safe/loss trend
-8. Coverage gaps (keep low-priority)
-9. Manager pinned notes + surface on employee home/shift ID screen
+4. Message / Assign Tasks composer (store or individual)
+5. Open shifts by store
+6. Overtime watchlist (40h/80h)
+8. Safe/loss trend
+9. Coverage gaps (keep low-priority)
+10. Manager pinned notes + surface on employee home/shift ID screen
 
 ## Suggested Build Order (to stay time-efficient)
 1. Dashboard shell + cards layout
