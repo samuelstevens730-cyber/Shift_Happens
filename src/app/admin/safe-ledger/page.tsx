@@ -301,7 +301,7 @@ export default function SafeLedgerDashboardPage() {
     const byStore = new Map<string, {
       storeId: string;
       storeName: string;
-      cashSalesTotalCents: number;
+      expectedTotalCents: number;
       actualTotalCents: number;
       denomTotalCents: number;
       denoms: Record<"1" | "2" | "5" | "10" | "20" | "50" | "100", number>;
@@ -313,14 +313,14 @@ export default function SafeLedgerDashboardPage() {
         byStore.set(key, {
           storeId: row.store_id,
           storeName: (row.store_name ?? "Unknown Store").toUpperCase(),
-          cashSalesTotalCents: 0,
+          expectedTotalCents: 0,
           actualTotalCents: 0,
           denomTotalCents: 0,
           denoms: { "1": 0, "2": 0, "5": 0, "10": 0, "20": 0, "50": 0, "100": 0 },
         });
       }
       const summary = byStore.get(key)!;
-      summary.cashSalesTotalCents += row.cash_sales_cents;
+      summary.expectedTotalCents += row.expected_deposit_cents;
       summary.actualTotalCents += row.denom_total_cents;
       summary.denomTotalCents += row.denom_total_cents;
       summary.denoms["1"] += Number(row.denoms_jsonb?.["1"] ?? 0);
@@ -533,15 +533,15 @@ export default function SafeLedgerDashboardPage() {
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {storeReconciliationSummaries.map((summary) => {
-              const safeVariance = summary.actualTotalCents - summary.cashSalesTotalCents;
+              const safeVariance = summary.actualTotalCents - summary.expectedTotalCents;
               return (
                 <div key={summary.storeId} className="rounded border border-cyan-400/30 bg-slate-900/40 p-3">
                   <div className="mb-2 text-sm font-semibold text-cyan-200">{summary.storeName}</div>
                   <div className="grid gap-2 text-sm md:grid-cols-2">
                     <div>
                       <div className="text-xs uppercase text-slate-400">Expected Total</div>
-                      <div>{money(summary.cashSalesTotalCents)}</div>
-                      <div className="text-xs text-slate-500">Sum of Cash Sales</div>
+                      <div>{money(summary.expectedTotalCents)}</div>
+                      <div className="text-xs text-slate-500">Cash Sales - Expenses</div>
                     </div>
                     <div>
                       <div className="text-xs uppercase text-slate-400">Actual Total</div>
