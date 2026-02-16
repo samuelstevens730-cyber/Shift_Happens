@@ -40,6 +40,7 @@ type ShiftRow = {
   shift_type: string | null;
   ended_at: string | null;
   started_at: string | null;
+  schedule_shift_id: string | null;
   store: { id: string; expected_drawer_cents: number } | null;
 };
 
@@ -72,7 +73,7 @@ export async function POST(
 
   const { data: shift, error: shiftErr } = await supabaseServer
     .from("shifts")
-    .select("id, shift_type, ended_at, started_at, store:store_id(id, expected_drawer_cents)")
+    .select("id, shift_type, ended_at, started_at, schedule_shift_id, store:store_id(id, expected_drawer_cents)")
     .eq("id", shiftId)
     .maybeSingle()
     .returns<ShiftRow>();
@@ -116,6 +117,7 @@ export async function POST(
       requires_override: requiresOverride,
       last_action: "edited",
       last_action_by: user.id,
+      ...(shift.schedule_shift_id ? { shift_source: "scheduled" } : {}),
     })
     .eq("id", shiftId)
     .select("id")

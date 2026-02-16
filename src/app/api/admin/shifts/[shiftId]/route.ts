@@ -45,6 +45,7 @@ type ShiftRow = {
   store_id: string;
   profile_id: string;
   shift_type: ShiftType;
+  schedule_shift_id: string | null;
   last_action: string | null;
   manual_closed: boolean | null;
   manual_closed_reviewed_at: string | null;
@@ -69,7 +70,7 @@ export async function PATCH(
 
     const { data: shift, error: shiftErr } = await supabaseServer
       .from("shifts")
-      .select("id, store_id, profile_id, shift_type, last_action, manual_closed, manual_closed_reviewed_at")
+      .select("id, store_id, profile_id, shift_type, schedule_shift_id, last_action, manual_closed, manual_closed_reviewed_at")
       .eq("id", shiftId)
       .maybeSingle()
       .returns<ShiftRow>();
@@ -91,6 +92,7 @@ export async function PATCH(
     if (body.plannedStartAt) update.planned_start_at = body.plannedStartAt;
     if (body.startedAt) update.started_at = body.startedAt;
     if (body.endedAt !== undefined) update.ended_at = body.endedAt;
+    if (body.endedAt && shift.schedule_shift_id) update.shift_source = "scheduled";
 
     // If admin is ending a shift, auto-create any missing required drawer counts
     if (body.endedAt) {
