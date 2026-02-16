@@ -493,9 +493,9 @@ export default function SafeLedgerDashboardPage() {
           </label>
           <div className="flex flex-col gap-1 text-sm">
             <span className="text-slate-300">Quick View</span>
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center">
               <select
-                className="rounded-md border border-cyan-400/30 bg-slate-900/60 px-2 py-1.5"
+                className="w-full min-w-0 rounded-md border border-cyan-400/30 bg-slate-900/60 px-2 py-1.5 md:w-auto"
                 value={quickViewMode}
                 onChange={(e) => setQuickViewMode(e.target.value as "week" | "month")}
               >
@@ -504,7 +504,7 @@ export default function SafeLedgerDashboardPage() {
               </select>
               {quickViewMode === "week" && (
                 <select
-                  className="rounded-md border border-cyan-400/30 bg-slate-900/60 px-2 py-1.5"
+                  className="w-full min-w-0 rounded-md border border-cyan-400/30 bg-slate-900/60 px-2 py-1.5 md:w-auto"
                   value={selectedWeek}
                   onChange={(e) => setSelectedWeek(e.target.value)}
                 >
@@ -515,7 +515,7 @@ export default function SafeLedgerDashboardPage() {
                   ))}
                 </select>
               )}
-              <Button className="bg-purple-600 text-white hover:bg-purple-700" onClick={applyQuickView}>
+              <Button className="w-full bg-purple-600 text-white hover:bg-purple-700 md:w-auto" onClick={applyQuickView}>
                 Apply
               </Button>
             </div>
