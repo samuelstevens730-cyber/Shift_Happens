@@ -91,6 +91,18 @@ export async function GET(req: Request) {
       .returns<CloseoutJoinRow[]>();
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
+    const editedByIds = Array.from(new Set((data ?? []).map((row) => row.edited_by).filter((id): id is string => Boolean(id))));
+    let editorNameById = new Map<string, string>();
+    if (editedByIds.length > 0) {
+      const { data: editors, error: editorsErr } = await supabaseServer
+        .from("app_users")
+        .select("id, display_name")
+        .in("id", editedByIds)
+        .returns<Array<{ id: string; display_name: string | null }>>();
+      if (editorsErr) return NextResponse.json({ error: editorsErr.message }, { status: 500 });
+      editorNameById = new Map((editors ?? []).map((editor) => [editor.id, (editor.display_name ?? "").trim()]));
+    }
+
     const rows = (data ?? []).map((row) => ({
       id: row.id,
       store_id: row.store_id,
@@ -114,6 +126,10 @@ export async function GET(req: Request) {
       updated_at: row.updated_at,
       reviewed_at: row.reviewed_at,
       reviewed_by: row.reviewed_by,
+      edited_at: row.edited_at,
+      edited_by: row.edited_by,
+      edited_by_name: row.edited_by ? editorNameById.get(row.edited_by) ?? null : null,
+      is_historical_backfill: row.is_historical_backfill,
     }));
 
     return NextResponse.json({ rows });

@@ -31,6 +31,9 @@ export interface SafeCloseoutRow {
   requires_manager_review: boolean;
   reviewed_at: string | null;
   reviewed_by: string | null;
+  edited_at: string | null;
+  edited_by: string | null;
+  is_historical_backfill: boolean;
   created_at: string;
   updated_at: string;
 }

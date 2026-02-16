@@ -31,6 +31,10 @@ type ListRow = {
   updated_at: string;
   reviewed_at: string | null;
   reviewed_by: string | null;
+  edited_at: string | null;
+  edited_by: string | null;
+  edited_by_name?: string | null;
+  is_historical_backfill: boolean;
 };
 
 type Store = { id: string; name: string };
@@ -41,6 +45,7 @@ type DetailResponse = {
     store_name: string | null;
     drawer_count_cents: number | null;
     deposit_override_reason: string | null;
+    edited_by_name?: string | null;
   };
   expenses: Array<{ id: string; amount_cents: number; category: string; note: string | null; created_at: string }>;
   photos: Array<{ id: string; photo_type: "deposit_required" | "pos_optional"; storage_path: string | null; signed_url: string | null }>;
@@ -51,20 +56,43 @@ function money(cents: number | null | undefined): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+function toMoneyInput(cents: number | null | undefined): string {
+  if (cents == null || !Number.isFinite(cents)) return "";
+  return (cents / 100).toFixed(2);
+}
+
+function parseMoneyInputToCents(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.round(parsed * 100);
+}
+
+function varianceTone(absVarianceCents: number): string {
+  if (absVarianceCents === 0) return "border-emerald-400/40 bg-emerald-900/20 text-emerald-200";
+  if (absVarianceCents <= 100) return "border-amber-400/40 bg-amber-900/20 text-amber-200";
+  return "border-red-400/40 bg-red-900/20 text-red-200";
+}
+
 function statusChip(row: ListRow) {
+  const historicalBadge = row.is_historical_backfill ? (
+    <span className="rounded-full border border-sky-300 bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-700">HISTORICAL</span>
+  ) : null;
+
   if (row.requires_manager_review) {
-    return <span className="rounded-full border border-orange-300 bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-700">REVIEW NEEDED</span>;
+    return <div className="flex flex-wrap items-center gap-1"><span className="rounded-full border border-orange-300 bg-orange-100 px-2 py-0.5 text-xs font-semibold text-orange-700">REVIEW NEEDED</span>{historicalBadge}</div>;
   }
   if (row.status === "pass") {
-    return <span className="rounded-full border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">PASS</span>;
+    return <div className="flex flex-wrap items-center gap-1"><span className="rounded-full border border-emerald-300 bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">PASS</span>{historicalBadge}</div>;
   }
   if (row.status === "warn") {
-    return <span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">WARN {money(row.variance_cents)}</span>;
+    return <div className="flex flex-wrap items-center gap-1"><span className="rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">WARN {money(row.variance_cents)}</span>{historicalBadge}</div>;
   }
   if (row.status === "fail") {
-    return <span className="rounded-full border border-red-300 bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">FAIL {money(row.variance_cents)}</span>;
+    return <div className="flex flex-wrap items-center gap-1"><span className="rounded-full border border-red-300 bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">FAIL {money(row.variance_cents)}</span>{historicalBadge}</div>;
   }
-  return <span className="rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">{row.status.toUpperCase()}</span>;
+  return <div className="flex flex-wrap items-center gap-1"><span className="rounded-full border border-slate-300 bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">{row.status.toUpperCase()}</span>{historicalBadge}</div>;
 }
 
 function toDateKey(d: Date): string {
@@ -100,6 +128,17 @@ export default function SafeLedgerDashboardPage() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [reviewing, setReviewing] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editForm, setEditForm] = useState({
+    status: "pass",
+    cashSales: "",
+    cardSales: "",
+    otherSales: "",
+    expectedDeposit: "",
+    actualDeposit: "",
+    drawerCount: "",
+  });
   const [quickViewMode, setQuickViewMode] = useState<"week" | "month">("week");
   const [selectedWeek, setSelectedWeek] = useState<string>("1");
 
@@ -184,6 +223,15 @@ export default function SafeLedgerDashboardPage() {
     setRows((json?.rows ?? []) as ListRow[]);
   }
 
+  async function loadDetail(token: string, closeoutId: string) {
+    const res = await fetch(`/api/admin/safe-ledger/${closeoutId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json?.error || "Failed to load detail.");
+    setDetail(json as DetailResponse);
+  }
+
   useEffect(() => {
     let alive = true;
     (async () => {
@@ -208,6 +256,7 @@ export default function SafeLedgerDashboardPage() {
   useEffect(() => {
     if (!selectedId) {
       setDetail(null);
+      setIsEditing(false);
       return;
     }
     let alive = true;
@@ -216,13 +265,8 @@ export default function SafeLedgerDashboardPage() {
         const token = await withToken();
         if (!token || !alive) return;
         setDetailLoading(true);
-        const res = await fetch(`/api/admin/safe-ledger/${selectedId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const json = await res.json();
-        if (!res.ok) throw new Error(json?.error || "Failed to load detail.");
+        await loadDetail(token, selectedId);
         if (!alive) return;
-        setDetail(json as DetailResponse);
       } catch (e: unknown) {
         if (!alive) return;
         setError(e instanceof Error ? e.message : "Failed to load detail.");
@@ -235,10 +279,47 @@ export default function SafeLedgerDashboardPage() {
     };
   }, [selectedId]);
 
+  useEffect(() => {
+    if (!detail?.closeout) return;
+    setEditForm({
+      status: detail.closeout.status === "locked" ? "fail" : detail.closeout.status,
+      cashSales: toMoneyInput(detail.closeout.cash_sales_cents),
+      cardSales: toMoneyInput(detail.closeout.card_sales_cents),
+      otherSales: toMoneyInput(detail.closeout.other_sales_cents),
+      expectedDeposit: toMoneyInput(detail.closeout.expected_deposit_cents),
+      actualDeposit: toMoneyInput(detail.closeout.actual_deposit_cents),
+      drawerCount: toMoneyInput(detail.closeout.drawer_count_cents),
+    });
+  }, [detail]);
+
   const filteredRows = useMemo(() => {
     if (!showIssuesOnly) return rows;
     return rows.filter((r) => r.requires_manager_review || r.status === "warn" || r.status === "fail");
   }, [rows, showIssuesOnly]);
+
+  const reconciliation = useMemo(() => {
+    if (!detail?.closeout) return null;
+    const denoms = detail.closeout.denoms_jsonb ?? {};
+    const denomRows: Array<{ note: "1" | "5" | "10" | "20" | "50" | "100"; qty: number; amountCents: number }> = [
+      { note: "1", qty: Number(denoms["1"] ?? 0), amountCents: Number(denoms["1"] ?? 0) * 100 },
+      { note: "5", qty: Number(denoms["5"] ?? 0), amountCents: Number(denoms["5"] ?? 0) * 500 },
+      { note: "10", qty: Number(denoms["10"] ?? 0), amountCents: Number(denoms["10"] ?? 0) * 1000 },
+      { note: "20", qty: Number(denoms["20"] ?? 0), amountCents: Number(denoms["20"] ?? 0) * 2000 },
+      { note: "50", qty: Number(denoms["50"] ?? 0), amountCents: Number(denoms["50"] ?? 0) * 5000 },
+      { note: "100", qty: Number(denoms["100"] ?? 0), amountCents: Number(denoms["100"] ?? 0) * 10000 },
+    ];
+    const shouldBeInSafeCents = detail.closeout.expected_deposit_cents + (detail.closeout.drawer_count_cents ?? 0);
+    const billsCountedCents = detail.closeout.denom_total_cents;
+    const countedEnteredCents = detail.closeout.actual_deposit_cents;
+    const safeVarianceCents = billsCountedCents - shouldBeInSafeCents;
+    return {
+      denomRows,
+      shouldBeInSafeCents,
+      billsCountedCents,
+      countedEnteredCents,
+      safeVarianceCents,
+    };
+  }, [detail]);
 
   async function copyText(text: string, successMsg: string) {
     try {
@@ -313,6 +394,62 @@ export default function SafeLedgerDashboardPage() {
     }
   }
 
+  async function saveEdits() {
+    if (!detail?.closeout?.id) return;
+
+    const cashSalesCents = parseMoneyInputToCents(editForm.cashSales);
+    const cardSalesCents = parseMoneyInputToCents(editForm.cardSales);
+    const otherSalesCents = parseMoneyInputToCents(editForm.otherSales);
+    const expectedDepositCents = parseMoneyInputToCents(editForm.expectedDeposit);
+    const actualDepositCents = parseMoneyInputToCents(editForm.actualDeposit);
+    const drawerCountCents = editForm.drawerCount.trim() ? parseMoneyInputToCents(editForm.drawerCount) : null;
+
+    if (
+      cashSalesCents == null ||
+      cardSalesCents == null ||
+      otherSalesCents == null ||
+      expectedDepositCents == null ||
+      actualDepositCents == null ||
+      (editForm.drawerCount.trim() && drawerCountCents == null)
+    ) {
+      setError("Edit values must be valid non-negative dollar amounts.");
+      return;
+    }
+
+    try {
+      setSavingEdit(true);
+      const token = await withToken();
+      if (!token) return;
+
+      const res = await fetch(`/api/admin/safe-ledger/${detail.closeout.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          status: editForm.status,
+          cash_sales_cents: cashSalesCents,
+          card_sales_cents: cardSalesCents,
+          other_sales_cents: otherSalesCents,
+          expected_deposit_cents: expectedDepositCents,
+          actual_deposit_cents: actualDepositCents,
+          drawer_count_cents: drawerCountCents,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to save closeout edits.");
+
+      await Promise.all([loadRows(token), loadDetail(token, detail.closeout.id)]);
+      setIsEditing(false);
+      setToast("Closeout updated.");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to save closeout edits.");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   return (
     <div className="space-y-4 p-6 text-slate-100">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -324,7 +461,7 @@ export default function SafeLedgerDashboardPage() {
       </div>
 
       <div className="rounded-xl border border-cyan-400/30 bg-[#0b1220] p-4">
-        <div className="grid gap-3 md:grid-cols-5">
+        <div className="grid gap-3 lg:grid-cols-4">
           <DatePicker label="Start Date" value={from} onChange={setFrom} max={to} />
           <DatePicker label="End Date" value={to} onChange={setTo} min={from} />
           <label className="flex flex-col gap-1 text-sm">
@@ -369,11 +506,11 @@ export default function SafeLedgerDashboardPage() {
               </Button>
             </div>
           </div>
-          <label className="flex items-center gap-2 self-end pb-1 text-sm">
-            <input type="checkbox" checked={showIssuesOnly} onChange={(e) => setShowIssuesOnly(e.target.checked)} />
-            Show Issues Only
-          </label>
         </div>
+        <label className="mt-3 flex items-center gap-2 text-sm text-slate-200">
+          <input type="checkbox" checked={showIssuesOnly} onChange={(e) => setShowIssuesOnly(e.target.checked)} />
+          Show Issues Only
+        </label>
       </div>
 
       {error && <div className="rounded border border-red-400/50 bg-red-900/30 p-2 text-sm text-red-200">{error}</div>}
@@ -389,6 +526,8 @@ export default function SafeLedgerDashboardPage() {
                 <TableHead>Closer</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Variance ($)</TableHead>
+                <TableHead>Edited By</TableHead>
+                <TableHead>Date Edited</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -400,6 +539,8 @@ export default function SafeLedgerDashboardPage() {
                   <TableCell>{row.employee_name ?? "--"}</TableCell>
                   <TableCell>{statusChip(row)}</TableCell>
                   <TableCell>{money(row.variance_cents)}</TableCell>
+                  <TableCell>{row.edited_by_name ?? row.edited_by ?? "--"}</TableCell>
+                  <TableCell>{row.edited_at ? new Date(row.edited_at).toLocaleString() : "--"}</TableCell>
                   <TableCell>
                     <Button variant="secondary" onClick={() => setSelectedId(row.id)}>View</Button>
                   </TableCell>
@@ -407,7 +548,7 @@ export default function SafeLedgerDashboardPage() {
               ))}
               {filteredRows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-slate-400">No closeouts for selected filters.</TableCell>
+                  <TableCell colSpan={8} className="text-center text-slate-400">No closeouts for selected filters.</TableCell>
                 </TableRow>
               )}
             </TableBody>
@@ -423,7 +564,11 @@ export default function SafeLedgerDashboardPage() {
               {detail?.closeout?.store_name ?? "--"} · {detail?.closeout?.business_date ?? "--"} · {detail?.closeout?.employee_name ?? "--"}
             </DialogDescription>
           </DialogHeader>
-
+          {detail?.closeout?.is_historical_backfill && (
+            <div className="rounded border border-sky-400/40 bg-sky-900/20 px-3 py-2 text-xs text-sky-200">
+              Historical backfill row
+            </div>
+          )}
           {detailLoading || !detail ? (
             <div className="text-sm text-slate-300">Loading detail...</div>
           ) : (
@@ -431,15 +576,62 @@ export default function SafeLedgerDashboardPage() {
               <div className="grid gap-3 md:grid-cols-3">
                 <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
                   <div className="font-medium">Cash Sales</div>
-                  <div>{money(detail.closeout.cash_sales_cents)}</div>
+                  {isEditing ? (
+                    <input
+                      className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                      value={editForm.cashSales}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, cashSales: e.target.value }))}
+                    />
+                  ) : (
+                    <div>{money(detail.closeout.cash_sales_cents)}</div>
+                  )}
                 </div>
                 <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
                   <div className="font-medium">Card Sales</div>
-                  <div>{money(detail.closeout.card_sales_cents)}</div>
+                  {isEditing ? (
+                    <input
+                      className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                      value={editForm.cardSales}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, cardSales: e.target.value }))}
+                    />
+                  ) : (
+                    <div>{money(detail.closeout.card_sales_cents)}</div>
+                  )}
                 </div>
                 <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
                   <div className="font-medium">Drawer Count (Float)</div>
-                  <div>{money(detail.closeout.drawer_count_cents)}</div>
+                  {isEditing ? (
+                    <input
+                      className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                      value={editForm.drawerCount}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, drawerCount: e.target.value }))}
+                    />
+                  ) : (
+                    <div>{money(detail.closeout.drawer_count_cents)}</div>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
+                  <div className="font-medium">Other Sales</div>
+                  {isEditing ? (
+                    <input
+                      className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                      value={editForm.otherSales}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, otherSales: e.target.value }))}
+                    />
+                  ) : (
+                    <div>{money(detail.closeout.other_sales_cents)}</div>
+                  )}
+                </div>
+                <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
+                  <div className="font-medium">Edited By</div>
+                  <div>{detail.closeout.edited_by_name ?? detail.closeout.edited_by ?? "--"}</div>
+                </div>
+                <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
+                  <div className="font-medium">Date Edited</div>
+                  <div>{detail.closeout.edited_at ? new Date(detail.closeout.edited_at).toLocaleString() : "--"}</div>
                 </div>
               </div>
 
@@ -462,13 +654,88 @@ export default function SafeLedgerDashboardPage() {
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
                   <div className="font-medium">Expected Deposit</div>
-                  <div>{money(detail.closeout.expected_deposit_cents)}</div>
+                  {isEditing ? (
+                    <input
+                      className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                      value={editForm.expectedDeposit}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, expectedDeposit: e.target.value }))}
+                    />
+                  ) : (
+                    <div>{money(detail.closeout.expected_deposit_cents)}</div>
+                  )}
                 </div>
                 <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
                   <div className="font-medium">Actual Deposit</div>
-                  <div>{money(detail.closeout.actual_deposit_cents)}</div>
+                  {isEditing ? (
+                    <input
+                      className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                      value={editForm.actualDeposit}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, actualDeposit: e.target.value }))}
+                    />
+                  ) : (
+                    <div>{money(detail.closeout.actual_deposit_cents)}</div>
+                  )}
                 </div>
               </div>
+              {reconciliation && (
+                <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
+                  <div className="mb-2 font-medium">Safe Reconciliation</div>
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div className="rounded border border-cyan-400/30 bg-slate-900/60 p-2">
+                      <div className="text-xs uppercase text-slate-400">Should Be In Safe</div>
+                      <div className="text-base font-semibold">{money(reconciliation.shouldBeInSafeCents)}</div>
+                      <div className="text-xs text-slate-400">Expected Deposit + Float</div>
+                    </div>
+                    <div className="rounded border border-cyan-400/30 bg-slate-900/60 p-2">
+                      <div className="text-xs uppercase text-slate-400">Bills Counted In Safe</div>
+                      <div className="text-base font-semibold">{money(reconciliation.billsCountedCents)}</div>
+                    </div>
+                    <div className="rounded border border-cyan-400/30 bg-slate-900/60 p-2">
+                      <div className="text-xs uppercase text-slate-400">Counted Total Entered</div>
+                      <div className="text-base font-semibold">{money(reconciliation.countedEnteredCents)}</div>
+                    </div>
+                    <div className={`rounded border p-2 ${varianceTone(Math.abs(reconciliation.safeVarianceCents))}`}>
+                      <div className="text-xs uppercase">Variance (Bills vs Should)</div>
+                      <div className="text-base font-semibold">{money(reconciliation.safeVarianceCents)}</div>
+                    </div>
+                  </div>
+                  <div className="mt-3 overflow-x-auto rounded border border-cyan-400/30">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-900/80 text-slate-300">
+                        <tr>
+                          <th className="px-2 py-1 font-medium">Denom</th>
+                          <th className="px-2 py-1 font-medium">Qty</th>
+                          <th className="px-2 py-1 font-medium">Amount</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reconciliation.denomRows.map((row) => (
+                          <tr key={row.note} className="border-t border-cyan-400/20">
+                            <td className="px-2 py-1">${row.note}</td>
+                            <td className="px-2 py-1">{row.qty}</td>
+                            <td className="px-2 py-1">{money(row.amountCents)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+              {isEditing && (
+                <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
+                  <div className="font-medium">Status</div>
+                  <select
+                    className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                    value={editForm.status}
+                    onChange={(e) => setEditForm((prev) => ({ ...prev, status: e.target.value }))}
+                  >
+                    <option value="pass">PASS</option>
+                    <option value="warn">WARN</option>
+                    <option value="fail">FAIL</option>
+                    <option value="draft">DRAFT</option>
+                  </select>
+                </div>
+              )}
 
               <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
                 <div className="mb-2 font-medium">Evidence</div>
@@ -492,9 +759,25 @@ export default function SafeLedgerDashboardPage() {
 
               <div className="flex justify-end gap-2">
                 <Button className="border border-cyan-400/40 bg-slate-900/60 text-slate-100 hover:bg-slate-800" onClick={() => setSelectedId(null)}>Close</Button>
-                <Button className="bg-emerald-500 text-black hover:bg-emerald-400" onClick={() => void markReviewed()} disabled={reviewing}>
-                  {reviewing ? "Saving..." : "Mark as Reviewed"}
-                </Button>
+                {isEditing ? (
+                  <>
+                    <Button className="bg-slate-700 text-slate-100 hover:bg-slate-600" onClick={() => setIsEditing(false)} disabled={savingEdit}>
+                      Cancel Edit
+                    </Button>
+                    <Button className="bg-purple-600 text-white hover:bg-purple-700" onClick={() => void saveEdits()} disabled={savingEdit}>
+                      {savingEdit ? "Saving..." : "Save Edit"}
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button className="bg-purple-600 text-white hover:bg-purple-700" onClick={() => setIsEditing(true)}>
+                      Edit
+                    </Button>
+                    <Button className="bg-emerald-500 text-black hover:bg-emerald-400" onClick={() => void markReviewed()} disabled={reviewing}>
+                      {reviewing ? "Saving..." : "Mark as Reviewed"}
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           )}

@@ -16,6 +16,17 @@ type CloseoutJoinRow = SafeCloseoutRow & {
   } | null;
 };
 
+type PatchBody = {
+  status?: "draft" | "pass" | "warn" | "fail";
+  cash_sales_cents?: number;
+  card_sales_cents?: number;
+  other_sales_cents?: number;
+  expected_deposit_cents?: number;
+  actual_deposit_cents?: number;
+  drawer_count_cents?: number | null;
+  deposit_override_reason?: string | null;
+};
+
 function fullName(profile: CloseoutJoinRow["profile"]): string | null {
   if (!profile) return null;
   const fallback = (profile.name ?? "").trim();
@@ -24,6 +35,10 @@ function fullName(profile: CloseoutJoinRow["profile"]): string | null {
 
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function isNonNegativeInt(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
 }
 
 export async function GET(
@@ -94,11 +109,23 @@ export async function GET(
       })
     );
 
+    let editedByName: string | null = null;
+    if (closeout.edited_by) {
+      const { data: editor, error: editorErr } = await supabaseServer
+        .from("app_users")
+        .select("display_name")
+        .eq("id", closeout.edited_by)
+        .maybeSingle<{ display_name: string | null }>();
+      if (editorErr) return NextResponse.json({ error: editorErr.message }, { status: 500 });
+      editedByName = (editor?.display_name ?? "").trim() || null;
+    }
+
     return NextResponse.json({
       closeout: {
         ...closeout,
         employee_name: fullName(closeout.profile),
         store_name: closeout.store?.name ?? null,
+        edited_by_name: editedByName,
       },
       expenses: expensesRes.data ?? [],
       photos: photosWithUrls,
@@ -106,6 +133,102 @@ export async function GET(
   } catch (e: unknown) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Failed to load safe closeout detail." },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const token = getBearerToken(req);
+    if (!token) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+    const { data: { user }, error: authErr } = await supabaseServer.auth.getUser(token);
+    if (authErr || !user) {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+
+    const managerStoreIds = await getManagerStoreIds(user.id);
+    if (managerStoreIds.length === 0) {
+      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    }
+
+    const { id } = await params;
+    if (!isUuid(id)) {
+      return NextResponse.json({ error: "Invalid closeout id." }, { status: 400 });
+    }
+
+    const body = (await req.json().catch(() => ({}))) as PatchBody;
+
+    const { data: existing, error: existingErr } = await supabaseServer
+      .from("safe_closeouts")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle<SafeCloseoutRow>();
+
+    if (existingErr) return NextResponse.json({ error: existingErr.message }, { status: 500 });
+    if (!existing) return NextResponse.json({ error: "Closeout not found." }, { status: 404 });
+    if (!managerStoreIds.includes(existing.store_id)) {
+      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    }
+
+    if (
+      (body.cash_sales_cents !== undefined && !isNonNegativeInt(body.cash_sales_cents)) ||
+      (body.card_sales_cents !== undefined && !isNonNegativeInt(body.card_sales_cents)) ||
+      (body.other_sales_cents !== undefined && !isNonNegativeInt(body.other_sales_cents)) ||
+      (body.expected_deposit_cents !== undefined && !isNonNegativeInt(body.expected_deposit_cents)) ||
+      (body.actual_deposit_cents !== undefined && !isNonNegativeInt(body.actual_deposit_cents))
+    ) {
+      return NextResponse.json({ error: "Money fields must be non-negative integer cents." }, { status: 400 });
+    }
+
+    if (
+      body.drawer_count_cents !== undefined &&
+      body.drawer_count_cents !== null &&
+      !isNonNegativeInt(body.drawer_count_cents)
+    ) {
+      return NextResponse.json({ error: "drawer_count_cents must be null or non-negative integer cents." }, { status: 400 });
+    }
+
+    if (
+      body.status !== undefined &&
+      !["draft", "pass", "warn", "fail"].includes(body.status)
+    ) {
+      return NextResponse.json({ error: "status must be one of draft, pass, warn, fail." }, { status: 400 });
+    }
+
+    const patch: Partial<SafeCloseoutRow> = {
+      cash_sales_cents: body.cash_sales_cents ?? existing.cash_sales_cents,
+      card_sales_cents: body.card_sales_cents ?? existing.card_sales_cents,
+      other_sales_cents: body.other_sales_cents ?? existing.other_sales_cents,
+      expected_deposit_cents: body.expected_deposit_cents ?? existing.expected_deposit_cents,
+      actual_deposit_cents: body.actual_deposit_cents ?? existing.actual_deposit_cents,
+      drawer_count_cents: body.drawer_count_cents ?? existing.drawer_count_cents,
+      deposit_override_reason: body.deposit_override_reason ?? existing.deposit_override_reason,
+      status: body.status ?? existing.status,
+      edited_at: new Date().toISOString(),
+      edited_by: user.id,
+      updated_at: new Date().toISOString(),
+    };
+
+    patch.variance_cents = patch.actual_deposit_cents! - patch.expected_deposit_cents!;
+
+    const { data: updated, error: updateErr } = await supabaseServer
+      .from("safe_closeouts")
+      .update(patch)
+      .eq("id", id)
+      .select("*")
+      .single<SafeCloseoutRow>();
+
+    if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
+
+    return NextResponse.json({ row: updated });
+  } catch (e: unknown) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Failed to update safe closeout." },
       { status: 500 }
     );
   }
