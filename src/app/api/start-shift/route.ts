@@ -39,7 +39,7 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { isOutOfThreshold, roundTo30Minutes, ShiftType } from "@/lib/kioskRules";
-import { getCstDowMinutes, isTimeWithinWindow, toStoreKey } from "@/lib/clockWindows";
+import { getCstDowMinutes } from "@/lib/clockWindows";
 import { authenticateShiftRequest, validateProfileAccess } from "@/lib/shiftAuth";
 
 type Body = {
@@ -260,29 +260,7 @@ export async function POST(req: Request) {
       }
     }
 
-    // 4c) Enforce fallback clock window for unscheduled open shifts only.
-    if (!hasScheduledShift && resolvedShiftType === "open") {
-      const storeKey = toStoreKey(store.name);
-      const cst = getCstDowMinutes(plannedRounded);
-      if (!storeKey || !cst) {
-        return NextResponse.json(
-          { error: "CLOCK_WINDOW_VIOLATION", code: "CLOCK_WINDOW_VIOLATION", windowLabel: "Outside allowed clock window" },
-          { status: 400 }
-        );
-      }
-      const windowCheck = isTimeWithinWindow({
-        storeKey,
-        shiftType: "open",
-        localDow: cst.dow,
-        minutes: cst.minutes,
-      });
-      if (!windowCheck.ok) {
-        return NextResponse.json(
-          { error: "CLOCK_WINDOW_VIOLATION", code: "CLOCK_WINDOW_VIOLATION", windowLabel: windowCheck.windowLabel },
-          { status: 400 }
-        );
-      }
-    }
+    // Clock-window enforcement is temporarily disabled.
 
     // 5) Enforce start drawer rules BEFORE creating the shift
     const startCents = body.startDrawerCents ?? null;

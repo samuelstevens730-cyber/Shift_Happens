@@ -37,7 +37,6 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { isOutOfThreshold, roundTo30Minutes, ShiftType } from "@/lib/kioskRules";
-import { getCstDowMinutes, isTimeWithinWindow, toStoreKey } from "@/lib/clockWindows";
 import { authenticateShiftRequest } from "@/lib/shiftAuth";
 
 type Body = {
@@ -501,28 +500,7 @@ export async function POST(req: Request) {
       }
     }
 
-    if (shiftType === "close" && !hasScheduledShift) {
-      const storeKey = toStoreKey(store.name);
-      const cst = getCstDowMinutes(endRounded);
-      if (!storeKey || !cst) {
-        return NextResponse.json(
-          { error: "CLOCK_WINDOW_VIOLATION", code: "CLOCK_WINDOW_VIOLATION", windowLabel: "Outside allowed clock window" },
-          { status: 400 }
-        );
-      }
-      const windowCheck = isTimeWithinWindow({
-        storeKey,
-        shiftType: "close",
-        localDow: cst.dow,
-        minutes: cst.minutes,
-      });
-      if (!windowCheck.ok) {
-        return NextResponse.json(
-          { error: "CLOCK_WINDOW_VIOLATION", code: "CLOCK_WINDOW_VIOLATION", windowLabel: windowCheck.windowLabel },
-          { status: 400 }
-        );
-      }
-    }
+    // Clock-window enforcement is temporarily disabled.
 
     const startedAt = new Date(shift.started_at);
     const durationHours = Number.isNaN(startedAt.getTime())
