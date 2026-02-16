@@ -148,6 +148,7 @@ export default function SafeLedgerDashboardPage() {
   const [savingEdit, setSavingEdit] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [savingAdd, setSavingAdd] = useState(false);
+  const [zoomPhoto, setZoomPhoto] = useState<{ url: string; label: string } | null>(null);
   const [editDepositPhotoFile, setEditDepositPhotoFile] = useState<File | null>(null);
   const [editPosPhotoFile, setEditPosPhotoFile] = useState<File | null>(null);
   const [addDepositPhotoFile, setAddDepositPhotoFile] = useState<File | null>(null);
@@ -1096,7 +1097,22 @@ export default function SafeLedgerDashboardPage() {
                       <div key={photo.id} className="space-y-1">
                         <div className="text-xs uppercase text-slate-400">{photo.photo_type.replace("_", " ")}</div>
                         {photo.signed_url ? (
-                          <img src={photo.signed_url} alt={photo.photo_type} className="h-48 w-full rounded border border-cyan-400/30 object-cover" />
+                          <button
+                            type="button"
+                            className="w-full"
+                            onClick={() =>
+                              setZoomPhoto({
+                                url: photo.signed_url!,
+                                label: photo.photo_type.replace("_", " "),
+                              })
+                            }
+                          >
+                            <img
+                              src={photo.signed_url}
+                              alt={photo.photo_type}
+                              className="h-48 w-full rounded border border-cyan-400/30 object-cover transition-opacity hover:opacity-90"
+                            />
+                          </button>
                         ) : (
                           <div className="rounded border border-cyan-400/30 p-3 text-xs text-slate-400">Photo unavailable.</div>
                         )}
@@ -1263,6 +1279,30 @@ export default function SafeLedgerDashboardPage() {
       {toast && (
         <div className="fixed right-4 top-4 z-50 rounded border border-cyan-400/40 bg-[#0b1220] px-3 py-2 text-sm text-slate-100 shadow">
           {toast}
+        </div>
+      )}
+
+      {zoomPhoto && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setZoomPhoto(null)}
+        >
+          <div className="w-full max-w-6xl" onClick={(e) => e.stopPropagation()}>
+            <div className="mb-2 flex items-center justify-between text-sm text-slate-200">
+              <span className="uppercase">{zoomPhoto.label}</span>
+              <Button
+                className="border border-cyan-400/40 bg-slate-900/60 text-slate-100 hover:bg-slate-800"
+                onClick={() => setZoomPhoto(null)}
+              >
+                Close
+              </Button>
+            </div>
+            <img
+              src={zoomPhoto.url}
+              alt={zoomPhoto.label}
+              className="max-h-[85vh] w-full rounded border border-cyan-400/40 object-contain"
+            />
+          </div>
         </div>
       )}
     </div>
