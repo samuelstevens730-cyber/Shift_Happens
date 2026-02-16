@@ -69,12 +69,13 @@ export default function SafeCloseoutWizard({
   const [cashSales, setCashSales] = useState("");
   const [cardSales, setCardSales] = useState("");
   const [expenses, setExpenses] = useState<ExpenseDraftRow[]>([{ id: crypto.randomUUID(), amount: "", note: "" }]);
-  const [denoms, setDenoms] = useState<Record<"100" | "50" | "20" | "10" | "5" | "1", string>>({
+  const [denoms, setDenoms] = useState<Record<"100" | "50" | "20" | "10" | "5" | "2" | "1", string>>({
     "100": "",
     "50": "",
     "20": "",
     "10": "",
     "5": "",
+    "2": "",
     "1": "",
   });
   const [varianceReason, setVarianceReason] = useState("");
@@ -110,7 +111,7 @@ export default function SafeCloseoutWizard({
       setVarianceReason(draft.deposit_override_reason ?? "");
       setVarianceOverride(Boolean(draft.deposit_override_reason));
 
-      const nextDenoms = { "100": "", "50": "", "20": "", "10": "", "5": "", "1": "" };
+      const nextDenoms = { "100": "", "50": "", "20": "", "10": "", "5": "", "2": "", "1": "" };
       for (const key of Object.keys(nextDenoms) as Array<keyof typeof nextDenoms>) {
         const qty = draft.denoms_jsonb?.[key];
         if (typeof qty === "number" && Number.isFinite(qty) && qty >= 0) {
@@ -131,7 +132,7 @@ export default function SafeCloseoutWizard({
       setDrawerCount("");
       setVarianceReason("");
       setVarianceOverride(false);
-      setDenoms({ "100": "", "50": "", "20": "", "10": "", "5": "", "1": "" });
+      setDenoms({ "100": "", "50": "", "20": "", "10": "", "5": "", "2": "", "1": "" });
       setExpenses([{ id: crypto.randomUUID(), amount: "", note: "" }]);
       setDepositPath(null);
       setPosPath(null);
@@ -156,6 +157,7 @@ export default function SafeCloseoutWizard({
       "20": Number(denoms["20"] || 0),
       "10": Number(denoms["10"] || 0),
       "5": Number(denoms["5"] || 0),
+      "2": Number(denoms["2"] || 0),
       "1": Number(denoms["1"] || 0),
     };
   }, [denoms]);
@@ -167,6 +169,7 @@ export default function SafeCloseoutWizard({
       denomsJson["20"] * 2000 +
       denomsJson["10"] * 1000 +
       denomsJson["5"] * 500 +
+      denomsJson["2"] * 200 +
       denomsJson["1"] * 100
     );
   }, [denomsJson]);
@@ -507,7 +510,7 @@ export default function SafeCloseoutWizard({
               {step === 3 && (
                 <div className="space-y-3">
                   <div className="text-sm font-semibold">3) The Verification (Bills Only)</div>
-                  {(["100", "50", "20", "10", "5", "1"] as const).map((key) => (
+                  {(["100", "50", "20", "10", "5", "2", "1"] as const).map((key) => (
                     <div key={key} className="grid grid-cols-[90px_1fr] items-center gap-2">
                       <label className="text-sm">${key} bills</label>
                       <input
