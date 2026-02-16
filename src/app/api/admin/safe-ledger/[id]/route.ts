@@ -257,10 +257,9 @@ export async function PATCH(
         }
       }
       nextExpenseTotal = body.expenses.reduce((sum, e) => sum + e.amount_cents, 0);
-      if (body.expected_deposit_cents === undefined) {
-        const rawExpected = patch.cash_sales_cents! - nextExpenseTotal;
-        patch.expected_deposit_cents = rawExpected < 0 ? 0 : Math.trunc((rawExpected + 50) / 100) * 100;
-      }
+      const rawExpected = patch.cash_sales_cents! - nextExpenseTotal;
+      // Keep expected in sync with cash - expenses when expenses are edited.
+      patch.expected_deposit_cents = rawExpected < 0 ? 0 : Math.trunc((rawExpected + 50) / 100) * 100;
     }
 
     patch.variance_cents = patch.actual_deposit_cents! - patch.expected_deposit_cents!;

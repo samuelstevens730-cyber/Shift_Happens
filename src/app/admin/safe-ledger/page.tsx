@@ -537,7 +537,6 @@ export default function SafeLedgerDashboardPage() {
     const cashSalesCents = parseMoneyInputToCents(editForm.cashSales);
     const cardSalesCents = parseMoneyInputToCents(editForm.cardSales);
     const otherSalesCents = parseMoneyInputToCents(editForm.otherSales);
-    const expectedDepositCents = parseMoneyInputToCents(editForm.expectedDeposit);
     const actualDepositCents = parseMoneyInputToCents(editForm.actualDeposit);
     const drawerCountCents = editForm.drawerCount.trim() ? parseMoneyInputToCents(editForm.drawerCount) : null;
     const denomValues = {
@@ -569,7 +568,6 @@ export default function SafeLedgerDashboardPage() {
       cashSalesCents == null ||
       cardSalesCents == null ||
       otherSalesCents == null ||
-      expectedDepositCents == null ||
       actualDepositCents == null ||
       (editForm.drawerCount.trim() && drawerCountCents == null) ||
       denomsInvalid
@@ -582,6 +580,10 @@ export default function SafeLedgerDashboardPage() {
       setSavingEdit(true);
       const token = await withToken();
       if (!token) return;
+      const expenseTotalCents = expensePayload.reduce((sum, expense) => sum + expense.amount_cents, 0);
+      const rawExpectedCents = cashSalesCents - expenseTotalCents;
+      const computedExpectedCents = rawExpectedCents < 0 ? 0 : Math.trunc((rawExpectedCents + 50) / 100) * 100;
+      setEditForm((prev) => ({ ...prev, expectedDeposit: toMoneyInput(computedExpectedCents) }));
       const photosToAppend: PhotoUploadInput[] = [];
       if (editDepositPhotoFile) {
         const storagePath = await uploadPhoto(token, editDepositPhotoFile);
@@ -603,7 +605,7 @@ export default function SafeLedgerDashboardPage() {
           cash_sales_cents: cashSalesCents,
           card_sales_cents: cardSalesCents,
           other_sales_cents: otherSalesCents,
-          expected_deposit_cents: expectedDepositCents,
+          expected_deposit_cents: computedExpectedCents,
           actual_deposit_cents: actualDepositCents,
           drawer_count_cents: drawerCountCents,
           denoms_jsonb: denomValues,
@@ -1033,11 +1035,14 @@ export default function SafeLedgerDashboardPage() {
                 <div className="rounded border border-cyan-400/30 bg-slate-900/40 p-3 text-sm">
                   <div className="font-medium">Expected Deposit</div>
                   {isEditing ? (
-                    <input
-                      className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
-                      value={editForm.expectedDeposit}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, expectedDeposit: e.target.value }))}
-                    />
+                    <div>
+                      <input
+                        className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                        value={editForm.expectedDeposit}
+                        onChange={(e) => setEditForm((prev) => ({ ...prev, expectedDeposit: e.target.value }))}
+                      />
+                      <div className="mt-1 text-xs text-slate-400">Auto-recalculated from Cash - Expenses when you save.</div>
+                    </div>
                   ) : (
                     <div>{money(detail.closeout.expected_deposit_cents)}</div>
                   )}
