@@ -34,6 +34,13 @@ function money(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+function gradeTone(grade: "A" | "B" | "C" | "D" | undefined) {
+  if (grade === "A") return "border-emerald-500/60 bg-emerald-950/20 text-emerald-200";
+  if (grade === "B") return "border-sky-500/60 bg-sky-950/20 text-sky-200";
+  if (grade === "C") return "border-amber-500/60 bg-amber-950/20 text-amber-200";
+  return "border-red-500/60 bg-red-950/20 text-red-200";
+}
+
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -226,25 +233,34 @@ export default function AdminDashboardPage() {
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
                     {visibleStores.map((store) => {
                       const health = data?.health[store.id];
-                      const tone =
-                        health?.grade === "A"
-                          ? "border-emerald-500/50"
-                          : health?.grade === "B"
-                            ? "border-sky-500/50"
-                            : health?.grade === "C"
-                              ? "border-amber-500/50"
-                              : "border-red-500/50";
+                      const tone = gradeTone(health?.grade);
                       return (
-                        <div key={store.id} className={`rounded-lg border bg-slate-900/60 p-3 ${tone}`}>
-                          <div className="flex items-center justify-between">
-                            <div className="text-sm font-medium text-slate-100">{store.name}</div>
-                            <Badge variant="outline">{health?.grade ?? "N/A"}</Badge>
+                        <div key={store.id} className={`rounded-lg border p-3 ${tone}`}>
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="text-sm font-medium text-slate-100">{store.name}</div>
+                              <div className="text-xs text-slate-400">Score: {health?.score ?? 0}</div>
+                            </div>
+                            <div className="flex h-12 w-12 items-center justify-center rounded-full border border-current/40 text-2xl font-bold">
+                              {health?.grade ?? "D"}
+                            </div>
                           </div>
-                          <div className="mt-1 text-xs text-slate-400">Score: {health?.score ?? 0}</div>
-                          <div className="mt-2 space-y-1">
+                          <div className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-300">
+                            What's Dragging Grade
+                          </div>
+                          <div className="mt-2 space-y-1.5">
                             {(health?.signals ?? []).map((signal) => (
-                              <div key={signal.name} className="text-xs text-slate-300">
-                                {signal.name}: {signal.score}/{signal.maxScore}
+                              <div key={signal.name} className="text-xs">
+                                <div className="mb-1 flex items-center justify-between text-slate-200">
+                                  <span>{signal.name}</span>
+                                  <span>{signal.score}/{signal.maxScore}</span>
+                                </div>
+                                <div className="h-1.5 w-full rounded bg-slate-800">
+                                  <div
+                                    className="h-1.5 rounded bg-current/70"
+                                    style={{ width: `${Math.max(0, Math.min(100, (signal.score / signal.maxScore) * 100))}%` }}
+                                  />
+                                </div>
                               </div>
                             ))}
                           </div>
