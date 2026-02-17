@@ -102,6 +102,7 @@ export default function AdminDashboardPage() {
   const [storeId, setStoreId] = useState<string>("all");
   const [from, setFrom] = useState<string>(() => dateDaysAgo(6));
   const [to, setTo] = useState<string>(() => cstDateKey(new Date()));
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [chartMode, setChartMode] = useState<"total" | "detailed">("detailed");
   const [actionOpen, setActionOpen] = useState(true);
   const [quickViewItem, setQuickViewItem] = useState<DashboardActionItem | null>(null);
@@ -326,6 +327,11 @@ export default function AdminDashboardPage() {
     return users.filter((u) => u.active && u.storeIds.includes(storeId));
   }, [users, storeId]);
 
+  const selectedStoreLabel = useMemo(() => {
+    if (storeId === "all") return "All Stores";
+    return data?.stores.find((store) => store.id === storeId)?.name ?? "Selected Store";
+  }, [data, storeId]);
+
   async function sendQuickAssignment() {
     try {
       if (!quickSend.message.trim()) {
@@ -388,52 +394,64 @@ export default function AdminDashboardPage() {
           </div>
         </div>
 
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle>Filters</CardTitle>
-            <CardDescription>Desktop stays dense; mobile stacks vertically in priority order.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <label className="flex flex-col gap-1 text-sm text-slate-300">
-                Start Date
-                <input
-                  type="date"
-                  className="h-10 rounded-md border border-slate-700 bg-slate-900 px-3 text-slate-100"
-                  value={from}
-                  max={to}
-                  onChange={(e) => setFrom(e.target.value)}
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm text-slate-300">
-                End Date
-                <input
-                  type="date"
-                  className="h-10 rounded-md border border-slate-700 bg-slate-900 px-3 text-slate-100"
-                  value={to}
-                  min={from}
-                  onChange={(e) => setTo(e.target.value)}
-                />
-              </label>
-              <div className="flex flex-col gap-1 text-sm text-slate-300">
-                <span>Store</span>
-                <Select value={storeId} onValueChange={setStoreId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select store" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Stores</SelectItem>
-                    {(data?.stores ?? []).map((store) => (
-                      <SelectItem key={store.id} value={store.id}>
-                        {store.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+        <Collapsible open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <Card>
+            <CardHeader className="py-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <CardTitle>Filters</CardTitle>
+                  <CardDescription>{from} to {to} · {selectedStoreLabel}</CardDescription>
+                </div>
+                <CollapsibleTrigger className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800">
+                  {filtersOpen ? "Hide" : "Expand"}
+                </CollapsibleTrigger>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <CollapsibleContent>
+              <Separator />
+              <CardContent className="pt-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <label className="flex flex-col gap-1 text-sm text-slate-300">
+                    Start Date
+                    <input
+                      type="date"
+                      className="h-10 rounded-md border border-slate-700 bg-slate-900 px-3 text-slate-100"
+                      value={from}
+                      max={to}
+                      onChange={(e) => setFrom(e.target.value)}
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm text-slate-300">
+                    End Date
+                    <input
+                      type="date"
+                      className="h-10 rounded-md border border-slate-700 bg-slate-900 px-3 text-slate-100"
+                      value={to}
+                      min={from}
+                      onChange={(e) => setTo(e.target.value)}
+                    />
+                  </label>
+                  <div className="flex flex-col gap-1 text-sm text-slate-300">
+                    <span>Store</span>
+                    <Select value={storeId} onValueChange={setStoreId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select store" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All Stores</SelectItem>
+                        {(data?.stores ?? []).map((store) => (
+                          <SelectItem key={store.id} value={store.id}>
+                            {store.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
 
         {error && (
           <Card className="border-red-500/40">
@@ -485,8 +503,172 @@ export default function AdminDashboardPage() {
               </Card>
             </section>
 
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-cyan-300" /> Sales Block</CardTitle>
+                <CardDescription>Sales by date for selected store scope and date range.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Tabs defaultValue="table" className="w-full">
+                  <TabsList>
+                    <TabsTrigger value="table">Table</TabsTrigger>
+                    <TabsTrigger value="chart">Chart</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="table">
+                    <div className="max-h-[320px] overflow-auto rounded border border-slate-800">
+                      <table className="min-w-full text-sm">
+                        <thead className="sticky top-0 bg-slate-900 text-slate-300">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Date</th>
+                            <th className="px-3 py-2 text-left">Store</th>
+                            <th className="px-3 py-2 text-left">Day</th>
+                            <th className="px-3 py-2 text-right">Cash</th>
+                            <th className="px-3 py-2 text-right">Card</th>
+                            <th className="px-3 py-2 text-right">Other</th>
+                            <th className="px-3 py-2 text-right">Total</th>
+                            <th className="px-3 py-2 text-left">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {salesRows.map((row) => (
+                            <tr key={`${row.date}-${row.storeId}`} className="border-t border-slate-800 text-slate-100">
+                              <td className="px-3 py-2">{row.date}</td>
+                              <td className="px-3 py-2">{row.storeName}</td>
+                              <td className="px-3 py-2">{weekdayLabel(row.date)}</td>
+                              <td className="px-3 py-2 text-right">{money(row.cash)}</td>
+                              <td className="px-3 py-2 text-right">{money(row.card)}</td>
+                              <td className="px-3 py-2 text-right">{money(row.other)}</td>
+                              <td className="px-3 py-2 text-right font-semibold">{money(row.total)}</td>
+                              <td className="px-3 py-2">
+                                <Badge
+                                  variant={
+                                    row.status === "fail"
+                                      ? "destructive"
+                                      : row.status === "warn"
+                                        ? "outline"
+                                        : "secondary"
+                                  }
+                                >
+                                  {row.status.toUpperCase()}
+                                </Badge>
+                              </td>
+                            </tr>
+                          ))}
+                          {salesRows.length === 0 ? (
+                            <tr>
+                              <td colSpan={8} className="px-3 py-4 text-center text-slate-400">
+                                No sales rows in selected range.
+                              </td>
+                            </tr>
+                          ) : null}
+                          {salesRows.length > 0 ? (
+                            <tr className="border-t-2 border-cyan-700/50 bg-slate-900/80 text-slate-100">
+                              <td className="px-3 py-2 font-semibold">TOTAL</td>
+                              <td className="px-3 py-2 text-slate-400">{storeId === "all" ? "All Stores" : "Selected Store"}</td>
+                              <td className="px-3 py-2 text-slate-400">--</td>
+                              <td className="px-3 py-2 text-right font-semibold">{money(tableTotals.cash)}</td>
+                              <td className="px-3 py-2 text-right font-semibold">{money(tableTotals.card)}</td>
+                              <td className="px-3 py-2 text-right font-semibold">{money(tableTotals.other)}</td>
+                              <td className="px-3 py-2 text-right font-bold">{money(tableTotals.total)}</td>
+                              <td className="px-3 py-2 text-slate-400">--</td>
+                            </tr>
+                          ) : null}
+                        </tbody>
+                      </table>
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="chart">
+                    <div className="rounded border border-slate-800 bg-slate-900/60 p-3">
+                      <div className="mb-3 flex justify-end">
+                        <Select value={chartMode} onValueChange={(value) => setChartMode(value as "total" | "detailed")}>
+                          <SelectTrigger className="w-[220px]">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="detailed">Detailed View</SelectItem>
+                            <SelectItem value="total">Total Only</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {chartData.length === 0 ? (
+                        <div className="py-8 text-center text-sm text-slate-400">
+                          No chart data in selected range.
+                        </div>
+                      ) : (
+                        <div className="h-[320px] w-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <ComposedChart data={chartData}>
+                              <defs>
+                                <linearGradient id="totalGradient" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.35} />
+                                  <stop offset="100%" stopColor="#22d3ee" stopOpacity={0.02} />
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                              <XAxis dataKey="date" tick={{ fill: "#94a3b8", fontSize: 12 }} axisLine={{ stroke: "#334155" }} tickLine={{ stroke: "#334155" }} />
+                              <YAxis
+                                tickFormatter={(value) => shortMoney(Number(value))}
+                                tick={{ fill: "#94a3b8", fontSize: 12 }}
+                                axisLine={{ stroke: "#334155" }}
+                                tickLine={{ stroke: "#334155" }}
+                                width={70}
+                                domain={[0, chartYAxis.domainMax]}
+                                ticks={chartYAxis.ticks}
+                              />
+                              <Tooltip
+                                contentStyle={{
+                                  backgroundColor: "#0f172a",
+                                  border: "1px solid #334155",
+                                  borderRadius: 10,
+                                  color: "#e2e8f0",
+                                }}
+                                formatter={(value) => money(Number(value ?? 0))}
+                              />
+                              <Legend wrapperStyle={{ color: "#cbd5e1" }} />
+                              <Area
+                                type="monotone"
+                                dataKey="total"
+                                name="Total"
+                                stroke="#22d3ee"
+                                fill="url(#totalGradient)"
+                                strokeWidth={2}
+                              />
+                              {chartMode === "detailed" ? (
+                                storeId === "all" ? (
+                                  (data?.stores ?? []).map((store, idx) => {
+                                    const key = `store_${store.id.replace(/-/g, "_")}`;
+                                    const colors = ["#34d399", "#a78bfa", "#f59e0b", "#f43f5e", "#60a5fa"];
+                                    return (
+                                      <Line
+                                        key={store.id}
+                                        type="monotone"
+                                        dataKey={key}
+                                        name={store.name}
+                                        stroke={colors[idx % colors.length]}
+                                        strokeWidth={2.2}
+                                        dot={false}
+                                      />
+                                    );
+                                  })
+                                ) : (
+                                  <>
+                                    <Line type="monotone" dataKey="cash" name="Cash" stroke="#34d399" strokeWidth={2} dot={false} />
+                                    <Line type="monotone" dataKey="card" name="Card" stroke="#a78bfa" strokeWidth={2} dot={false} />
+                                  </>
+                                )
+                              ) : null}
+                            </ComposedChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
+                    </div>
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+
             <section className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-              <Card className="lg:col-span-12">
+              <Card className="lg:col-span-7">
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-2"><Activity className="h-5 w-5 text-cyan-300" /> Store Health</CardTitle>
                   <CardDescription>Weighted score model (Option B) with top drag signals.</CardDescription>
@@ -580,170 +762,6 @@ export default function AdminDashboardPage() {
                       </div>
                     </CollapsibleContent>
                   </Collapsible>
-                </CardContent>
-              </Card>
-
-              <Card className="lg:col-span-7">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-cyan-300" /> Sales Block</CardTitle>
-                  <CardDescription>Sales by date for selected store scope and date range.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Tabs defaultValue="table" className="w-full">
-                    <TabsList>
-                      <TabsTrigger value="table">Table</TabsTrigger>
-                      <TabsTrigger value="chart">Chart</TabsTrigger>
-                    </TabsList>
-                    <TabsContent value="table">
-                      <div className="max-h-[320px] overflow-auto rounded border border-slate-800">
-                        <table className="min-w-full text-sm">
-                          <thead className="sticky top-0 bg-slate-900 text-slate-300">
-                            <tr>
-                              <th className="px-3 py-2 text-left">Date</th>
-                              <th className="px-3 py-2 text-left">Store</th>
-                              <th className="px-3 py-2 text-left">Day</th>
-                              <th className="px-3 py-2 text-right">Cash</th>
-                              <th className="px-3 py-2 text-right">Card</th>
-                              <th className="px-3 py-2 text-right">Other</th>
-                              <th className="px-3 py-2 text-right">Total</th>
-                              <th className="px-3 py-2 text-left">Status</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {salesRows.map((row) => (
-                              <tr key={`${row.date}-${row.storeId}`} className="border-t border-slate-800 text-slate-100">
-                                <td className="px-3 py-2">{row.date}</td>
-                                <td className="px-3 py-2">{row.storeName}</td>
-                                <td className="px-3 py-2">{weekdayLabel(row.date)}</td>
-                                <td className="px-3 py-2 text-right">{money(row.cash)}</td>
-                                <td className="px-3 py-2 text-right">{money(row.card)}</td>
-                                <td className="px-3 py-2 text-right">{money(row.other)}</td>
-                                <td className="px-3 py-2 text-right font-semibold">{money(row.total)}</td>
-                                <td className="px-3 py-2">
-                                  <Badge
-                                    variant={
-                                      row.status === "fail"
-                                        ? "destructive"
-                                        : row.status === "warn"
-                                          ? "outline"
-                                          : "secondary"
-                                    }
-                                  >
-                                    {row.status.toUpperCase()}
-                                  </Badge>
-                                </td>
-                              </tr>
-                            ))}
-                            {salesRows.length === 0 ? (
-                              <tr>
-                                <td colSpan={8} className="px-3 py-4 text-center text-slate-400">
-                                  No sales rows in selected range.
-                                </td>
-                              </tr>
-                            ) : null}
-                            {salesRows.length > 0 ? (
-                              <tr className="border-t-2 border-cyan-700/50 bg-slate-900/80 text-slate-100">
-                                <td className="px-3 py-2 font-semibold">TOTAL</td>
-                                <td className="px-3 py-2 text-slate-400">{storeId === "all" ? "All Stores" : "Selected Store"}</td>
-                                <td className="px-3 py-2 text-slate-400">--</td>
-                                <td className="px-3 py-2 text-right font-semibold">{money(tableTotals.cash)}</td>
-                                <td className="px-3 py-2 text-right font-semibold">{money(tableTotals.card)}</td>
-                                <td className="px-3 py-2 text-right font-semibold">{money(tableTotals.other)}</td>
-                                <td className="px-3 py-2 text-right font-bold">{money(tableTotals.total)}</td>
-                                <td className="px-3 py-2 text-slate-400">--</td>
-                              </tr>
-                            ) : null}
-                          </tbody>
-                        </table>
-                      </div>
-                    </TabsContent>
-                    <TabsContent value="chart">
-                      <div className="rounded border border-slate-800 bg-slate-900/60 p-3">
-                        <div className="mb-3 flex justify-end">
-                          <Select value={chartMode} onValueChange={(value) => setChartMode(value as "total" | "detailed")}>
-                            <SelectTrigger className="w-[220px]">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="detailed">Detailed View</SelectItem>
-                              <SelectItem value="total">Total Only</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        {chartData.length === 0 ? (
-                          <div className="py-8 text-center text-sm text-slate-400">
-                            No chart data in selected range.
-                          </div>
-                        ) : (
-                          <div className="h-[320px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <ComposedChart data={chartData}>
-                                <defs>
-                                  <linearGradient id="totalGradient" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.35} />
-                                    <stop offset="100%" stopColor="#22d3ee" stopOpacity={0.02} />
-                                  </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                                <XAxis dataKey="date" tick={{ fill: "#94a3b8", fontSize: 12 }} axisLine={{ stroke: "#334155" }} tickLine={{ stroke: "#334155" }} />
-                                <YAxis
-                                  tickFormatter={(value) => shortMoney(Number(value))}
-                                  tick={{ fill: "#94a3b8", fontSize: 12 }}
-                                  axisLine={{ stroke: "#334155" }}
-                                  tickLine={{ stroke: "#334155" }}
-                                  width={70}
-                                  domain={[0, chartYAxis.domainMax]}
-                                  ticks={chartYAxis.ticks}
-                                />
-                                <Tooltip
-                                  contentStyle={{
-                                    backgroundColor: "#0f172a",
-                                    border: "1px solid #334155",
-                                    borderRadius: 10,
-                                    color: "#e2e8f0",
-                                  }}
-                                  formatter={(value) => money(Number(value ?? 0))}
-                                />
-                                <Legend wrapperStyle={{ color: "#cbd5e1" }} />
-                                <Area
-                                  type="monotone"
-                                  dataKey="total"
-                                  name="Total"
-                                  stroke="#22d3ee"
-                                  fill="url(#totalGradient)"
-                                  strokeWidth={2}
-                                />
-                                {chartMode === "detailed" ? (
-                                  storeId === "all" ? (
-                                    (data?.stores ?? []).map((store, idx) => {
-                                      const key = `store_${store.id.replace(/-/g, "_")}`;
-                                      const colors = ["#34d399", "#a78bfa", "#f59e0b", "#f43f5e", "#60a5fa"];
-                                      return (
-                                        <Line
-                                          key={store.id}
-                                          type="monotone"
-                                          dataKey={key}
-                                          name={store.name}
-                                          stroke={colors[idx % colors.length]}
-                                          strokeWidth={2.2}
-                                          dot={false}
-                                        />
-                                      );
-                                    })
-                                  ) : (
-                                    <>
-                                      <Line type="monotone" dataKey="cash" name="Cash" stroke="#34d399" strokeWidth={2} dot={false} />
-                                      <Line type="monotone" dataKey="card" name="Card" stroke="#a78bfa" strokeWidth={2} dot={false} />
-                                    </>
-                                  )
-                                ) : null}
-                              </ComposedChart>
-                            </ResponsiveContainer>
-                          </div>
-                        )}
-                      </div>
-                    </TabsContent>
-                  </Tabs>
                 </CardContent>
               </Card>
 
