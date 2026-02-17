@@ -11,6 +11,17 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Area,
+  CartesianGrid,
+  ComposedChart,
+  Legend,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -38,6 +49,13 @@ function money(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+function shortMoney(cents: number): string {
+  const dollars = cents / 100;
+  if (Math.abs(dollars) >= 1000000) return `$${(dollars / 1000000).toFixed(1)}M`;
+  if (Math.abs(dollars) >= 1000) return `$${(dollars / 1000).toFixed(1)}k`;
+  return `$${dollars.toFixed(0)}`;
+}
+
 function weekdayLabel(dateKey: string): string {
   const date = new Date(`${dateKey}T00:00:00`);
   return new Intl.DateTimeFormat("en-US", {
@@ -63,6 +81,7 @@ export default function AdminDashboardPage() {
   const [storeId, setStoreId] = useState<string>("all");
   const [from, setFrom] = useState<string>(() => dateDaysAgo(6));
   const [to, setTo] = useState<string>(() => cstDateKey(new Date()));
+  const [chartMode, setChartMode] = useState<"total" | "detailed">("detailed");
   const [actionOpen, setActionOpen] = useState(true);
   const [quickViewItem, setQuickViewItem] = useState<DashboardActionItem | null>(null);
 
@@ -113,40 +132,84 @@ export default function AdminDashboardPage() {
 
   const salesRows = useMemo(() => {
     if (!data) return [];
-    const perDate = new Map<
-      string,
-      { date: string; cash: number; card: number; other: number; total: number; statuses: string[] }
-    >();
+    const storeNameById = new Map(data.stores.map((store) => [store.id, store.name]));
+    const rows: Array<{
+      date: string;
+      storeId: string;
+      storeName: string;
+      cash: number;
+      card: number;
+      other: number;
+      total: number;
+      status: string;
+    }> = [];
     const targetStoreIds = storeId === "all" ? data.stores.map((store) => store.id) : [storeId];
 
     for (const sid of targetStoreIds) {
-      const rows = data.salesHistory[sid] ?? [];
-      for (const row of rows) {
-        const existing = perDate.get(row.date) ?? {
+      const historyRows = data.salesHistory[sid] ?? [];
+      for (const row of historyRows) {
+        rows.push({
           date: row.date,
-          cash: 0,
-          card: 0,
-          other: 0,
-          total: 0,
-          statuses: [],
-        };
-        existing.cash += row.cash;
-        existing.card += row.card;
-        existing.other += row.other;
-        existing.total += row.total;
-        existing.statuses.push(row.status);
-        perDate.set(row.date, existing);
+          storeId: sid,
+          storeName: storeNameById.get(sid) ?? "Unknown Store",
+          cash: row.cash,
+          card: row.card,
+          other: row.other,
+          total: row.total,
+          status: row.status,
+        });
       }
     }
 
-    return Array.from(perDate.values())
-      .sort((a, b) => b.date.localeCompare(a.date))
-      .map((row) => {
-        const hasFail = row.statuses.includes("fail");
-        const hasWarn = row.statuses.includes("warn");
-        const status = hasFail ? "fail" : hasWarn ? "warn" : row.statuses[0] ?? "pass";
-        return { ...row, status };
-      });
+    return rows.sort((a, b) => {
+      const dateCmp = b.date.localeCompare(a.date);
+      if (dateCmp !== 0) return dateCmp;
+      return a.storeName.localeCompare(b.storeName);
+    });
+  }, [data, storeId]);
+
+  const tableTotals = useMemo(
+    () =>
+      salesRows.reduce(
+        (acc, row) => ({
+          cash: acc.cash + row.cash,
+          card: acc.card + row.card,
+          other: acc.other + row.other,
+          total: acc.total + row.total,
+        }),
+        { cash: 0, card: 0, other: 0, total: 0 }
+      ),
+    [salesRows]
+  );
+
+  const chartData = useMemo(() => {
+    if (!data) return [];
+    const storeNameById = new Map(data.stores.map((store) => [store.id, store.name]));
+    const targetStoreIds = storeId === "all" ? data.stores.map((store) => store.id) : [storeId];
+    const byDate = new Map<string, Record<string, number | string>>();
+
+    for (const sid of targetStoreIds) {
+      const rows = data.salesHistory[sid] ?? [];
+      const safeKey = `store_${sid.replace(/-/g, "_")}`;
+      for (const row of rows) {
+        const existing = byDate.get(row.date) ?? {
+          date: row.date.slice(5),
+          total: 0,
+          cash: 0,
+          card: 0,
+        };
+        existing.total = Number(existing.total) + row.total;
+        existing.cash = Number(existing.cash) + row.cash;
+        existing.card = Number(existing.card) + row.card;
+        existing[safeKey] = row.total;
+        existing[`${safeKey}_label`] = storeNameById.get(sid) ?? sid;
+        byDate.set(row.date, existing);
+      }
+    }
+
+    return Array.from(byDate.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([, value]) => value);
   }, [data, storeId]);
 
   useEffect(() => {
@@ -409,6 +472,7 @@ export default function AdminDashboardPage() {
                           <thead className="sticky top-0 bg-slate-900 text-slate-300">
                             <tr>
                               <th className="px-3 py-2 text-left">Date</th>
+                              <th className="px-3 py-2 text-left">Store</th>
                               <th className="px-3 py-2 text-left">Day</th>
                               <th className="px-3 py-2 text-right">Cash</th>
                               <th className="px-3 py-2 text-right">Card</th>
@@ -419,8 +483,9 @@ export default function AdminDashboardPage() {
                           </thead>
                           <tbody>
                             {salesRows.map((row) => (
-                              <tr key={row.date} className="border-t border-slate-800 text-slate-100">
+                              <tr key={`${row.date}-${row.storeId}`} className="border-t border-slate-800 text-slate-100">
                                 <td className="px-3 py-2">{row.date}</td>
+                                <td className="px-3 py-2">{row.storeName}</td>
                                 <td className="px-3 py-2">{weekdayLabel(row.date)}</td>
                                 <td className="px-3 py-2 text-right">{money(row.cash)}</td>
                                 <td className="px-3 py-2 text-right">{money(row.card)}</td>
@@ -443,9 +508,21 @@ export default function AdminDashboardPage() {
                             ))}
                             {salesRows.length === 0 ? (
                               <tr>
-                                <td colSpan={7} className="px-3 py-4 text-center text-slate-400">
+                                <td colSpan={8} className="px-3 py-4 text-center text-slate-400">
                                   No sales rows in selected range.
                                 </td>
+                              </tr>
+                            ) : null}
+                            {salesRows.length > 0 ? (
+                              <tr className="border-t-2 border-cyan-700/50 bg-slate-900/80 text-slate-100">
+                                <td className="px-3 py-2 font-semibold">TOTAL</td>
+                                <td className="px-3 py-2 text-slate-400">{storeId === "all" ? "All Stores" : "Selected Store"}</td>
+                                <td className="px-3 py-2 text-slate-400">--</td>
+                                <td className="px-3 py-2 text-right font-semibold">{money(tableTotals.cash)}</td>
+                                <td className="px-3 py-2 text-right font-semibold">{money(tableTotals.card)}</td>
+                                <td className="px-3 py-2 text-right font-semibold">{money(tableTotals.other)}</td>
+                                <td className="px-3 py-2 text-right font-bold">{money(tableTotals.total)}</td>
+                                <td className="px-3 py-2 text-slate-400">--</td>
                               </tr>
                             ) : null}
                           </tbody>
@@ -453,8 +530,87 @@ export default function AdminDashboardPage() {
                       </div>
                     </TabsContent>
                     <TabsContent value="chart">
-                      <div className="rounded border border-slate-800 bg-slate-900/60 p-3 text-sm text-slate-300">
-                        Chart view queued for Phase 2 (recharts).
+                      <div className="rounded border border-slate-800 bg-slate-900/60 p-3">
+                        <div className="mb-3 flex justify-end">
+                          <Select value={chartMode} onValueChange={(value) => setChartMode(value as "total" | "detailed")}>
+                            <SelectTrigger className="w-[220px]">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="detailed">Detailed View</SelectItem>
+                              <SelectItem value="total">Total Only</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        {chartData.length === 0 ? (
+                          <div className="py-8 text-center text-sm text-slate-400">
+                            No chart data in selected range.
+                          </div>
+                        ) : (
+                          <div className="h-[320px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <ComposedChart data={chartData}>
+                                <defs>
+                                  <linearGradient id="totalGradient" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.35} />
+                                    <stop offset="100%" stopColor="#22d3ee" stopOpacity={0.02} />
+                                  </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                                <XAxis dataKey="date" tick={{ fill: "#94a3b8", fontSize: 12 }} axisLine={{ stroke: "#334155" }} tickLine={{ stroke: "#334155" }} />
+                                <YAxis
+                                  tickFormatter={(value) => shortMoney(Number(value))}
+                                  tick={{ fill: "#94a3b8", fontSize: 12 }}
+                                  axisLine={{ stroke: "#334155" }}
+                                  tickLine={{ stroke: "#334155" }}
+                                  width={70}
+                                />
+                                <Tooltip
+                                  contentStyle={{
+                                    backgroundColor: "#0f172a",
+                                    border: "1px solid #334155",
+                                    borderRadius: 10,
+                                    color: "#e2e8f0",
+                                  }}
+                                  formatter={(value) => money(Number(value ?? 0))}
+                                />
+                                <Legend wrapperStyle={{ color: "#cbd5e1" }} />
+                                <Area
+                                  type="monotone"
+                                  dataKey="total"
+                                  name="Total"
+                                  stroke="#22d3ee"
+                                  fill="url(#totalGradient)"
+                                  strokeWidth={2}
+                                />
+                                {chartMode === "detailed" ? (
+                                  storeId === "all" ? (
+                                    (data?.stores ?? []).map((store, idx) => {
+                                      const key = `store_${store.id.replace(/-/g, "_")}`;
+                                      const colors = ["#34d399", "#a78bfa", "#f59e0b", "#f43f5e", "#60a5fa"];
+                                      return (
+                                        <Line
+                                          key={store.id}
+                                          type="monotone"
+                                          dataKey={key}
+                                          name={store.name}
+                                          stroke={colors[idx % colors.length]}
+                                          strokeWidth={2.2}
+                                          dot={false}
+                                        />
+                                      );
+                                    })
+                                  ) : (
+                                    <>
+                                      <Line type="monotone" dataKey="cash" name="Cash" stroke="#34d399" strokeWidth={2} dot={false} />
+                                      <Line type="monotone" dataKey="card" name="Card" stroke="#a78bfa" strokeWidth={2} dot={false} />
+                                    </>
+                                  )
+                                ) : null}
+                              </ComposedChart>
+                            </ResponsiveContainer>
+                          </div>
+                        )}
                       </div>
                     </TabsContent>
                   </Tabs>
