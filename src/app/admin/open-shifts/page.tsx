@@ -21,7 +21,7 @@
  */
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -66,7 +66,7 @@ function formatMoney(cents: number | null) {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-export default function OpenShiftsPage() {
+function OpenShiftsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const source = searchParams.get("source");
@@ -322,6 +322,14 @@ export default function OpenShiftsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function OpenShiftsPage() {
+  return (
+    <Suspense fallback={<div className="app-shell">Loading...</div>}>
+      <OpenShiftsContent />
+    </Suspense>
   );
 }
 

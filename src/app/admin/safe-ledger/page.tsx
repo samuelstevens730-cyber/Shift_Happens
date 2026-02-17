@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
@@ -144,7 +144,7 @@ function weekdayLabel(dateKey: string): string {
   return labels[day] ?? "UNK";
 }
 
-export default function SafeLedgerDashboardPage() {
+function SafeLedgerDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const source = searchParams.get("source");
@@ -1583,5 +1583,13 @@ export default function SafeLedgerDashboardPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function SafeLedgerDashboardPage() {
+  return (
+    <Suspense fallback={<div className="space-y-4 p-6 text-slate-100">Loading safe ledger...</div>}>
+      <SafeLedgerDashboardContent />
+    </Suspense>
   );
 }

@@ -21,7 +21,7 @@
  */
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
@@ -53,7 +53,7 @@ function formatWhen(value: string | null) {
   });
 }
 
-export default function OverridesPage() {
+function OverridesContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const source = searchParams.get("source");
@@ -244,5 +244,13 @@ export default function OverridesPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function OverridesPage() {
+  return (
+    <Suspense fallback={<div className="app-shell">Loading...</div>}>
+      <OverridesContent />
+    </Suspense>
   );
 }
