@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -13,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { DashboardResponse } from "@/types/adminDashboard";
+import type { DashboardActionItem, DashboardResponse } from "@/types/adminDashboard";
 
 function cstDateKey(date: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -49,6 +52,8 @@ export default function AdminDashboardPage() {
   const [storeId, setStoreId] = useState<string>("all");
   const [from, setFrom] = useState<string>(() => dateDaysAgo(6));
   const [to, setTo] = useState<string>(() => cstDateKey(new Date()));
+  const [actionOpen, setActionOpen] = useState(true);
+  const [quickViewItem, setQuickViewItem] = useState<DashboardActionItem | null>(null);
 
   const topline = useMemo(() => {
     if (!data) {
@@ -77,6 +82,23 @@ export default function AdminDashboardPage() {
     if (storeId === "all") return data.stores;
     return data.stores.filter((store) => store.id === storeId);
   }, [data, storeId]);
+
+  const actionRows = useMemo(() => {
+    if (!data) return [];
+    const labels: Record<string, string> = {
+      people: "People",
+      money: "Money",
+      scheduling: "Scheduling",
+      approvals: "Approvals",
+    };
+    return (Object.entries(data.actions) as Array<[keyof DashboardResponse["actions"], DashboardActionItem[]]>).flatMap(
+      ([category, items]) =>
+        items.map((item) => ({
+          ...item,
+          categoryLabel: labels[category],
+        }))
+    );
+  }, [data]);
 
   useEffect(() => {
     let alive = true;
@@ -276,25 +298,48 @@ export default function AdminDashboardPage() {
                   <CardTitle>Immediate Action Items</CardTitle>
                   <CardDescription>Priority buckets, quick triage, and drilldown in next phase.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-2 lg:max-h-[360px] lg:overflow-y-auto">
-                  <div className="flex flex-wrap gap-2">
-                    <Badge variant="destructive">People: {data?.actionCounts.people ?? 0}</Badge>
-                    <Badge variant="secondary">Money: {data?.actionCounts.money ?? 0}</Badge>
-                    <Badge variant="secondary">Scheduling: {data?.actionCounts.scheduling ?? 0}</Badge>
-                    <Badge variant="secondary">Approvals: {data?.actionCounts.approvals ?? 0}</Badge>
-                  </div>
-                  <div className="space-y-2 pt-1">
-                    {Object.entries(data?.actions ?? {}).flatMap(([category, items]) =>
-                      items.map((item) => (
-                        <div key={item.id} className="rounded border border-slate-800 bg-slate-900/60 p-2">
-                          <div className="text-sm font-medium text-slate-100">{item.title}</div>
-                          <div className="text-xs text-slate-400">
-                            {category} · {item.description}
+                <CardContent>
+                  <Collapsible open={actionOpen} onOpenChange={setActionOpen}>
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap gap-2">
+                        <Badge variant="destructive">People: {data?.actionCounts.people ?? 0}</Badge>
+                        <Badge variant="secondary">Money: {data?.actionCounts.money ?? 0}</Badge>
+                        <Badge variant="secondary">Scheduling: {data?.actionCounts.scheduling ?? 0}</Badge>
+                        <Badge variant="secondary">Approvals: {data?.actionCounts.approvals ?? 0}</Badge>
+                      </div>
+                      <CollapsibleTrigger className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800">
+                        {actionOpen ? "Collapse" : "Expand"}
+                      </CollapsibleTrigger>
+                    </div>
+                    <CollapsibleContent>
+                      <Separator className="my-3" />
+                      <div className="space-y-2 lg:max-h-[320px] lg:overflow-y-auto">
+                        {actionRows.length === 0 ? (
+                          <div className="rounded border border-slate-800 bg-slate-900/60 p-2 text-xs text-slate-400">
+                            No immediate action items.
                           </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
+                        ) : (
+                          actionRows.map((item) => (
+                            <button
+                              key={item.id}
+                              className="w-full rounded border border-slate-800 bg-slate-900/60 p-2 text-left hover:bg-slate-800/70"
+                              onClick={() => setQuickViewItem(item)}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="text-sm font-medium text-slate-100">{item.title}</div>
+                                <Badge variant={item.severity === "high" ? "destructive" : "outline"}>
+                                  {item.severity.toUpperCase()}
+                                </Badge>
+                              </div>
+                              <div className="mt-1 text-xs text-slate-400">
+                                {item.categoryLabel} · {item.description}
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
                 </CardContent>
               </Card>
 
@@ -313,6 +358,25 @@ export default function AdminDashboardPage() {
           </div>
         )}
       </div>
+
+      <Dialog open={Boolean(quickViewItem)} onOpenChange={(open) => !open && setQuickViewItem(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Quick View (Stub)</DialogTitle>
+            <DialogDescription>This will become the unified action drilldown in Phase 2.</DialogDescription>
+          </DialogHeader>
+          {quickViewItem ? (
+            <div className="space-y-2 text-sm text-slate-200">
+              <div><span className="text-slate-400">Title:</span> {quickViewItem.title}</div>
+              <div><span className="text-slate-400">Category:</span> {quickViewItem.category}</div>
+              <div><span className="text-slate-400">Severity:</span> {quickViewItem.severity}</div>
+              <div><span className="text-slate-400">Details:</span> {quickViewItem.description}</div>
+              <div><span className="text-slate-400">Store ID:</span> {quickViewItem.store_id ?? "N/A"}</div>
+              <div><span className="text-slate-400">Created:</span> {quickViewItem.created_at ?? "N/A"}</div>
+            </div>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
