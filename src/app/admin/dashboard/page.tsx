@@ -615,12 +615,11 @@ export default function AdminDashboardPage() {
                               <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
                               <XAxis dataKey="date" tick={{ fill: "#94a3b8", fontSize: 12 }} axisLine={{ stroke: "#334155" }} tickLine={{ stroke: "#334155" }} />
                               <YAxis
-                                hide={isMobileChart}
                                 tickFormatter={(value) => shortMoney(Number(value))}
-                                tick={{ fill: "#94a3b8", fontSize: 12 }}
+                                tick={{ fill: "#94a3b8", fontSize: isMobileChart ? 11 : 12 }}
                                 axisLine={{ stroke: "#334155" }}
                                 tickLine={{ stroke: "#334155" }}
-                                width={isMobileChart ? 0 : 70}
+                                width={isMobileChart ? 42 : 70}
                                 domain={[0, chartYAxis.domainMax]}
                                 ticks={chartYAxis.ticks}
                               />
