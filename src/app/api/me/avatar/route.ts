@@ -65,7 +65,6 @@ export async function PATCH(req: Request) {
       avatar_style: style,
       avatar_seed: seed,
       avatar_options: options,
-      updated_at: new Date().toISOString(),
     })
     .eq("id", profileId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

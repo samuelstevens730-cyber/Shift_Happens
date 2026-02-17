@@ -20,6 +20,44 @@ const ALLOWED_AVATAAARS = {
   skinColor: new Set(["f8d25c", "fd9841", "ffdbb4", "edb98a", "d08b5b", "ae5d29", "614335"]),
 } as const;
 
+const AVATAAARS_VALUE_MAP = {
+  top: {
+    longHair: "longHairBigHair",
+    shortHair: "shortHairShortFlat",
+    turban: "turban",
+    winterHat1: "winterHat1",
+    winterHat2: "winterHat2",
+    hat: "hat",
+    eyepatch: "eyepatch",
+  },
+  accessories: {
+    none: "blank",
+    kurt: "kurt",
+    prescription01: "prescription01",
+    prescription02: "prescription02",
+    round: "round",
+    sunglasses: "sunglasses",
+    wayfarers: "wayfarers",
+  },
+  facialHair: {
+    none: "blank",
+    beardMedium: "beardMedium",
+    beardLight: "beardLight",
+    beardMajestic: "beardMajestic",
+    moustacheFancy: "moustacheFancy",
+    moustacheMagnum: "moustacheMagnum",
+  },
+  skinColor: {
+    f8d25c: "yellow",
+    fd9841: "tanned",
+    ffdbb4: "light",
+    edb98a: "pale",
+    d08b5b: "brown",
+    ae5d29: "darkBrown",
+    "614335": "black",
+  },
+} as const;
+
 function addDiceParam(params: URLSearchParams, key: string, value?: string) {
   if (!value) return;
   params.append(`${key}[]`, value);
@@ -50,15 +88,17 @@ export default function UserAvatar({
     const accessories = options.accessories;
     const facialHair = options.facialHair;
     const skinColor = options.skinColor;
-    if (top && ALLOWED_AVATAAARS.top.has(top)) addDiceParam(params, "top", top);
+    if (top && ALLOWED_AVATAAARS.top.has(top)) {
+      addDiceParam(params, "top", AVATAAARS_VALUE_MAP.top[top]);
+    }
     if (accessories && ALLOWED_AVATAAARS.accessories.has(accessories)) {
-      addDiceParam(params, "accessories", accessories);
+      addDiceParam(params, "accessories", AVATAAARS_VALUE_MAP.accessories[accessories]);
     }
     if (facialHair && ALLOWED_AVATAAARS.facialHair.has(facialHair)) {
-      addDiceParam(params, "facialHair", facialHair);
+      addDiceParam(params, "facialHair", AVATAAARS_VALUE_MAP.facialHair[facialHair]);
     }
     if (skinColor && ALLOWED_AVATAAARS.skinColor.has(skinColor)) {
-      addDiceParam(params, "skinColor", skinColor);
+      addDiceParam(params, "skinColor", AVATAAARS_VALUE_MAP.skinColor[skinColor]);
     }
   }
 
