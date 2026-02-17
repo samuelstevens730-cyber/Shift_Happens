@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import type { ShiftSalesResponse } from "@/types/adminShiftSales";
+import type { ShiftSalesRow } from "@/types/adminShiftSales";
 
 function cstDateKey(date: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -124,6 +125,75 @@ export default function AdminShiftSalesPage() {
       .sort((a, b) => (b.avgSalesPerShiftCents ?? -1) - (a.avgSalesPerShiftCents ?? -1));
   }, [data]);
 
+  const adjustedLeaderboard = useMemo(() => {
+    const rows = (data?.rows ?? []).filter(
+      (row): row is ShiftSalesRow & { salesCents: number } => row.salesCents != null
+    );
+    if (rows.length === 0) return [];
+
+    const salesByStore = new Map<string, number>();
+    for (const row of rows) {
+      salesByStore.set(row.storeId, (salesByStore.get(row.storeId) ?? 0) + row.salesCents);
+    }
+    const storeTotals = Array.from(salesByStore.values()).filter((value) => value > 0);
+    if (storeTotals.length === 0) return [];
+    const networkAvgStoreTotal =
+      storeTotals.reduce((sum, value) => sum + value, 0) / storeTotals.length;
+
+    const factorByStore = new Map<string, number>();
+    for (const [sid, total] of salesByStore.entries()) {
+      factorByStore.set(sid, total > 0 ? networkAvgStoreTotal / total : 1);
+    }
+
+    const byEmployee = new Map<
+      string,
+      {
+        employeeName: string;
+        shiftsWithSales: number;
+        rawSalesCents: number;
+        adjustedSalesCents: number;
+        weightedFactorTotal: number;
+      }
+    >();
+
+    for (const row of rows) {
+      const factor = factorByStore.get(row.storeId) ?? 1;
+      const existing = byEmployee.get(row.profileId) ?? {
+        employeeName: row.employeeName ?? "Unknown",
+        shiftsWithSales: 0,
+        rawSalesCents: 0,
+        adjustedSalesCents: 0,
+        weightedFactorTotal: 0,
+      };
+      existing.shiftsWithSales += 1;
+      existing.rawSalesCents += row.salesCents;
+      existing.adjustedSalesCents += Math.round(row.salesCents * factor);
+      existing.weightedFactorTotal += factor;
+      byEmployee.set(row.profileId, existing);
+    }
+
+    return Array.from(byEmployee.entries())
+      .map(([profileId, value]) => ({
+        profileId,
+        employeeName: value.employeeName,
+        shiftsWithSales: value.shiftsWithSales,
+        rawSalesCents: value.rawSalesCents,
+        adjustedSalesCents: value.adjustedSalesCents,
+        rawAvgPerShiftCents:
+          value.shiftsWithSales > 0 ? Math.round(value.rawSalesCents / value.shiftsWithSales) : null,
+        adjustedAvgPerShiftCents:
+          value.shiftsWithSales > 0
+            ? Math.round(value.adjustedSalesCents / value.shiftsWithSales)
+            : null,
+        avgStoreFactor:
+          value.shiftsWithSales > 0 ? value.weightedFactorTotal / value.shiftsWithSales : 1,
+      }))
+      .sort(
+        (a, b) =>
+          (b.adjustedAvgPerShiftCents ?? -1) - (a.adjustedAvgPerShiftCents ?? -1)
+      );
+  }, [data]);
+
   return (
     <div className="app-shell">
       <div className="mx-auto max-w-7xl space-y-4">
@@ -208,6 +278,46 @@ export default function AdminShiftSalesPage() {
                     <tr>
                       <td colSpan={5} className="py-6 text-center text-slate-400">
                         No leaderboard data in this range.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="card card-pad overflow-auto">
+              <div className="mb-1 text-base font-semibold">
+                Volume-Adjusted Leaderboard (Fair Across Stores)
+              </div>
+              <div className="mb-3 text-xs text-slate-400">
+                Adjusted using store sales-volume factor for selected range.
+              </div>
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left border-b border-white/10">
+                    <th className="py-2 pr-3">Rank</th>
+                    <th className="py-2 pr-3">Employee</th>
+                    <th className="py-2 pr-3">Shifts (with sales)</th>
+                    <th className="py-2 pr-3">Raw Avg / Shift</th>
+                    <th className="py-2 pr-3">Adj Avg / Shift</th>
+                    <th className="py-2 pr-3">Avg Factor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {adjustedLeaderboard.map((row, idx) => (
+                    <tr key={row.profileId} className="border-b border-white/5">
+                      <td className="py-2 pr-3">#{idx + 1}</td>
+                      <td className="py-2 pr-3">{row.employeeName}</td>
+                      <td className="py-2 pr-3">{row.shiftsWithSales}</td>
+                      <td className="py-2 pr-3">{money(row.rawAvgPerShiftCents)}</td>
+                      <td className="py-2 pr-3 font-semibold">{money(row.adjustedAvgPerShiftCents)}</td>
+                      <td className="py-2 pr-3">{row.avgStoreFactor.toFixed(2)}x</td>
+                    </tr>
+                  ))}
+                  {adjustedLeaderboard.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="py-6 text-center text-slate-400">
+                        No adjusted leaderboard data in this range.
                       </td>
                     </tr>
                   )}
