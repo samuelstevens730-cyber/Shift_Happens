@@ -22,14 +22,7 @@ const ALLOWED_AVATAAARS = {
 
 function addDiceParam(params: URLSearchParams, key: string, value?: string) {
   if (!value) return;
-  params.append(`${key}[]`, value);
-}
-
-function addDiceParamCandidates(params: URLSearchParams, key: string, candidates: string[]) {
-  const unique = Array.from(new Set(candidates.filter(Boolean)));
-  for (const candidate of unique) {
-    addDiceParam(params, key, candidate);
-  }
+  params.set(key, value);
 }
 
 export default function UserAvatar({
@@ -57,50 +50,42 @@ export default function UserAvatar({
     const accessories = options.accessories;
     const facialHair = options.facialHair;
     const skinColor = options.skinColor;
+
+    const topMap: Record<string, string> = {
+      longHair: "longButNotTooLong",
+      shortHair: "shortFlat",
+      turban: "turban",
+      winterHat1: "winterHat1",
+      winterHat2: "winterHat02",
+      hat: "hat",
+      eyepatch: "shortFlat",
+    };
+    const skinMap: Record<string, string> = {
+      f8d25c: "yellow",
+      fd9841: "tanned",
+      ffdbb4: "light",
+      edb98a: "pale",
+      d08b5b: "brown",
+      ae5d29: "darkBrown",
+      "614335": "black",
+    };
+
     if (top && ALLOWED_AVATAAARS.top.has(top)) {
-      const topCandidates: Record<string, string[]> = {
-        longHair: ["longHair", "longHairBigHair", "LongHairBigHair"],
-        shortHair: ["shortHair", "shortHairShortFlat", "ShortHairShortFlat"],
-        turban: ["turban", "Turban"],
-        winterHat1: ["winterHat1", "WinterHat1"],
-        winterHat2: ["winterHat2", "WinterHat2", "winterHat02", "WinterHat02"],
-        hat: ["hat", "Hat"],
-        eyepatch: ["eyepatch", "Eyepatch"],
-      };
-      addDiceParamCandidates(params, "top", topCandidates[top] ?? [top]);
+      addDiceParam(params, "top", topMap[top] ?? top);
     }
     if (accessories && ALLOWED_AVATAAARS.accessories.has(accessories)) {
-      if (accessories !== "none") {
-        addDiceParamCandidates(params, "accessories", [
-          accessories,
-          accessories.charAt(0).toUpperCase() + accessories.slice(1),
-        ]);
-      }
+      if (accessories !== "none") addDiceParam(params, "accessories", accessories);
     }
     if (facialHair && ALLOWED_AVATAAARS.facialHair.has(facialHair)) {
-      if (facialHair !== "none") {
-        addDiceParamCandidates(params, "facialHair", [
-          facialHair,
-          facialHair.charAt(0).toUpperCase() + facialHair.slice(1),
-        ]);
-      }
+      if (facialHair !== "none") addDiceParam(params, "facialHair", facialHair);
     }
     if (skinColor && ALLOWED_AVATAAARS.skinColor.has(skinColor)) {
-      const skinMap: Record<string, string> = {
-        f8d25c: "yellow",
-        fd9841: "tanned",
-        ffdbb4: "light",
-        edb98a: "pale",
-        d08b5b: "brown",
-        ae5d29: "darkBrown",
-        "614335": "black",
-      };
-      const mapped = skinMap[skinColor];
-      addDiceParamCandidates(params, "skinColor", [
-        skinColor,
-        mapped,
-        mapped ? mapped.charAt(0).toUpperCase() + mapped.slice(1) : "",
-      ]);
+      addDiceParam(params, "skinColor", skinMap[skinColor] ?? "light");
+    }
+
+    // "eyepatch" is an accessories option in DiceBear's avataaars style.
+    if (top === "eyepatch") {
+      addDiceParam(params, "accessories", "eyepatch");
     }
   }
 
