@@ -19,6 +19,7 @@ function sanitizeOptions(value: unknown): AvatarOptions {
   if (typeof raw.accessories === "string") next.accessories = raw.accessories;
   if (typeof raw.facialHair === "string") next.facialHair = raw.facialHair;
   if (typeof raw.skinColor === "string") next.skinColor = raw.skinColor;
+  if (typeof raw.clothing === "string") next.clothing = raw.clothing;
   return next;
 }
 

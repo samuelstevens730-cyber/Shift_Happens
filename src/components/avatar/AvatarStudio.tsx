@@ -8,10 +8,34 @@ import UserAvatar, { type AvatarOptions } from "@/components/UserAvatar";
 
 const PIN_TOKEN_KEY = "sh_pin_token";
 
-const TOP_OPTIONS = ["longHair", "shortHair", "turban", "winterHat1", "winterHat2", "hat", "eyepatch"] as const;
+const TOP_OPTIONS = [
+  "longHair",
+  "shortHair",
+  "eyepatch",
+  "hat",
+  "hijab",
+  "turban",
+  "winterHat1",
+  "winterHat2",
+  "winterHat3",
+  "frida",
+  "shavedSides",
+] as const;
 const ACCESSORY_OPTIONS = ["none", "kurt", "prescription01", "prescription02", "round", "sunglasses", "wayfarers"] as const;
 const FACIAL_HAIR_OPTIONS = ["none", "beardMedium", "beardLight", "beardMajestic", "moustacheFancy", "moustacheMagnum"] as const;
 const SKIN_OPTIONS = ["f8d25c", "fd9841", "ffdbb4", "edb98a", "d08b5b", "ae5d29", "614335"] as const;
+const CLOTHING_OPTIONS = [
+  "none",
+  "blazerAndShirt",
+  "blazerAndSweater",
+  "collarAndSweater",
+  "graphicShirt",
+  "hoodie",
+  "overall",
+  "shirtCrewNeck",
+  "shirtScoopNeck",
+  "shirtVNeck",
+] as const;
 const STYLE_OPTIONS = ["avataaars", "adventurer", "bottts", "fun-emoji", "lorelei"] as const;
 
 function randomSeed() {
@@ -31,6 +55,7 @@ export default function AvatarStudio() {
   const [accessories, setAccessories] = useState<(typeof ACCESSORY_OPTIONS)[number]>("none");
   const [facialHair, setFacialHair] = useState<(typeof FACIAL_HAIR_OPTIONS)[number]>("none");
   const [skinColor, setSkinColor] = useState<(typeof SKIN_OPTIONS)[number]>("ffdbb4");
+  const [clothing, setClothing] = useState<(typeof CLOTHING_OPTIONS)[number]>("none");
 
   const options = useMemo<AvatarOptions>(
     () => ({
@@ -38,8 +63,9 @@ export default function AvatarStudio() {
       accessories,
       facialHair,
       skinColor,
+      clothing,
     }),
-    [top, accessories, facialHair, skinColor]
+    [top, accessories, facialHair, skinColor, clothing]
   );
 
   async function getAuthToken() {
@@ -88,6 +114,9 @@ export default function AvatarStudio() {
         }
         if (opts.skinColor && SKIN_OPTIONS.includes(opts.skinColor as (typeof SKIN_OPTIONS)[number])) {
           setSkinColor(opts.skinColor as (typeof SKIN_OPTIONS)[number]);
+        }
+        if (opts.clothing && CLOTHING_OPTIONS.includes(opts.clothing as (typeof CLOTHING_OPTIONS)[number])) {
+          setClothing(opts.clothing as (typeof CLOTHING_OPTIONS)[number]);
         }
       } catch (e: unknown) {
         if (!alive) return;
@@ -210,6 +239,21 @@ export default function AvatarStudio() {
                       {SKIN_OPTIONS.map((item) => (
                         <option key={item} value={item}>
                           #{item}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="text-sm">
+                    Clothing
+                    <select
+                      className="select mt-1"
+                      value={clothing}
+                      onChange={(e) => setClothing(e.target.value as (typeof CLOTHING_OPTIONS)[number])}
+                    >
+                      {CLOTHING_OPTIONS.map((item) => (
+                        <option key={item} value={item}>
+                          {item}
                         </option>
                       ))}
                     </select>

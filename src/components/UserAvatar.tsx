@@ -1,5 +1,4 @@
 "use client";
-import { useEffect, useMemo, useState } from "react";
 
 type AvatarMode = "full" | "head";
 
@@ -8,20 +7,47 @@ type AvatarOptions = {
   accessories?: string;
   facialHair?: string;
   skinColor?: string;
+  clothing?: string;
 };
 
 const DEFAULT_STYLE = "adventurer";
 const DEFAULT_SEED = "shift_happens";
 
 const ALLOWED_AVATAAARS = {
-  top: new Set(["longHair", "shortHair", "turban", "winterHat1", "winterHat2", "hat", "eyepatch"]),
+  top: new Set([
+    "longHair",
+    "shortHair",
+    "eyepatch",
+    "hat",
+    "hijab",
+    "turban",
+    "winterHat1",
+    "winterHat2",
+    "winterHat3",
+    "frida",
+    "shavedSides",
+  ]),
   accessories: new Set(["kurt", "prescription01", "prescription02", "round", "sunglasses", "wayfarers", "none"]),
   facialHair: new Set(["beardMedium", "beardLight", "beardMajestic", "moustacheFancy", "moustacheMagnum", "none"]),
   skinColor: new Set(["f8d25c", "fd9841", "ffdbb4", "edb98a", "d08b5b", "ae5d29", "614335"]),
+  clothing: new Set([
+    "blazerAndShirt",
+    "blazerAndSweater",
+    "collarAndSweater",
+    "graphicShirt",
+    "hoodie",
+    "overall",
+    "shirtCrewNeck",
+    "shirtScoopNeck",
+    "shirtVNeck",
+    "none",
+  ]),
 } as const;
 
-function addDiceParam(params: URLSearchParams, key: string, value?: string) {
+function addDiceParam(params: URLSearchParams, key: string, value?: string | null) {
   if (!value) return;
+  const cleaned = value.trim();
+  if (!cleaned || cleaned.toLowerCase() === "none") return;
   params.set(key, value);
 }
 
@@ -42,50 +68,28 @@ export default function UserAvatar({
 }) {
   const resolvedSeed = seed?.trim() || DEFAULT_SEED;
   const resolvedStyle = style?.trim() || DEFAULT_STYLE;
-
+  const baseUrl = "https://api.dicebear.com/9.x";
   const params = new URLSearchParams({ seed: resolvedSeed });
 
   if (resolvedStyle === "avataaars" && options) {
-    const top = options.top;
-    const accessories = options.accessories;
-    const facialHair = options.facialHair;
-    const skinColor = options.skinColor;
+    const safeTop = options.top?.trim() ?? "";
+    const safeAccessories = options.accessories?.trim() ?? "";
+    const safeFacialHair = options.facialHair?.trim() ?? "";
+    const safeSkinColor = options.skinColor?.trim().replace(/^#/, "") ?? "";
+    const safeClothing = options.clothing?.trim() ?? "";
 
-    const topMap: Record<string, string> = {
-      longHair: "longButNotTooLong",
-      shortHair: "shortFlat",
-      turban: "turban",
-      winterHat1: "winterHat1",
-      winterHat2: "winterHat02",
-      hat: "hat",
-      eyepatch: "shortFlat",
-    };
-    const skinMap: Record<string, string> = {
-      f8d25c: "yellow",
-      fd9841: "tanned",
-      ffdbb4: "light",
-      edb98a: "pale",
-      d08b5b: "brown",
-      ae5d29: "darkBrown",
-      "614335": "black",
-    };
-
-    if (top && ALLOWED_AVATAAARS.top.has(top)) {
-      addDiceParam(params, "top", topMap[top] ?? top);
+    if (safeTop && ALLOWED_AVATAAARS.top.has(safeTop)) addDiceParam(params, "top", safeTop);
+    if (safeAccessories && ALLOWED_AVATAAARS.accessories.has(safeAccessories)) {
+      addDiceParam(params, "accessories", safeAccessories);
     }
-    if (accessories && ALLOWED_AVATAAARS.accessories.has(accessories)) {
-      if (accessories !== "none") addDiceParam(params, "accessories", accessories);
+    if (safeFacialHair && ALLOWED_AVATAAARS.facialHair.has(safeFacialHair)) {
+      addDiceParam(params, "facialHair", safeFacialHair);
     }
-    if (facialHair && ALLOWED_AVATAAARS.facialHair.has(facialHair)) {
-      if (facialHair !== "none") addDiceParam(params, "facialHair", facialHair);
+    if (safeSkinColor && ALLOWED_AVATAAARS.skinColor.has(safeSkinColor)) {
+      addDiceParam(params, "skinColor", safeSkinColor);
     }
-    if (skinColor && ALLOWED_AVATAAARS.skinColor.has(skinColor)) {
-      addDiceParam(params, "skinColor", skinMap[skinColor] ?? "light");
-    }
-
-    // "eyepatch" is an accessories option in DiceBear's avataaars style.
-    if (top === "eyepatch") {
-      addDiceParam(params, "accessories", "eyepatch");
+    if (safeClothing && ALLOWED_AVATAAARS.clothing.has(safeClothing)) {
+      addDiceParam(params, "clothing", safeClothing);
     }
   }
 
@@ -93,38 +97,10 @@ export default function UserAvatar({
     params.set("scale", "150");
     params.set("translateY", "10");
   }
-
-  const primarySrc = `https://api.dicebear.com/9.x/${resolvedStyle}/svg?${params.toString()}`;
-  const simpleParams = new URLSearchParams({ seed: resolvedSeed });
-  if (mode === "head") {
-    simpleParams.set("scale", "150");
-    simpleParams.set("translateY", "10");
-  }
-  const fallbackSimple = `https://api.dicebear.com/9.x/${resolvedStyle}/svg?${simpleParams.toString()}`;
-  const fallbackAltStyle = `https://api.dicebear.com/9.x/adventurer/svg?${simpleParams.toString()}`;
-  const fallbackAvataaarsNeutral = `https://api.dicebear.com/9.x/avataaars-neutral/svg?${simpleParams.toString()}`;
-
-  const fallbackChain = useMemo(() => {
-    const chain: string[] = [primarySrc, fallbackSimple];
-    if (resolvedStyle === "avataaars") chain.push(fallbackAvataaarsNeutral);
-    chain.push(fallbackAltStyle);
-    return chain;
-  }, [primarySrc, fallbackSimple, fallbackAvataaarsNeutral, fallbackAltStyle, resolvedStyle]);
-
-  const [srcIndex, setSrcIndex] = useState(0);
-  useEffect(() => {
-    setSrcIndex(0);
-  }, [primarySrc, resolvedStyle, resolvedSeed, mode, options?.top, options?.accessories, options?.facialHair, options?.skinColor]);
-  const src = fallbackChain[Math.min(srcIndex, fallbackChain.length - 1)];
-
-  return (
-    <img
-      src={src}
-      alt={alt}
-      className={className}
-      onError={() => setSrcIndex((prev) => (prev < fallbackChain.length - 1 ? prev + 1 : prev))}
-    />
-  );
+  const url = `${baseUrl}/${resolvedStyle}/svg?${params.toString()}`;
+  // Debug helper requested for browser verification.
+  console.log("Generated Avatar URL:", url);
+  return <img src={url} alt={alt} className={className} />;
 }
 
 export type { AvatarOptions };
