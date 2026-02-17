@@ -66,6 +66,7 @@ type SalesDailyRecordRow = {
   id: string;
   out_of_balance: boolean | null;
   balance_variance_cents: number | null;
+  open_x_report_cents?: number | null;
 };
 
 function parseClockWindowError(message: string) {
@@ -327,9 +328,13 @@ export async function POST(req: Request) {
     const [storeSettingsRes, rolloverConfigRes] = await Promise.all([
       supabaseServer
         .from("store_settings")
-        .select("sales_tracking_enabled, sales_rollover_enabled")
+        .select("sales_tracking_enabled, sales_rollover_enabled, safe_ledger_enabled")
         .eq("store_id", shift.store_id)
-        .maybeSingle<{ sales_tracking_enabled: boolean | null; sales_rollover_enabled: boolean | null }>(),
+        .maybeSingle<{
+          sales_tracking_enabled: boolean | null;
+          sales_rollover_enabled: boolean | null;
+          safe_ledger_enabled: boolean | null;
+        }>(),
       supabaseServer
         .from("store_rollover_config")
         .select("has_rollover")
@@ -341,6 +346,7 @@ export async function POST(req: Request) {
     if (rolloverConfigRes.error) return NextResponse.json({ error: rolloverConfigRes.error.message }, { status: 500 });
     const salesTrackingEnabled = Boolean(storeSettingsRes.data?.sales_tracking_enabled);
     const salesRolloverEnabled = storeSettingsRes.data?.sales_rollover_enabled ?? true;
+    const safeLedgerEnabled = Boolean(storeSettingsRes.data?.safe_ledger_enabled);
     const isRolloverNight = Boolean(rolloverConfigRes.data?.has_rollover) && Boolean(salesRolloverEnabled);
 
     if (salesTrackingEnabled && shiftType !== "other") {
@@ -393,17 +399,58 @@ export async function POST(req: Request) {
       }
 
       if (isCloseSales && !isRolloverNight) {
-        const zReport = body.salesZReportCents;
-        const priorX = body.salesPriorXCents;
-        if (!Number.isFinite(zReport ?? null) || (zReport ?? 0) < 0) {
-          return NextResponse.json({ error: "Missing or invalid Z report total." }, { status: 400 });
-        }
-        if (!Number.isFinite(priorX ?? null) || (priorX ?? 0) < 0) {
-          return NextResponse.json({ error: "Missing or invalid prior X report total." }, { status: 400 });
+        let zReportCents: number | null =
+          Number.isFinite(body.salesZReportCents ?? null) && (body.salesZReportCents ?? 0) >= 0
+            ? Math.round(body.salesZReportCents ?? 0)
+            : null;
+        let priorXReportCents: number | null =
+          Number.isFinite(body.salesPriorXCents ?? null) && (body.salesPriorXCents ?? 0) >= 0
+            ? Math.round(body.salesPriorXCents ?? 0)
+            : null;
+
+        if ((zReportCents == null || priorXReportCents == null) && safeLedgerEnabled) {
+          const [dailyRecordLookupRes, closeoutLookupRes] = await Promise.all([
+            supabaseServer
+              .from("daily_sales_records")
+              .select("id,open_x_report_cents")
+              .eq("store_id", shift.store_id)
+              .eq("business_date", businessDate)
+              .maybeSingle<{ id: string; open_x_report_cents: number | null }>(),
+            supabaseServer
+              .from("safe_closeouts")
+              .select("id,status,cash_sales_cents,card_sales_cents")
+              .eq("store_id", shift.store_id)
+              .eq("business_date", businessDate)
+              .maybeSingle<{
+                id: string;
+                status: string;
+                cash_sales_cents: number;
+                card_sales_cents: number;
+              }>(),
+          ]);
+          if (dailyRecordLookupRes.error) {
+            return NextResponse.json({ error: dailyRecordLookupRes.error.message }, { status: 500 });
+          }
+          if (closeoutLookupRes.error) {
+            return NextResponse.json({ error: closeoutLookupRes.error.message }, { status: 500 });
+          }
+
+          const closeout = closeoutLookupRes.data;
+          if (closeout && closeout.status !== "draft") {
+            zReportCents = closeout.cash_sales_cents + closeout.card_sales_cents;
+          }
+          if (priorXReportCents == null) {
+            priorXReportCents = dailyRecordLookupRes.data?.open_x_report_cents ?? null;
+          }
         }
 
-        const zReportCents = Math.round(zReport ?? 0);
-        const priorXReportCents = Math.round(priorX ?? 0);
+        if (zReportCents == null) {
+          return NextResponse.json({ error: "Missing or invalid Z report total." }, { status: 400 });
+        }
+        if (priorXReportCents == null) {
+          return NextResponse.json({ error: "Missing prior X report total. Ensure open shift sales are entered." }, { status: 400 });
+        }
+
         const closeSalesCents = zReportCents - priorXReportCents;
 
         const { data: dailyUpsert, error: dailyErr } = await supabaseServer

@@ -29,6 +29,7 @@ import HomeHeader from "@/components/HomeHeader";
 import RolloverEntryCard from "./components/RolloverEntryCard";
 import SafeCloseoutWizard from "./components/SafeCloseoutWizard";
 import { useSafeCloseout } from "@/hooks/useSafeCloseout";
+import type { SafeCloseoutContext } from "@/hooks/useSafeCloseout";
 
 const PIN_TOKEN_KEY = "sh_pin_token";
 
@@ -1219,6 +1220,8 @@ export default function ShiftPage() {
             pinToken={pinToken}
             managerAccessToken={managerAccessToken}
             managerSession={managerSession}
+            safeCloseoutContext={safeCloseout.context}
+            safeCloseoutEnabled={safeCloseout.isEnabled}
           />
         )}
         {safeCloseout.isOpen && (
@@ -1487,6 +1490,8 @@ function ClockOutModal({
   pinToken,
   managerAccessToken,
   managerSession,
+  safeCloseoutContext,
+  safeCloseoutEnabled,
 }: {
   shiftId: string;
   qrToken: string;
@@ -1499,6 +1504,8 @@ function ClockOutModal({
   pinToken: string | null;
   managerAccessToken: string | null;
   managerSession: boolean;
+  safeCloseoutContext: SafeCloseoutContext | null;
+  safeCloseoutEnabled: boolean;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -1588,7 +1595,17 @@ function ClockOutModal({
   const salesZReportCents = parseMoneyInputToCents(salesZReport);
   const salesPriorXCents = parseMoneyInputToCents(salesPriorX);
   const requiresSalesForOpen = salesTrackingEnabled && shiftType === "open";
-  const requiresSalesForClose = salesTrackingEnabled && (shiftType === "close" || shiftType === "double") && !isRolloverNight;
+  const useSafeCloseoutSalesForClose = Boolean(
+    safeCloseoutEnabled &&
+      safeCloseoutContext?.closeout &&
+      (shiftType === "close" || shiftType === "double") &&
+      !isRolloverNight
+  );
+  const requiresSalesForClose =
+    salesTrackingEnabled &&
+    (shiftType === "close" || shiftType === "double") &&
+    !isRolloverNight &&
+    !useSafeCloseoutSalesForClose;
   const salesInputsValid =
     (!requiresSalesForOpen || salesXReportCents != null) &&
     (!requiresSalesForClose || (salesZReportCents != null && salesPriorXCents != null));
@@ -1782,7 +1799,7 @@ function ClockOutModal({
               </>
             )}
 
-            {(shiftType === "close" || shiftType === "double") && !isRolloverNight && (
+            {(shiftType === "close" || shiftType === "double") && !isRolloverNight && !useSafeCloseoutSalesForClose && (
               <>
                 <label className="text-sm">Prior X Report ($)</label>
                 <input
@@ -1801,6 +1818,11 @@ function ClockOutModal({
                   placeholder="0.00"
                 />
               </>
+            )}
+            {(shiftType === "close" || shiftType === "double") && !isRolloverNight && useSafeCloseoutSalesForClose && (
+              <div className="text-xs border rounded p-2 text-emerald-700 border-emerald-300 bg-emerald-50">
+                Using submitted Safe Closeout totals for close-shift sales. No extra sales entry needed at clock out.
+              </div>
             )}
             {(shiftType === "close" || shiftType === "double") && isRolloverNight && (
               <div className="text-xs border rounded p-2 text-blue-700 border-blue-300">
