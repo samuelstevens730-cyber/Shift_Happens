@@ -22,7 +22,14 @@ const ALLOWED_AVATAAARS = {
 
 function addDiceParam(params: URLSearchParams, key: string, value?: string) {
   if (!value) return;
-  params.set(key, value);
+  params.append(`${key}[]`, value);
+}
+
+function addDiceParamCandidates(params: URLSearchParams, key: string, candidates: string[]) {
+  const unique = Array.from(new Set(candidates.filter(Boolean)));
+  for (const candidate of unique) {
+    addDiceParam(params, key, candidate);
+  }
 }
 
 export default function UserAvatar({
@@ -50,15 +57,50 @@ export default function UserAvatar({
     const accessories = options.accessories;
     const facialHair = options.facialHair;
     const skinColor = options.skinColor;
-    if (top && ALLOWED_AVATAAARS.top.has(top)) addDiceParam(params, "top", top);
+    if (top && ALLOWED_AVATAAARS.top.has(top)) {
+      const topCandidates: Record<string, string[]> = {
+        longHair: ["longHair", "longHairBigHair", "LongHairBigHair"],
+        shortHair: ["shortHair", "shortHairShortFlat", "ShortHairShortFlat"],
+        turban: ["turban", "Turban"],
+        winterHat1: ["winterHat1", "WinterHat1"],
+        winterHat2: ["winterHat2", "WinterHat2", "winterHat02", "WinterHat02"],
+        hat: ["hat", "Hat"],
+        eyepatch: ["eyepatch", "Eyepatch"],
+      };
+      addDiceParamCandidates(params, "top", topCandidates[top] ?? [top]);
+    }
     if (accessories && ALLOWED_AVATAAARS.accessories.has(accessories)) {
-      if (accessories !== "none") addDiceParam(params, "accessories", accessories);
+      if (accessories !== "none") {
+        addDiceParamCandidates(params, "accessories", [
+          accessories,
+          accessories.charAt(0).toUpperCase() + accessories.slice(1),
+        ]);
+      }
     }
     if (facialHair && ALLOWED_AVATAAARS.facialHair.has(facialHair)) {
-      if (facialHair !== "none") addDiceParam(params, "facialHair", facialHair);
+      if (facialHair !== "none") {
+        addDiceParamCandidates(params, "facialHair", [
+          facialHair,
+          facialHair.charAt(0).toUpperCase() + facialHair.slice(1),
+        ]);
+      }
     }
     if (skinColor && ALLOWED_AVATAAARS.skinColor.has(skinColor)) {
-      addDiceParam(params, "skinColor", skinColor);
+      const skinMap: Record<string, string> = {
+        f8d25c: "yellow",
+        fd9841: "tanned",
+        ffdbb4: "light",
+        edb98a: "pale",
+        d08b5b: "brown",
+        ae5d29: "darkBrown",
+        "614335": "black",
+      };
+      const mapped = skinMap[skinColor];
+      addDiceParamCandidates(params, "skinColor", [
+        skinColor,
+        mapped,
+        mapped ? mapped.charAt(0).toUpperCase() + mapped.slice(1) : "",
+      ]);
     }
   }
 
