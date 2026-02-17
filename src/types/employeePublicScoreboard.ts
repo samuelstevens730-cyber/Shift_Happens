@@ -1,10 +1,14 @@
 import type { EmployeeScoreRow } from "@/types/employeeScore";
+import type { AvatarOptions } from "@/components/UserAvatar";
 
 export type PublicScoreRow = {
   profileId: string;
   employeeName: string | null;
   score: number;
   grade: "A" | "B" | "C" | "D";
+  avatarStyle: string | null;
+  avatarSeed: string | null;
+  avatarOptions: AvatarOptions;
 };
 
 export type EmployeePublicScoreboardResponse = {

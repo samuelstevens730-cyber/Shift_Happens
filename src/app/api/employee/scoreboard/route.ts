@@ -6,6 +6,7 @@ import type {
   EmployeeScoreRow,
 } from "@/types/employeeScore";
 import type { EmployeePublicScoreboardResponse } from "@/types/employeePublicScoreboard";
+import type { AvatarOptions } from "@/components/UserAvatar";
 
 const MIN_SHIFTS_FOR_RANKING = 8;
 
@@ -105,6 +106,14 @@ type EmployeeStats = {
   closeoutAbsVariance: number[];
   cleaningCompleted: number;
   cleaningSkipped: number;
+};
+
+type ProfileRow = {
+  id: string;
+  name: string | null;
+  avatar_style: string | null;
+  avatar_seed: string | null;
+  avatar_options: AvatarOptions | null;
 };
 
 export async function GET(req: Request) {
@@ -237,7 +246,10 @@ export async function GET(req: Request) {
               scheduled_start: string;
             }>
           >(),
-        supabaseServer.from("profiles").select("id,name").returns<Array<{ id: string; name: string | null }>>(),
+        supabaseServer
+          .from("profiles")
+          .select("id,name,avatar_style,avatar_seed,avatar_options")
+          .returns<Array<ProfileRow>>(),
         supabaseServer
           .from("store_managers")
           .select("store_id,user_id")
@@ -273,6 +285,7 @@ export async function GET(req: Request) {
     }
     const managerProfileIdSet = new Set((managerProfiles ?? []).map((row) => row.id));
 
+    const profileById = new Map((profilesRes.data ?? []).map((p) => [p.id, p]));
     const profileNameById = new Map((profilesRes.data ?? []).map((p) => [p.id, p.name]));
     const expectedDrawerByStoreId = new Map(
       (storesRes.data ?? []).map((s) => [s.id, s.expected_drawer_cents])
@@ -617,6 +630,9 @@ export async function GET(req: Request) {
         employeeName: row.employeeName,
         score: row.score,
         grade: row.grade,
+        avatarStyle: profileById.get(row.profileId)?.avatar_style ?? null,
+        avatarSeed: profileById.get(row.profileId)?.avatar_seed ?? null,
+        avatarOptions: (profileById.get(row.profileId)?.avatar_options ?? {}) as AvatarOptions,
       }));
     const managerRows = rows
       .filter((row) => managerProfileIdSet.has(row.profileId))
@@ -625,6 +641,9 @@ export async function GET(req: Request) {
         employeeName: row.employeeName,
         score: row.score,
         grade: row.grade,
+        avatarStyle: profileById.get(row.profileId)?.avatar_style ?? null,
+        avatarSeed: profileById.get(row.profileId)?.avatar_seed ?? null,
+        avatarOptions: (profileById.get(row.profileId)?.avatar_options ?? {}) as AvatarOptions,
       }));
     const winner = publicRows[0] ?? null;
     const myRow = rows.find((row) => row.profileId === auth.profileId) ?? null;

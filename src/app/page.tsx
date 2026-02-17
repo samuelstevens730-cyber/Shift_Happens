@@ -639,7 +639,7 @@ function HomePageInner() {
                 QUICK LINK: SUBMIT ADVANCE
               </Link>
               <Link
-                href="/dashboard/scoreboard"
+                href="/scoreboard"
                 className="block rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-center text-xs font-semibold tracking-wide text-cyan-200 hover:bg-cyan-500/15"
               >
                 QUICK LINK: RANKINGS
