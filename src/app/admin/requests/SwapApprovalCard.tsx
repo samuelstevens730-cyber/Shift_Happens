@@ -27,6 +27,7 @@ type Props = {
   requests: SwapRequest[];
   token: string;
   onRefresh: () => void;
+  highlightRequestId?: string | null;
 };
 
 function formatDate(value: string) {
@@ -46,7 +47,7 @@ function formatTime(value?: string) {
   return `${hour12}:${minute} ${suffix}`;
 }
 
-export default function SwapApprovalCard({ requests, token, onRefresh }: Props) {
+export default function SwapApprovalCard({ requests, token, onRefresh, highlightRequestId = null }: Props) {
   const pending = requests.filter(r => r.status === "pending");
   const [error, setError] = useState<string | null>(null);
 
@@ -106,7 +107,12 @@ export default function SwapApprovalCard({ requests, token, onRefresh }: Props) 
           const requesterName = req.requester?.name ?? req.requester_profile_id;
           const storeName = shift?.stores?.name ?? shift?.store_id ?? req.store_id;
           return (
-            <div key={req.id} className="rounded-lg border border-white/10 bg-white/5 p-3 space-y-2">
+            <div
+              key={req.id}
+              className={`rounded-lg border bg-white/5 p-3 space-y-2 ${
+                highlightRequestId === req.id ? "border-cyan-400/80 ring-1 ring-cyan-400/40" : "border-white/10"
+              }`}
+            >
               <div className="flex items-center justify-between">
                 <div className="text-sm font-semibold">Request {req.id}</div>
                 <div className="text-xs muted">Expires {formatDate(req.expires_at)}</div>

@@ -71,8 +71,27 @@ type TabId = (typeof TABS)[number]["id"];
 function AdminRequestsContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const tabParam = (searchParams.get("tab") || "swaps") as TabId;
-  const activeTab = TABS.some(t => t.id === tabParam) ? tabParam : "swaps";
+  const tabParam = searchParams.get("tab");
+  const source = searchParams.get("source");
+  const actionId = searchParams.get("actionId");
+  const storeIdFilter = searchParams.get("storeId");
+  const dashboardTab: TabId | null =
+    actionId?.startsWith("approval-swap-")
+      ? "swaps"
+      : actionId?.startsWith("approval-timeoff-")
+        ? "timeoff"
+        : actionId?.startsWith("approval-timesheet-")
+          ? "timesheets"
+          : null;
+  const activeTab = TABS.some(t => t.id === tabParam) ? (tabParam as TabId) : dashboardTab ?? "swaps";
+  const highlightRequestId =
+    actionId?.startsWith("approval-swap-")
+      ? actionId.replace("approval-swap-", "")
+      : actionId?.startsWith("approval-timeoff-")
+        ? actionId.replace("approval-timeoff-", "")
+        : actionId?.startsWith("approval-timesheet-")
+          ? actionId.replace("approval-timesheet-", "")
+          : null;
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -96,10 +115,19 @@ function AdminRequestsContent() {
     if (!timeRes.ok) throw new Error(timeJson?.error ?? "Failed to load time off requests.");
     if (!tsRes.ok) throw new Error(tsJson?.error ?? "Failed to load timesheet requests.");
 
-    setSwapRequests(swapJson?.rows ?? []);
-    setTimeOffRequests(timeJson?.rows ?? []);
-    setTimesheetRequests(tsJson?.rows ?? []);
-  }, []);
+    const nextSwaps: SwapRequest[] = swapJson?.rows ?? [];
+    const nextTimeOff: TimeOffRequest[] = timeJson?.rows ?? [];
+    const nextTimesheets: TimesheetRequest[] = tsJson?.rows ?? [];
+    if (source === "dashboard" && storeIdFilter) {
+      setSwapRequests(nextSwaps.filter((row) => row.store_id === storeIdFilter));
+      setTimeOffRequests(nextTimeOff.filter((row) => row.store_id === storeIdFilter));
+      setTimesheetRequests(nextTimesheets.filter((row) => row.store_id === storeIdFilter));
+      return;
+    }
+    setSwapRequests(nextSwaps);
+    setTimeOffRequests(nextTimeOff);
+    setTimesheetRequests(nextTimesheets);
+  }, [source, storeIdFilter]);
 
   useEffect(() => {
     let alive = true;
@@ -143,6 +171,7 @@ function AdminRequestsContent() {
           requests={swapRequests}
           token={token}
           onRefresh={() => refreshAll(token)}
+          highlightRequestId={highlightRequestId}
         />
       );
     }
@@ -152,6 +181,7 @@ function AdminRequestsContent() {
           requests={timeOffRequests}
           token={token}
           onRefresh={() => refreshAll(token)}
+          highlightRequestId={highlightRequestId}
         />
       );
     }
@@ -160,9 +190,10 @@ function AdminRequestsContent() {
         requests={timesheetRequests}
         token={token}
         onRefresh={() => refreshAll(token)}
+        highlightRequestId={highlightRequestId}
       />
     );
-  }, [activeTab, swapRequests, timeOffRequests, timesheetRequests, token, refreshAll]);
+  }, [activeTab, swapRequests, timeOffRequests, timesheetRequests, token, refreshAll, highlightRequestId]);
 
   if (loading) return <div className="app-shell">Loading...</div>;
   if (error) return <div className="app-shell"><div className="banner banner-error">{error}</div></div>;
@@ -191,6 +222,12 @@ function AdminRequestsContent() {
             ))}
           </div>
         </header>
+
+        {source === "dashboard" && (
+          <div className="rounded border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
+            Opened from Dashboard Action Items{storeIdFilter ? ` · Store filter applied` : ""}{highlightRequestId ? ` · Highlight target loaded` : ""}.
+          </div>
+        )}
 
         {content}
       </div>

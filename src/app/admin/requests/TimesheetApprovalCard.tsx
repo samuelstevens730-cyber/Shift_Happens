@@ -22,6 +22,7 @@ type Props = {
   requests: TimesheetRequest[];
   token: string;
   onRefresh: () => void;
+  highlightRequestId?: string | null;
 };
 
 function formatDateTime(value?: string | null) {
@@ -31,7 +32,7 @@ function formatDateTime(value?: string | null) {
   return dt.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-export default function TimesheetApprovalCard({ requests, token, onRefresh }: Props) {
+export default function TimesheetApprovalCard({ requests, token, onRefresh, highlightRequestId = null }: Props) {
   const pending = requests.filter(r => r.status === "pending");
   const [error, setError] = useState<string | null>(null);
 
@@ -87,7 +88,12 @@ export default function TimesheetApprovalCard({ requests, token, onRefresh }: Pr
       {pending.length === 0 && <div className="text-sm muted">No pending timesheet requests.</div>}
       <div className="space-y-3">
         {pending.map(req => (
-          <div key={req.id} className="rounded-lg border border-white/10 bg-white/5 p-3 space-y-2">
+          <div
+            key={req.id}
+            className={`rounded-lg border bg-white/5 p-3 space-y-2 ${
+              highlightRequestId === req.id ? "border-cyan-400/80 ring-1 ring-cyan-400/40" : "border-white/10"
+            }`}
+          >
             <div className="flex items-center justify-between">
               <div className="text-sm font-semibold">Request {req.id}</div>
               <div className="text-xs muted">{formatDateTime(req.created_at)}</div>

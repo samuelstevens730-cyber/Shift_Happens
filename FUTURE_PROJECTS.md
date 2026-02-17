@@ -6,6 +6,12 @@
 - Support in-drawer actions for approvals, closeout review, and override/manual-close workflows.
 - Ensure list/count/state refresh consistency after each action.
 
+## Action Items Queue
+- Build a full `Action Items Queue` page with category/store/severity/status filters.
+- Add `GET /api/admin/dashboard/queue` for paginated queue data.
+- Support inline resolve/review/approve actions and optional bulk actions.
+- Add deep-link support from dashboard cards to pre-filter/highlight specific queue items.
+
 ## UI System Migration
 - Migrate remaining pages to `shadcn/ui` incrementally.
 - Preserve current behavior while standardizing components and visual language.

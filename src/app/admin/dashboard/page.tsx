@@ -404,18 +404,33 @@ export default function AdminDashboardPage() {
   }
 
   function actionDestination(item: DashboardActionItem): string {
+    let basePath = "/admin";
     switch (item.category) {
       case "people":
-        return "/admin/overrides";
+        basePath = "/admin/overrides";
+        break;
       case "money":
-        return "/admin/safe-ledger";
+        basePath = "/admin/safe-ledger";
+        break;
       case "scheduling":
-        return "/admin/open-shifts";
+        basePath = "/admin/open-shifts";
+        break;
       case "approvals":
-        return "/admin/requests";
+        basePath = "/admin/requests";
+        break;
       default:
-        return "/admin";
+        basePath = "/admin";
+        break;
     }
+
+    const params = new URLSearchParams({
+      source: "dashboard",
+      actionCategory: item.category,
+      actionId: item.id,
+    });
+    if (item.store_id) params.set("storeId", item.store_id);
+    if (item.created_at) params.set("createdAt", item.created_at);
+    return `${basePath}?${params.toString()}`;
   }
 
   function actionButtonLabel(item: DashboardActionItem): string {
