@@ -461,10 +461,12 @@ export async function GET(req: Request) {
           ? stats.adjustedSalesValues.reduce((sum, v) => sum + v, 0) / stats.adjustedSalesValues.length
           : null;
 
+      // Keep a non-zero floor for sales scoring so the lowest performer
+      // still receives some credit when valid sales data exists.
       const salesRawPoints =
-        rawAvg == null ? null : 15 * percentile(rawAvg, rawSalesPopulation);
+        rawAvg == null ? null : 2 + 13 * percentile(rawAvg, rawSalesPopulation);
       const salesAdjustedPoints =
-        adjustedAvg == null ? null : 15 * percentile(adjustedAvg, adjustedSalesPopulation);
+        adjustedAvg == null ? null : 2 + 13 * percentile(adjustedAvg, adjustedSalesPopulation);
 
       const attendanceRate =
         stats.attendanceScheduled > 0 ? stats.attendanceWorked / stats.attendanceScheduled : null;
