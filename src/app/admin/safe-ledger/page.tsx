@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -146,6 +146,12 @@ function weekdayLabel(dateKey: string): string {
 
 export default function SafeLedgerDashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const source = searchParams.get("source");
+  const actionId = searchParams.get("actionId");
+  const actionStoreId = searchParams.get("storeId");
+  const actionCreatedAt = searchParams.get("createdAt");
+  const targetCloseoutId = actionId?.startsWith("money-") ? actionId.replace("money-", "") : null;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [rows, setRows] = useState<ListRow[]>([]);
@@ -221,6 +227,7 @@ export default function SafeLedgerDashboardPage() {
   });
   const [quickViewMode, setQuickViewMode] = useState<"week" | "month">("week");
   const [selectedWeek, setSelectedWeek] = useState<string>("1");
+  const [hasAppliedDeepLink, setHasAppliedDeepLink] = useState(false);
 
   const weekRanges = useMemo(() => {
     const today = new Date();
@@ -268,6 +275,25 @@ export default function SafeLedgerDashboardPage() {
     const timer = window.setTimeout(() => setToast(null), 2000);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    if (source !== "dashboard" || hasAppliedDeepLink) return;
+    if (actionStoreId) setStoreId(actionStoreId);
+    if (targetCloseoutId) setShowIssuesOnly(true);
+    if (actionCreatedAt) {
+      const dateKey = actionCreatedAt.slice(0, 10);
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) {
+        const targetDate = new Date(`${dateKey}T00:00:00`);
+        if (!Number.isNaN(targetDate.getTime())) {
+          const fromDate = new Date(targetDate);
+          fromDate.setDate(fromDate.getDate() - 14);
+          const today = new Date();
+          setFrom(toDateKey(fromDate));
+          setTo(toDateKey(today));
+        }
+      }
+    }
+  }, [source, hasAppliedDeepLink, actionStoreId, targetCloseoutId, actionCreatedAt]);
 
   async function withToken() {
     const { data: { session } } = await supabase.auth.getSession();
@@ -424,6 +450,19 @@ export default function SafeLedgerDashboardPage() {
     if (!showIssuesOnly) return rows;
     return rows.filter((r) => r.requires_manager_review || r.status === "warn" || r.status === "fail");
   }, [rows, showIssuesOnly]);
+
+  useEffect(() => {
+    if (source !== "dashboard" || hasAppliedDeepLink) return;
+    if (!targetCloseoutId) {
+      setHasAppliedDeepLink(true);
+      return;
+    }
+    const exists = rows.some((row) => row.id === targetCloseoutId);
+    if (exists) {
+      setSelectedId(targetCloseoutId);
+      setHasAppliedDeepLink(true);
+    }
+  }, [source, hasAppliedDeepLink, targetCloseoutId, rows]);
 
   const addFormUsers = useMemo(() => {
     if (!addForm.storeId) return users;
@@ -871,6 +910,12 @@ export default function SafeLedgerDashboardPage() {
         </div>
       </div>
 
+      {source === "dashboard" && (
+        <div className="rounded border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
+          Opened from Command Center Action Items. Matching closeout is highlighted when available.
+        </div>
+      )}
+
       <div className="rounded-xl border border-cyan-400/30 bg-[#0b1220] p-4">
         <div className="grid gap-3 lg:grid-cols-4">
           <DatePicker label="Start Date" value={from} onChange={setFrom} max={to} />
@@ -991,7 +1036,10 @@ export default function SafeLedgerDashboardPage() {
             </TableHeader>
             <TableBody>
               {filteredRows.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow
+                  key={row.id}
+                  className={targetCloseoutId === row.id ? "ring-1 ring-cyan-400/40" : undefined}
+                >
                   <TableCell>{row.business_date}</TableCell>
                   <TableCell>{row.store_name ?? "--"}</TableCell>
                   <TableCell>{row.employee_name ?? "--"}</TableCell>

@@ -22,7 +22,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 type OpenShiftRow = {
@@ -68,6 +68,12 @@ function formatMoney(cents: number | null) {
 
 export default function OpenShiftsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const source = searchParams.get("source");
+  const actionId = searchParams.get("actionId");
+  const actionStoreId = searchParams.get("storeId");
+  const highlightedShiftId =
+    actionId?.startsWith("scheduling-") ? actionId.replace("scheduling-", "") : null;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAuthed, setIsAuthed] = useState(false);
@@ -208,11 +214,22 @@ export default function OpenShiftsPage() {
       <div className="max-w-5xl mx-auto space-y-6">
         <h1 className="text-2xl font-semibold">Open Shifts</h1>
 
+        {source === "dashboard" && (
+          <div className="banner text-xs border border-cyan-500/40 bg-cyan-500/10 text-cyan-100">
+            Opened from Command Center Action Items{actionStoreId ? " · Store filter applied where possible." : "."}
+          </div>
+        )}
+
         {error && <div className="banner banner-error text-sm">{error}</div>}
 
         <div className="space-y-3">
           {sortedRows.map(r => (
-            <div key={r.id} className="card card-pad space-y-2">
+            <div
+              key={r.id}
+              className={`card card-pad space-y-2 ${
+                highlightedShiftId === r.id ? "border-cyan-400/80 ring-1 ring-cyan-400/40" : ""
+              }`}
+            >
               <div className="flex flex-wrap gap-3 items-center justify-between">
                 <div className="text-sm muted">
                   <b>{r.storeName || "Unknown Store"}</b>

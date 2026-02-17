@@ -12,6 +12,11 @@
 - Support inline resolve/review/approve actions and optional bulk actions.
 - Add deep-link support from dashboard cards to pre-filter/highlight specific queue items.
 
+## Shift Sales Tracker (Employee of the Month)
+- Build shift-level sales dashboard and leaderboard for EOM calculations.
+- Readiness gate: implement only after we have at least 4 full weeks of complete shift-level sales capture across stores.
+- Keep historical EOD-only backfill excluded from shift leaderboard math.
+
 ## UI System Migration
 - Migrate remaining pages to `shadcn/ui` incrementally.
 - Preserve current behavior while standardizing components and visual language.
