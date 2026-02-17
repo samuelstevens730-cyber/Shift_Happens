@@ -477,37 +477,42 @@ export default function SafeLedgerDashboardPage() {
   }, [isPickupOpen, pickupStoreId, currentSafeBalanceByStore]);
 
   const storeReconciliationSummaries = useMemo(() => {
+    const latestPickupByStore = new Map<string, string>();
+    for (const pickup of pickups) {
+      const current = latestPickupByStore.get(pickup.store_id);
+      if (!current || pickup.pickup_date > current) {
+        latestPickupByStore.set(pickup.store_id, pickup.pickup_date);
+      }
+    }
+
     const byStore = new Map<string, {
       storeId: string;
       storeName: string;
-      grossExpectedCents: number;
-      grossActualCents: number;
-      pickupTotalCents: number;
       expectedTotalCents: number;
       actualTotalCents: number;
-      denomTotalCents: number;
+      lastPickupDate: string | null;
       denoms: Record<"1" | "2" | "5" | "10" | "20" | "50" | "100", number>;
     }>();
 
     for (const row of filteredRows) {
       const key = row.store_id;
+      const lastPickupDate = latestPickupByStore.get(key) ?? null;
+      if (lastPickupDate && row.business_date <= lastPickupDate) {
+        continue;
+      }
       if (!byStore.has(key)) {
         byStore.set(key, {
           storeId: row.store_id,
           storeName: (row.store_name ?? "Unknown Store").toUpperCase(),
-          grossExpectedCents: 0,
-          grossActualCents: 0,
-          pickupTotalCents: 0,
           expectedTotalCents: 0,
           actualTotalCents: 0,
-          denomTotalCents: 0,
+          lastPickupDate,
           denoms: { "1": 0, "2": 0, "5": 0, "10": 0, "20": 0, "50": 0, "100": 0 },
         });
       }
       const summary = byStore.get(key)!;
-      summary.grossExpectedCents += row.cash_sales_cents - row.expense_total_cents;
-      summary.grossActualCents += row.denom_total_cents;
-      summary.denomTotalCents += row.denom_total_cents;
+      summary.expectedTotalCents += row.cash_sales_cents - row.expense_total_cents;
+      summary.actualTotalCents += row.denom_total_cents;
       summary.denoms["1"] += Number(row.denoms_jsonb?.["1"] ?? 0);
       summary.denoms["2"] += Number(row.denoms_jsonb?.["2"] ?? 0);
       summary.denoms["5"] += Number(row.denoms_jsonb?.["5"] ?? 0);
@@ -517,31 +522,22 @@ export default function SafeLedgerDashboardPage() {
       summary.denoms["100"] += Number(row.denoms_jsonb?.["100"] ?? 0);
     }
 
-    for (const pickup of pickups) {
-      if (!byStore.has(pickup.store_id)) {
-        byStore.set(pickup.store_id, {
-          storeId: pickup.store_id,
-          storeName: (pickup.store_name ?? "Unknown Store").toUpperCase(),
-          grossExpectedCents: 0,
-          grossActualCents: 0,
-          pickupTotalCents: 0,
+    for (const store of stores) {
+      const lastPickupDate = latestPickupByStore.get(store.id) ?? null;
+      if (!byStore.has(store.id) && lastPickupDate) {
+        byStore.set(store.id, {
+          storeId: store.id,
+          storeName: store.name.toUpperCase(),
           expectedTotalCents: 0,
           actualTotalCents: 0,
-          denomTotalCents: 0,
+          lastPickupDate,
           denoms: { "1": 0, "2": 0, "5": 0, "10": 0, "20": 0, "50": 0, "100": 0 },
         });
       }
-      const summary = byStore.get(pickup.store_id)!;
-      summary.pickupTotalCents += pickup.amount_cents;
-    }
-
-    for (const summary of byStore.values()) {
-      summary.expectedTotalCents = summary.grossExpectedCents - summary.pickupTotalCents;
-      summary.actualTotalCents = summary.grossActualCents - summary.pickupTotalCents;
     }
 
     return Array.from(byStore.values()).sort((a, b) => a.storeName.localeCompare(b.storeName));
-  }, [filteredRows, pickups]);
+  }, [filteredRows, pickups, stores]);
 
   async function copyText(text: string, successMsg: string) {
     try {
@@ -950,23 +946,21 @@ export default function SafeLedgerDashboardPage() {
                     <div>
                       <div className="text-xs uppercase text-slate-400">Expected Total</div>
                       <div>{money(summary.expectedTotalCents)}</div>
-                      <div className="text-xs text-slate-500">(Cash Sales - Expenses) - Pickups</div>
+                      <div className="text-xs text-slate-500">Cash Sales - Expenses (since last pickup)</div>
                     </div>
                     <div>
                       <div className="text-xs uppercase text-slate-400">Actual Total</div>
                       <div>{money(summary.actualTotalCents)}</div>
-                      <div className="text-xs text-slate-500">Denomination Counts - Pickups</div>
-                    </div>
-                    <div>
-                      <div className="text-xs uppercase text-slate-400">Pickup Total</div>
-                      <div>{money(summary.pickupTotalCents)}</div>
-                      <div className="text-xs text-slate-500">Owner/manager removals in range</div>
+                      <div className="text-xs text-slate-500">Denomination Counts (since last pickup)</div>
                     </div>
                     <div className={`rounded border px-2 py-1 ${varianceTone(safeVariance)}`}>
                       <div className="text-xs uppercase">Variance (Actual - Expected)</div>
                       <div className="font-semibold">{money(safeVariance)}</div>
                     </div>
                   </div>
+                  {summary.lastPickupDate ? (
+                    <div className="mt-2 text-xs text-emerald-300">Baseline reset by full pickup on {summary.lastPickupDate}</div>
+                  ) : null}
                   <div className="mt-3 text-xs text-slate-300">
                     Denomination count: 1({summary.denoms["1"]}) 2({summary.denoms["2"]}) 5({summary.denoms["5"]}) 10({summary.denoms["10"]}) 20({summary.denoms["20"]}) 50({summary.denoms["50"]}) 100({summary.denoms["100"]})
                   </div>
