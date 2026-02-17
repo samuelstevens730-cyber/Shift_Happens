@@ -1,0 +1,124 @@
+export type ShiftDetailResponse = {
+  shift: {
+    id: string;
+    storeId: string;
+    profileId: string;
+    shiftType: "open" | "close" | "double" | "other";
+    shiftSource: string | null;
+    shiftNote: string | null;
+    plannedStartAt: string;
+    startedAt: string;
+    endedAt: string | null;
+    requiresOverride: boolean;
+    overrideAt: string | null;
+    overrideBy: string | null;
+    overrideNote: string | null;
+    manualClosed: boolean;
+    manualClosedAt: string | null;
+    manualClosedByProfile: string | null;
+    manualClosedReviewStatus: string | null;
+    manualClosedReviewedAt: string | null;
+    manualClosedReviewedBy: string | null;
+    scheduleShiftId: string | null;
+    unscheduledReviewedAt: string | null;
+    unscheduledReviewedBy: string | null;
+    unscheduledReviewNote: string | null;
+    lastAction: string | null;
+    lastActionBy: string | null;
+    createdAt: string;
+  };
+  store: {
+    id: string;
+    name: string;
+    expectedDrawerCents: number;
+  } | null;
+  profile: {
+    id: string;
+    name: string | null;
+    active: boolean | null;
+  } | null;
+  scheduleShift: {
+    id: string;
+    scheduleId: string;
+    shiftDate: string;
+    shiftType: string;
+    shiftMode: string | null;
+    scheduledStart: string;
+    scheduledEnd: string;
+    scheduleStatus: string | null;
+    periodStart: string | null;
+    periodEnd: string | null;
+  } | null;
+  drawerCounts: Array<{
+    id: string;
+    countType: "start" | "changeover" | "end";
+    countedAt: string;
+    drawerCents: number;
+    changeCount: number | null;
+    confirmed: boolean;
+    notifiedManager: boolean;
+    note: string | null;
+    outOfThreshold: boolean;
+    reviewedAt: string | null;
+    reviewedBy: string | null;
+    countMissing: boolean;
+  }>;
+  dailySalesRecord: {
+    id: string;
+    businessDate: string;
+    openShiftId: string | null;
+    closeShiftId: string | null;
+    openXReportCents: number | null;
+    closeSalesCents: number | null;
+    zReportCents: number | null;
+    closerRolloverCents: number | null;
+    openerRolloverCents: number | null;
+    rolloverCents: number | null;
+    rolloverMismatch: boolean | null;
+    outOfBalance: boolean | null;
+    balanceVarianceCents: number | null;
+    reviewedAt: string | null;
+    reviewNote: string | null;
+  } | null;
+  shiftSalesEntries: Array<{
+    id: string;
+    entryType: "x_report" | "z_report" | "rollover";
+    amountCents: number;
+    priorXReportCents: number | null;
+    confirmed: boolean | null;
+    note: string | null;
+    countedAt: string | null;
+  }>;
+  safeCloseout: {
+    id: string;
+    businessDate: string;
+    status: string;
+    cashSalesCents: number;
+    cardSalesCents: number;
+    otherSalesCents: number;
+    expectedDepositCents: number;
+    actualDepositCents: number;
+    denomTotalCents: number;
+    varianceCents: number;
+    denoms: Record<string, number>;
+    requiresManagerReview: boolean;
+    reviewedAt: string | null;
+    reviewedBy: string | null;
+    depositOverrideReason: string | null;
+    expenses: Array<{
+      id: string;
+      amountCents: number;
+      category: string;
+      note: string | null;
+      createdAt: string;
+    }>;
+    photos: Array<{
+      id: string;
+      photoType: "deposit_required" | "pos_optional";
+      storagePath: string | null;
+      thumbPath: string | null;
+      purgeAfter: string | null;
+      createdAt: string;
+    }>;
+  } | null;
+};

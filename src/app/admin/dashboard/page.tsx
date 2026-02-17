@@ -456,6 +456,26 @@ export default function AdminDashboardPage() {
   }
 
   function actionDestination(item: DashboardActionItem): string {
+    const shiftDetailPath = (() => {
+      if (item.category === "people" && item.id.startsWith("people-")) {
+        return `/admin/shifts/${item.id.replace("people-", "")}`;
+      }
+      if (item.category === "scheduling" && item.id.startsWith("scheduling-")) {
+        return `/admin/shifts/${item.id.replace("scheduling-", "")}`;
+      }
+      return null;
+    })();
+    if (shiftDetailPath) {
+      const params = new URLSearchParams({
+        source: "dashboard",
+        actionCategory: item.category,
+        actionId: item.id,
+      });
+      if (item.store_id) params.set("storeId", item.store_id);
+      if (item.created_at) params.set("createdAt", item.created_at);
+      return `${shiftDetailPath}?${params.toString()}`;
+    }
+
     let basePath = "/admin";
     switch (item.category) {
       case "people":
@@ -488,11 +508,11 @@ export default function AdminDashboardPage() {
   function actionButtonLabel(item: DashboardActionItem): string {
     switch (item.category) {
       case "people":
-        return "Review Shift";
+        return "Open Shift Detail";
       case "money":
         return "Review Closeout";
       case "scheduling":
-        return "Review Scheduling";
+        return "Open Shift Detail";
       case "approvals":
         return "Approve / Deny";
       default:
