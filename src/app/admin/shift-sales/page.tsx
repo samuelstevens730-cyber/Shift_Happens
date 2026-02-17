@@ -94,6 +94,36 @@ export default function AdminShiftSalesPage() {
     );
   }, [data]);
 
+  const leaderboard = useMemo(() => {
+    const byEmployee = new Map<
+      string,
+      { employeeName: string; shifts: number; withSales: number; totalSalesCents: number }
+    >();
+    for (const row of data?.rows ?? []) {
+      const key = row.profileId;
+      const existing = byEmployee.get(key) ?? {
+        employeeName: row.employeeName ?? "Unknown",
+        shifts: 0,
+        withSales: 0,
+        totalSalesCents: 0,
+      };
+      existing.shifts += 1;
+      if (row.salesCents != null) {
+        existing.withSales += 1;
+        existing.totalSalesCents += row.salesCents;
+      }
+      byEmployee.set(key, existing);
+    }
+    return Array.from(byEmployee.entries())
+      .map(([profileId, value]) => ({
+        profileId,
+        ...value,
+        avgSalesPerShiftCents:
+          value.withSales > 0 ? Math.round(value.totalSalesCents / value.withSales) : null,
+      }))
+      .sort((a, b) => (b.avgSalesPerShiftCents ?? -1) - (a.avgSalesPerShiftCents ?? -1));
+  }, [data]);
+
   return (
     <div className="app-shell">
       <div className="mx-auto max-w-7xl space-y-4">
@@ -149,47 +179,85 @@ export default function AdminShiftSalesPage() {
         {error && <div className="banner banner-error">{error}</div>}
 
         {!loading && !error && (
-          <div className="card card-pad overflow-auto">
-            <table className="min-w-full text-sm">
-              <thead>
-                <tr className="text-left border-b border-white/10">
-                  <th className="py-2 pr-3">Date</th>
-                  <th className="py-2 pr-3">Store</th>
-                  <th className="py-2 pr-3">Employee</th>
-                  <th className="py-2 pr-3">Type</th>
-                  <th className="py-2 pr-3">Started</th>
-                  <th className="py-2 pr-3">Shift Sales</th>
-                  <th className="py-2 pr-3">Formula</th>
-                  <th className="py-2 pr-3">Inputs</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(data?.rows ?? []).map((row) => (
-                  <tr key={row.shiftId} className="border-b border-white/5 align-top">
-                    <td className="py-2 pr-3">{row.businessDate}</td>
-                    <td className="py-2 pr-3">{row.storeName ?? "--"}</td>
-                    <td className="py-2 pr-3">{row.employeeName ?? "--"}</td>
-                    <td className="py-2 pr-3">{row.shiftType}</td>
-                    <td className="py-2 pr-3">{cstDateTime(row.startedAt)}</td>
-                    <td className="py-2 pr-3 font-semibold">{money(row.salesCents)}</td>
-                    <td className="py-2 pr-3">{row.formula}</td>
-                    <td className="py-2 pr-3 text-xs text-slate-400">
-                      <div>Begin X: {money(row.beginningXReportCents)}</div>
-                      <div>End X: {money(row.openXReportCents)}</div>
-                      <div>Z: {money(row.zReportCents)}</div>
-                      <div>Midnight X: {money(row.midnightXReportCents)}</div>
-                    </td>
+          <div className="space-y-4">
+            <div className="card card-pad overflow-auto">
+              <div className="mb-3 text-base font-semibold">Shift Sales Leaderboard (Avg / Shift)</div>
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left border-b border-white/10">
+                    <th className="py-2 pr-3">Rank</th>
+                    <th className="py-2 pr-3">Employee</th>
+                    <th className="py-2 pr-3">Shifts (Data)</th>
+                    <th className="py-2 pr-3">Total Sales</th>
+                    <th className="py-2 pr-3">Avg / Shift</th>
                   </tr>
-                ))}
-                {(data?.rows ?? []).length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="py-6 text-center text-slate-400">
-                      No shifts in this range.
-                    </td>
+                </thead>
+                <tbody>
+                  {leaderboard.map((row, idx) => (
+                    <tr key={row.profileId} className="border-b border-white/5">
+                      <td className="py-2 pr-3">#{idx + 1}</td>
+                      <td className="py-2 pr-3">{row.employeeName}</td>
+                      <td className="py-2 pr-3">
+                        {row.withSales}/{row.shifts}
+                      </td>
+                      <td className="py-2 pr-3">{money(row.totalSalesCents)}</td>
+                      <td className="py-2 pr-3 font-semibold">{money(row.avgSalesPerShiftCents)}</td>
+                    </tr>
+                  ))}
+                  {leaderboard.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-6 text-center text-slate-400">
+                        No leaderboard data in this range.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="card card-pad overflow-auto">
+              <div className="mb-3 text-base font-semibold">All Shift Sales Rows</div>
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left border-b border-white/10">
+                    <th className="py-2 pr-3">Date</th>
+                    <th className="py-2 pr-3">Store</th>
+                    <th className="py-2 pr-3">Employee</th>
+                    <th className="py-2 pr-3">Type</th>
+                    <th className="py-2 pr-3">Started</th>
+                    <th className="py-2 pr-3">Shift Sales</th>
+                    <th className="py-2 pr-3">Formula</th>
+                    <th className="py-2 pr-3">Inputs</th>
                   </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {(data?.rows ?? []).map((row) => (
+                    <tr key={row.shiftId} className="border-b border-white/5 align-top">
+                      <td className="py-2 pr-3">{row.businessDate}</td>
+                      <td className="py-2 pr-3">{row.storeName ?? "--"}</td>
+                      <td className="py-2 pr-3">{row.employeeName ?? "--"}</td>
+                      <td className="py-2 pr-3">{row.shiftType}</td>
+                      <td className="py-2 pr-3">{cstDateTime(row.startedAt)}</td>
+                      <td className="py-2 pr-3 font-semibold">{money(row.salesCents)}</td>
+                      <td className="py-2 pr-3">{row.formula}</td>
+                      <td className="py-2 pr-3 text-xs text-slate-400">
+                        <div>Begin X: {money(row.beginningXReportCents)}</div>
+                        <div>End X: {money(row.openXReportCents)}</div>
+                        <div>Z: {money(row.zReportCents)}</div>
+                        <div>Midnight X: {money(row.midnightXReportCents)}</div>
+                      </td>
+                    </tr>
+                  ))}
+                  {(data?.rows ?? []).length === 0 && (
+                    <tr>
+                      <td colSpan={8} className="py-6 text-center text-slate-400">
+                        No shifts in this range.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
