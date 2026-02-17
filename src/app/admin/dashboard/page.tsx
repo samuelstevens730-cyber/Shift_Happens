@@ -66,6 +66,17 @@ function shortMoney(cents: number): string {
   return `$${dollars.toFixed(0)}`;
 }
 
+function buildYAxisTicks(maxValueCents: number, stepCents: number): number[] {
+  const safeMax = Math.max(0, maxValueCents);
+  const roundedMax = Math.ceil(safeMax / stepCents) * stepCents;
+  const domainMax = Math.max(stepCents * 2, roundedMax + stepCents);
+  const ticks: number[] = [];
+  for (let value = 0; value <= domainMax; value += stepCents) {
+    ticks.push(value);
+  }
+  return ticks;
+}
+
 function weekdayLabel(dateKey: string): string {
   const date = new Date(`${dateKey}T00:00:00`);
   return new Intl.DateTimeFormat("en-US", {
@@ -236,6 +247,30 @@ export default function AdminDashboardPage() {
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([, value]) => value);
   }, [data, storeId]);
+
+  const chartYAxis = useMemo(() => {
+    const tickStepCents = 50000; // $500 standardized increments
+    if (!data) {
+      const fallbackTicks = buildYAxisTicks(0, tickStepCents);
+      return { domainMax: fallbackTicks.at(-1) ?? 100000, ticks: fallbackTicks };
+    }
+
+    let maxValue = 0;
+    const totalByDate = new Map<string, number>();
+    for (const store of data.stores) {
+      const rows = data.salesHistory[store.id] ?? [];
+      for (const row of rows) {
+        maxValue = Math.max(maxValue, row.total, row.cash, row.card, row.other);
+        totalByDate.set(row.date, (totalByDate.get(row.date) ?? 0) + row.total);
+      }
+    }
+    for (const total of totalByDate.values()) {
+      maxValue = Math.max(maxValue, total);
+    }
+
+    const ticks = buildYAxisTicks(maxValue, tickStepCents);
+    return { domainMax: ticks.at(-1) ?? tickStepCents * 2, ticks };
+  }, [data]);
 
   useEffect(() => {
     let alive = true;
@@ -657,6 +692,8 @@ export default function AdminDashboardPage() {
                                   axisLine={{ stroke: "#334155" }}
                                   tickLine={{ stroke: "#334155" }}
                                   width={70}
+                                  domain={[0, chartYAxis.domainMax]}
+                                  ticks={chartYAxis.ticks}
                                 />
                                 <Tooltip
                                   contentStyle={{
