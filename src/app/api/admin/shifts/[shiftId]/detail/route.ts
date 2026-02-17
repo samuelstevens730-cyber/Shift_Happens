@@ -414,3 +414,178 @@ export async function GET(
     );
   }
 }
+
+type ShiftDetailPatchBody = {
+  shift?: {
+    shiftType?: "open" | "close" | "double" | "other";
+    plannedStartAt?: string;
+    startedAt?: string;
+    endedAt?: string | null;
+    shiftNote?: string | null;
+    manualCloseReviewStatus?: "approved" | "edited" | "removed" | null;
+  };
+  drawerCounts?: Array<{
+    id: string;
+    drawerCents?: number;
+    changeCount?: number | null;
+    confirmed?: boolean;
+    notifiedManager?: boolean;
+    note?: string | null;
+  }>;
+  dailySalesRecord?: {
+    openXReportCents?: number | null;
+    closeSalesCents?: number | null;
+    zReportCents?: number | null;
+    reviewNote?: string | null;
+  };
+};
+
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ shiftId: string }> }
+) {
+  try {
+    const token = getBearerToken(req);
+    if (!token) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+    const {
+      data: { user },
+      error: authErr,
+    } = await supabaseServer.auth.getUser(token);
+    if (authErr || !user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+    const { shiftId } = await params;
+    if (!shiftId) return NextResponse.json({ error: "Missing shiftId." }, { status: 400 });
+
+    const managerStoreIds = await getManagerStoreIds(user.id);
+    if (managerStoreIds.length === 0) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+
+    const { data: shift, error: shiftErr } = await supabaseServer
+      .from("shifts")
+      .select("id,store_id,last_action,schedule_shift_id,manual_closed")
+      .eq("id", shiftId)
+      .maybeSingle()
+      .returns<{
+        id: string;
+        store_id: string;
+        last_action: string | null;
+        schedule_shift_id: string | null;
+        manual_closed: boolean | null;
+      }>();
+    if (shiftErr) return NextResponse.json({ error: shiftErr.message }, { status: 500 });
+    if (!shift) return NextResponse.json({ error: "Shift not found." }, { status: 404 });
+    if (!managerStoreIds.includes(shift.store_id)) {
+      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    }
+    if (shift.last_action === "removed") {
+      return NextResponse.json({ error: "Shift removed." }, { status: 400 });
+    }
+
+    const body = (await req.json()) as ShiftDetailPatchBody;
+    const hasShift = Boolean(body.shift);
+    const hasDrawer = Boolean(body.drawerCounts && body.drawerCounts.length > 0);
+    const hasDailySales = Boolean(body.dailySalesRecord);
+    if (!hasShift && !hasDrawer && !hasDailySales) {
+      return NextResponse.json({ error: "No fields to update." }, { status: 400 });
+    }
+
+    if (hasShift && body.shift) {
+      const shiftUpdate: Record<string, string | null> = {
+        last_action: "edited",
+        last_action_by: user.id,
+      };
+
+      if (body.shift.shiftType) shiftUpdate.shift_type = body.shift.shiftType;
+      if (body.shift.plannedStartAt) shiftUpdate.planned_start_at = body.shift.plannedStartAt;
+      if (body.shift.startedAt) shiftUpdate.started_at = body.shift.startedAt;
+      if (body.shift.endedAt !== undefined) shiftUpdate.ended_at = body.shift.endedAt;
+      if (body.shift.shiftNote !== undefined) shiftUpdate.shift_note = body.shift.shiftNote;
+
+      if (body.shift.manualCloseReviewStatus !== undefined) {
+        shiftUpdate.manual_closed_review_status = body.shift.manualCloseReviewStatus;
+        shiftUpdate.manual_closed_reviewed_at = new Date().toISOString();
+        shiftUpdate.manual_closed_reviewed_by = user.id;
+      } else if (shift.manual_closed) {
+        shiftUpdate.manual_closed_review_status = "edited";
+        shiftUpdate.manual_closed_reviewed_at = new Date().toISOString();
+        shiftUpdate.manual_closed_reviewed_by = user.id;
+      }
+
+      if (body.shift.endedAt && shift.schedule_shift_id) {
+        shiftUpdate.shift_source = "scheduled";
+      }
+
+      const { error: updateShiftErr } = await supabaseServer
+        .from("shifts")
+        .update(shiftUpdate)
+        .eq("id", shiftId);
+      if (updateShiftErr) {
+        return NextResponse.json({ error: updateShiftErr.message }, { status: 500 });
+      }
+    }
+
+    if (hasDrawer && body.drawerCounts) {
+      for (const row of body.drawerCounts) {
+        if (!row.id) continue;
+        const drawerUpdate: Record<string, number | string | boolean | null> = {};
+        if (row.drawerCents !== undefined) drawerUpdate.drawer_cents = row.drawerCents;
+        if (row.changeCount !== undefined) drawerUpdate.change_count = row.changeCount;
+        if (row.confirmed !== undefined) drawerUpdate.confirmed = row.confirmed;
+        if (row.notifiedManager !== undefined) drawerUpdate.notified_manager = row.notifiedManager;
+        if (row.note !== undefined) drawerUpdate.note = row.note;
+        if (Object.keys(drawerUpdate).length === 0) continue;
+
+        const { error: drawerErr } = await supabaseServer
+          .from("shift_drawer_counts")
+          .update(drawerUpdate)
+          .eq("id", row.id)
+          .eq("shift_id", shiftId);
+        if (drawerErr) {
+          return NextResponse.json({ error: drawerErr.message }, { status: 500 });
+        }
+      }
+    }
+
+    if (hasDailySales && body.dailySalesRecord) {
+      const { data: dailyRecord, error: dailyFetchErr } = await supabaseServer
+        .from("daily_sales_records")
+        .select("id")
+        .or(`open_shift_id.eq.${shiftId},close_shift_id.eq.${shiftId}`)
+        .limit(1)
+        .maybeSingle()
+        .returns<{ id: string }>();
+      if (dailyFetchErr) return NextResponse.json({ error: dailyFetchErr.message }, { status: 500 });
+
+      if (dailyRecord?.id) {
+        const dailyUpdate: Record<string, number | string | null> = {
+          updated_at: new Date().toISOString(),
+        };
+        if (body.dailySalesRecord.openXReportCents !== undefined) {
+          dailyUpdate.open_x_report_cents = body.dailySalesRecord.openXReportCents;
+        }
+        if (body.dailySalesRecord.closeSalesCents !== undefined) {
+          dailyUpdate.close_sales_cents = body.dailySalesRecord.closeSalesCents;
+        }
+        if (body.dailySalesRecord.zReportCents !== undefined) {
+          dailyUpdate.z_report_cents = body.dailySalesRecord.zReportCents;
+        }
+        if (body.dailySalesRecord.reviewNote !== undefined) {
+          dailyUpdate.review_note = body.dailySalesRecord.reviewNote;
+        }
+
+        const { error: dailyUpdateErr } = await supabaseServer
+          .from("daily_sales_records")
+          .update(dailyUpdate)
+          .eq("id", dailyRecord.id);
+        if (dailyUpdateErr) return NextResponse.json({ error: dailyUpdateErr.message }, { status: 500 });
+      }
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (e: unknown) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Failed to update shift detail." },
+      { status: 500 }
+    );
+  }
+}

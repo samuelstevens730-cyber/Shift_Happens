@@ -41,6 +41,16 @@ function fmtMoney(cents: number | null | undefined): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+function toLocalInputValueFromISO(value: string | null | undefined): string {
+  if (!value) return "";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(
+    d.getHours()
+  )}:${pad(d.getMinutes())}`;
+}
+
 function durationLabel(startedAt: string, endedAt: string | null): string {
   const startMs = Date.parse(startedAt);
   const endMs = endedAt ? Date.parse(endedAt) : Date.now();
@@ -56,8 +66,36 @@ export default function AdminShiftDetailPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [data, setData] = useState<ShiftDetailResponse | null>(null);
+  const [shiftForm, setShiftForm] = useState({
+    shiftType: "open" as ShiftDetailResponse["shift"]["shiftType"],
+    plannedStartAt: "",
+    startedAt: "",
+    endedAt: "",
+    shiftNote: "",
+    manualCloseReviewStatus: "",
+  });
+  const [drawerForm, setDrawerForm] = useState<
+    Record<
+      string,
+      {
+        drawerCents: string;
+        changeCount: string;
+        note: string;
+        confirmed: boolean;
+        notifiedManager: boolean;
+      }
+    >
+  >({});
+  const [dailySalesForm, setDailySalesForm] = useState({
+    openXReportCents: "",
+    closeSalesCents: "",
+    zReportCents: "",
+    reviewNote: "",
+  });
 
   const shiftId = params.shiftId;
   const backHref = useMemo(() => {
@@ -72,6 +110,7 @@ export default function AdminShiftDetailPage() {
       try {
         setLoading(true);
         setError(null);
+        setSuccess(null);
         const {
           data: { session },
         } = await supabase.auth.getSession();
@@ -87,7 +126,45 @@ export default function AdminShiftDetailPage() {
         const json = await res.json();
         if (!res.ok) throw new Error(json?.error || "Failed to load shift detail.");
         if (!active) return;
-        setData(json as ShiftDetailResponse);
+        const payload = json as ShiftDetailResponse;
+        setData(payload);
+        setShiftForm({
+          shiftType: payload.shift.shiftType,
+          plannedStartAt: toLocalInputValueFromISO(payload.shift.plannedStartAt),
+          startedAt: toLocalInputValueFromISO(payload.shift.startedAt),
+          endedAt: toLocalInputValueFromISO(payload.shift.endedAt),
+          shiftNote: payload.shift.shiftNote ?? "",
+          manualCloseReviewStatus: payload.shift.manualClosedReviewStatus ?? "",
+        });
+        setDrawerForm(
+          Object.fromEntries(
+            payload.drawerCounts.map((row) => [
+              row.id,
+              {
+                drawerCents: String(row.drawerCents),
+                changeCount: row.changeCount == null ? "" : String(row.changeCount),
+                note: row.note ?? "",
+                confirmed: row.confirmed,
+                notifiedManager: row.notifiedManager,
+              },
+            ])
+          )
+        );
+        setDailySalesForm({
+          openXReportCents:
+            payload.dailySalesRecord?.openXReportCents == null
+              ? ""
+              : String(payload.dailySalesRecord.openXReportCents),
+          closeSalesCents:
+            payload.dailySalesRecord?.closeSalesCents == null
+              ? ""
+              : String(payload.dailySalesRecord.closeSalesCents),
+          zReportCents:
+            payload.dailySalesRecord?.zReportCents == null
+              ? ""
+              : String(payload.dailySalesRecord.zReportCents),
+          reviewNote: payload.dailySalesRecord?.reviewNote ?? "",
+        });
       } catch (e: unknown) {
         if (!active) return;
         setError(e instanceof Error ? e.message : "Failed to load shift detail.");
@@ -100,6 +177,143 @@ export default function AdminShiftDetailPage() {
       active = false;
     };
   }, [router, shiftId]);
+
+  async function refreshDetail() {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    const token = session?.access_token ?? "";
+    const res = await fetch(`/api/admin/shifts/${shiftId}/detail`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json?.error || "Failed to refresh shift detail.");
+    const payload = json as ShiftDetailResponse;
+    setData(payload);
+    setShiftForm({
+      shiftType: payload.shift.shiftType,
+      plannedStartAt: toLocalInputValueFromISO(payload.shift.plannedStartAt),
+      startedAt: toLocalInputValueFromISO(payload.shift.startedAt),
+      endedAt: toLocalInputValueFromISO(payload.shift.endedAt),
+      shiftNote: payload.shift.shiftNote ?? "",
+      manualCloseReviewStatus: payload.shift.manualClosedReviewStatus ?? "",
+    });
+  }
+
+  async function saveAllChanges() {
+    if (!data || saving) return;
+    try {
+      setSaving(true);
+      setError(null);
+      setSuccess(null);
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token ?? "";
+      if (!token) {
+        router.replace(`/login?next=/admin/shifts/${shiftId}`);
+        return;
+      }
+
+      const drawerPayload = data.drawerCounts.map((row) => {
+        const formRow = drawerForm[row.id];
+        return {
+          id: row.id,
+          drawerCents: formRow ? Number(formRow.drawerCents || 0) : row.drawerCents,
+          changeCount:
+            formRow && formRow.changeCount !== "" ? Number(formRow.changeCount) : null,
+          note: formRow?.note ?? null,
+          confirmed: formRow?.confirmed ?? row.confirmed,
+          notifiedManager: formRow?.notifiedManager ?? row.notifiedManager,
+        };
+      });
+
+      const body = {
+        shift: {
+          shiftType: shiftForm.shiftType,
+          plannedStartAt: shiftForm.plannedStartAt
+            ? new Date(shiftForm.plannedStartAt).toISOString()
+            : undefined,
+          startedAt: shiftForm.startedAt
+            ? new Date(shiftForm.startedAt).toISOString()
+            : undefined,
+          endedAt: shiftForm.endedAt ? new Date(shiftForm.endedAt).toISOString() : null,
+          shiftNote: shiftForm.shiftNote.trim() || null,
+          manualCloseReviewStatus:
+            shiftForm.manualCloseReviewStatus === ""
+              ? null
+              : shiftForm.manualCloseReviewStatus,
+        },
+        drawerCounts: drawerPayload,
+        dailySalesRecord: {
+          openXReportCents:
+            dailySalesForm.openXReportCents === ""
+              ? null
+              : Number(dailySalesForm.openXReportCents),
+          closeSalesCents:
+            dailySalesForm.closeSalesCents === ""
+              ? null
+              : Number(dailySalesForm.closeSalesCents),
+          zReportCents:
+            dailySalesForm.zReportCents === ""
+              ? null
+              : Number(dailySalesForm.zReportCents),
+          reviewNote: dailySalesForm.reviewNote.trim() || null,
+        },
+      };
+
+      const res = await fetch(`/api/admin/shifts/${shiftId}/detail`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to save shift detail.");
+
+      await refreshDetail();
+      setSuccess("Shift detail updated.");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to save shift detail.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function softDeleteShift() {
+    if (!data || saving) return;
+    if (!window.confirm("Soft delete this shift? It will be removed from reporting views.")) {
+      return;
+    }
+    try {
+      setSaving(true);
+      setError(null);
+      setSuccess(null);
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token ?? "";
+      if (!token) {
+        router.replace(`/login?next=/admin/shifts/${shiftId}`);
+        return;
+      }
+
+      const res = await fetch(`/api/admin/shifts/${shiftId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to remove shift.");
+      router.push(backHref);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to remove shift.");
+    } finally {
+      setSaving(false);
+    }
+  }
 
   if (loading) return <div className="app-shell">Loading shift detail...</div>;
 
@@ -144,6 +358,8 @@ export default function AdminShiftDetailPage() {
             {data.shift.scheduleShiftId ? <Badge variant="outline">Scheduled</Badge> : <Badge variant="secondary">Unscheduled</Badge>}
           </div>
         </div>
+        {error ? <div className="banner banner-error text-sm">{error}</div> : null}
+        {success ? <div className="banner text-sm">{success}</div> : null}
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
           <div className="space-y-4 xl:col-span-2">
@@ -156,24 +372,98 @@ export default function AdminShiftDetailPage() {
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div>Store: <b>{data.store?.name ?? "--"}</b></div>
                   <div>Employee: <b>{data.profile?.name ?? "--"}</b></div>
-                  <div>Shift Source: <b>{data.shift.shiftSource ?? "--"}</b></div>
+                  <div>
+                    Shift Type:
+                    <select
+                      className="ml-2 rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                      value={shiftForm.shiftType}
+                      onChange={(e) =>
+                        setShiftForm((prev) => ({
+                          ...prev,
+                          shiftType: e.target.value as ShiftDetailResponse["shift"]["shiftType"],
+                        }))
+                      }
+                    >
+                      <option value="open">open</option>
+                      <option value="close">close</option>
+                      <option value="double">double</option>
+                      <option value="other">other</option>
+                    </select>
+                  </div>
                   <div>Duration: <b>{durationLabel(data.shift.startedAt, data.shift.endedAt)}</b></div>
                 </div>
                 <Separator />
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <div>Planned Start: <b>{fmtDateTime(data.shift.plannedStartAt)}</b></div>
-                  <div>Actual Start: <b>{fmtDateTime(data.shift.startedAt)}</b></div>
-                  <div>End: <b>{fmtDateTime(data.shift.endedAt)}</b></div>
+                  <label>
+                    Planned Start:
+                    <input
+                      type="datetime-local"
+                      className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                      value={shiftForm.plannedStartAt}
+                      onChange={(e) =>
+                        setShiftForm((prev) => ({ ...prev, plannedStartAt: e.target.value }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Actual Start:
+                    <input
+                      type="datetime-local"
+                      className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                      value={shiftForm.startedAt}
+                      onChange={(e) =>
+                        setShiftForm((prev) => ({ ...prev, startedAt: e.target.value }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    End:
+                    <input
+                      type="datetime-local"
+                      className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                      value={shiftForm.endedAt}
+                      onChange={(e) =>
+                        setShiftForm((prev) => ({ ...prev, endedAt: e.target.value }))
+                      }
+                    />
+                  </label>
                   <div>Created: <b>{fmtDateTime(data.shift.createdAt)}</b></div>
                 </div>
                 <Separator />
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <div>Override At: <b>{fmtDateTime(data.shift.overrideAt)}</b></div>
                   <div>Override Note: <b>{data.shift.overrideNote ?? "--"}</b></div>
-                  <div>Manual Review: <b>{data.shift.manualClosedReviewStatus ?? "--"}</b></div>
+                  <label>
+                    Manual Review:
+                    <select
+                      className="ml-2 rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                      value={shiftForm.manualCloseReviewStatus}
+                      onChange={(e) =>
+                        setShiftForm((prev) => ({
+                          ...prev,
+                          manualCloseReviewStatus: e.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">--</option>
+                      <option value="approved">approved</option>
+                      <option value="edited">edited</option>
+                      <option value="removed">removed</option>
+                    </select>
+                  </label>
                   <div>Unscheduled Review: <b>{fmtDateTime(data.shift.unscheduledReviewedAt)}</b></div>
                 </div>
-                {data.shift.shiftNote ? <div>Shift Note: <b>{data.shift.shiftNote}</b></div> : null}
+                <label className="block">
+                  Shift Note:
+                  <textarea
+                    className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                    rows={2}
+                    value={shiftForm.shiftNote}
+                    onChange={(e) =>
+                      setShiftForm((prev) => ({ ...prev, shiftNote: e.target.value }))
+                    }
+                  />
+                </label>
                 {data.shift.unscheduledReviewNote ? (
                   <div>Unscheduled Review Note: <b>{data.shift.unscheduledReviewNote}</b></div>
                 ) : null}
@@ -197,12 +487,120 @@ export default function AdminShiftDetailPage() {
                           <div className="text-xs text-slate-400">{fmtDateTime(row.countedAt)}</div>
                         </div>
                         <div className="mt-1 grid grid-cols-1 gap-1 sm:grid-cols-2">
-                          <div>Drawer: <b>{fmtMoney(row.drawerCents)}</b></div>
-                          <div>Change: <b>{fmtMoney(row.changeCount)}</b></div>
-                          <div>Confirmed: <b>{row.confirmed ? "Yes" : "No"}</b></div>
+                          <label>
+                            Drawer (cents)
+                            <input
+                              type="number"
+                              className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                              value={drawerForm[row.id]?.drawerCents ?? ""}
+                              onChange={(e) =>
+                                setDrawerForm((prev) => ({
+                                  ...prev,
+                                  [row.id]: {
+                                    ...(prev[row.id] ?? {
+                                      drawerCents: String(row.drawerCents),
+                                      changeCount: row.changeCount == null ? "" : String(row.changeCount),
+                                      note: row.note ?? "",
+                                      confirmed: row.confirmed,
+                                      notifiedManager: row.notifiedManager,
+                                    }),
+                                    drawerCents: e.target.value,
+                                  },
+                                }))
+                              }
+                            />
+                          </label>
+                          <label>
+                            Change Count (cents)
+                            <input
+                              type="number"
+                              className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                              value={drawerForm[row.id]?.changeCount ?? ""}
+                              onChange={(e) =>
+                                setDrawerForm((prev) => ({
+                                  ...prev,
+                                  [row.id]: {
+                                    ...(prev[row.id] ?? {
+                                      drawerCents: String(row.drawerCents),
+                                      changeCount: row.changeCount == null ? "" : String(row.changeCount),
+                                      note: row.note ?? "",
+                                      confirmed: row.confirmed,
+                                      notifiedManager: row.notifiedManager,
+                                    }),
+                                    changeCount: e.target.value,
+                                  },
+                                }))
+                              }
+                            />
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={drawerForm[row.id]?.confirmed ?? row.confirmed}
+                              onChange={(e) =>
+                                setDrawerForm((prev) => ({
+                                  ...prev,
+                                  [row.id]: {
+                                    ...(prev[row.id] ?? {
+                                      drawerCents: String(row.drawerCents),
+                                      changeCount: row.changeCount == null ? "" : String(row.changeCount),
+                                      note: row.note ?? "",
+                                      confirmed: row.confirmed,
+                                      notifiedManager: row.notifiedManager,
+                                    }),
+                                    confirmed: e.target.checked,
+                                  },
+                                }))
+                              }
+                            />
+                            Confirmed
+                          </label>
+                          <label className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={drawerForm[row.id]?.notifiedManager ?? row.notifiedManager}
+                              onChange={(e) =>
+                                setDrawerForm((prev) => ({
+                                  ...prev,
+                                  [row.id]: {
+                                    ...(prev[row.id] ?? {
+                                      drawerCents: String(row.drawerCents),
+                                      changeCount: row.changeCount == null ? "" : String(row.changeCount),
+                                      note: row.note ?? "",
+                                      confirmed: row.confirmed,
+                                      notifiedManager: row.notifiedManager,
+                                    }),
+                                    notifiedManager: e.target.checked,
+                                  },
+                                }))
+                              }
+                            />
+                            Notified Manager
+                          </label>
                           <div>Out of Threshold: <b>{row.outOfThreshold ? "Yes" : "No"}</b></div>
                         </div>
-                        {row.note ? <div className="mt-1 text-slate-300">Note: {row.note}</div> : null}
+                        <label className="block mt-1">
+                          Note:
+                          <input
+                            className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                            value={drawerForm[row.id]?.note ?? ""}
+                            onChange={(e) =>
+                              setDrawerForm((prev) => ({
+                                ...prev,
+                                [row.id]: {
+                                  ...(prev[row.id] ?? {
+                                    drawerCents: String(row.drawerCents),
+                                    changeCount: row.changeCount == null ? "" : String(row.changeCount),
+                                    note: row.note ?? "",
+                                    confirmed: row.confirmed,
+                                    notifiedManager: row.notifiedManager,
+                                  }),
+                                  note: e.target.value,
+                                },
+                              }))
+                            }
+                          />
+                        </label>
                       </div>
                     ))}
                   </div>
@@ -219,11 +617,60 @@ export default function AdminShiftDetailPage() {
                 <div>Schedule Window: <b>{openOrCloseSchedule}</b></div>
                 <div>Business Date: <b>{fmtDate(data.dailySalesRecord?.businessDate)}</b></div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <div>Open X Report: <b>{fmtMoney(data.dailySalesRecord?.openXReportCents)}</b></div>
-                  <div>Close Sales: <b>{fmtMoney(data.dailySalesRecord?.closeSalesCents)}</b></div>
-                  <div>Z Report: <b>{fmtMoney(data.dailySalesRecord?.zReportCents)}</b></div>
+                  <label>
+                    Open X Report (cents):
+                    <input
+                      type="number"
+                      className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                      value={dailySalesForm.openXReportCents}
+                      onChange={(e) =>
+                        setDailySalesForm((prev) => ({
+                          ...prev,
+                          openXReportCents: e.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Close Sales (cents):
+                    <input
+                      type="number"
+                      className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                      value={dailySalesForm.closeSalesCents}
+                      onChange={(e) =>
+                        setDailySalesForm((prev) => ({
+                          ...prev,
+                          closeSalesCents: e.target.value,
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    Z Report (cents):
+                    <input
+                      type="number"
+                      className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                      value={dailySalesForm.zReportCents}
+                      onChange={(e) =>
+                        setDailySalesForm((prev) => ({
+                          ...prev,
+                          zReportCents: e.target.value,
+                        }))
+                      }
+                    />
+                  </label>
                   <div>Balance Variance: <b>{fmtMoney(data.dailySalesRecord?.balanceVarianceCents)}</b></div>
                 </div>
+                <label className="block">
+                  Daily Sales Review Note:
+                  <input
+                    className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                    value={dailySalesForm.reviewNote}
+                    onChange={(e) =>
+                      setDailySalesForm((prev) => ({ ...prev, reviewNote: e.target.value }))
+                    }
+                  />
+                </label>
                 <Separator />
                 {data.shiftSalesEntries.length === 0 ? (
                   <div className="text-slate-400">No shift sales entries.</div>
@@ -296,6 +743,13 @@ export default function AdminShiftDetailPage() {
                 <CardDescription>Edit/Delete paths stay centralized until Phase 2 write UI lands.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
+                <button
+                  className="w-full rounded bg-cyan-600 px-3 py-2 text-sm font-medium text-white hover:bg-cyan-500 disabled:opacity-60"
+                  onClick={() => void saveAllChanges()}
+                  disabled={saving}
+                >
+                  {saving ? "Saving..." : "Save All Changes"}
+                </button>
                 <Link href="/admin/shifts" className="block rounded border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800">
                   Open Shifts Admin (edit/remove)
                 </Link>
@@ -308,6 +762,13 @@ export default function AdminShiftDetailPage() {
                 <Link href="/admin/open-shifts" className="block rounded border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800">
                   Open Open-Shifts Queue
                 </Link>
+                <button
+                  className="w-full rounded border border-red-700/70 px-3 py-2 text-sm text-red-300 hover:bg-red-950/30 disabled:opacity-60"
+                  onClick={() => void softDeleteShift()}
+                  disabled={saving}
+                >
+                  Soft Delete Shift
+                </button>
               </CardContent>
             </Card>
           </div>
