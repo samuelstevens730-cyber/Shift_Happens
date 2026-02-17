@@ -258,7 +258,7 @@ export async function GET(req: Request) {
         .or("requires_manager_review.eq.true,status.eq.warn,status.eq.fail"),
       supabaseServer
         .from("shifts")
-        .select("id,store_id,started_at")
+        .select("id,store_id,started_at,ended_at,profile:profile_id(name)")
         .in("store_id", activeStoreIds)
         .not("started_at", "is", null)
         .is("schedule_shift_id", null)
@@ -267,7 +267,15 @@ export async function GET(req: Request) {
         .lte("started_at", rangeToIso)
         .order("started_at", { ascending: false })
         .limit(3)
-        .returns<Array<{ id: string; store_id: string; started_at: string | null }>>(),
+        .returns<
+          Array<{
+            id: string;
+            store_id: string;
+            started_at: string | null;
+            ended_at: string | null;
+            profile: { name: string | null } | null;
+          }>
+        >(),
       supabaseServer
         .from("shifts")
         .select("id", { count: "exact", head: true })
@@ -355,15 +363,29 @@ export async function GET(req: Request) {
       created_at: row.business_date,
     }));
 
-    const schedulingActions: DashboardActionItem[] = (schedulingRowsRes.data ?? []).map((row) => ({
-      id: `scheduling-${row.id}`,
-      category: "scheduling",
-      severity: "medium",
-      title: "Unscheduled worked shift",
-      description: row.started_at ? `Started ${row.started_at}` : "Started time missing",
-      store_id: row.store_id,
-      created_at: row.started_at,
-    }));
+    const schedulingActions: DashboardActionItem[] = (schedulingRowsRes.data ?? []).map((row) => {
+      const startMs = row.started_at ? Date.parse(row.started_at) : NaN;
+      const endMs = row.ended_at ? Date.parse(row.ended_at) : Date.parse(nowIso);
+      const hasDuration = Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs;
+      const durationMinutes = hasDuration ? Math.round((endMs - startMs) / (1000 * 60)) : null;
+      const hours = durationMinutes != null ? Math.floor(durationMinutes / 60) : null;
+      const minutes = durationMinutes != null ? durationMinutes % 60 : null;
+      const durationText =
+        durationMinutes == null
+          ? "Duration unavailable"
+          : `${hours}h ${String(minutes).padStart(2, "0")}m${row.ended_at ? "" : " (open)"}`;
+      const employeeName = (row.profile?.name ?? "").trim() || "Unknown employee";
+
+      return {
+        id: `scheduling-${row.id}`,
+        category: "scheduling",
+        severity: "medium",
+        title: `Unscheduled shift: ${employeeName}`,
+        description: `${durationText}${row.started_at ? ` · Started ${row.started_at}` : ""}`,
+        store_id: row.store_id,
+        created_at: row.started_at,
+      };
+    });
 
     const approvalActions: DashboardActionItem[] = [
       ...(swapRowsRes.data ?? []).map((row) => ({
