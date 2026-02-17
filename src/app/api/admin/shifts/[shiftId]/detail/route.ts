@@ -130,6 +130,15 @@ type SafePhotoRow = {
   created_at: string;
 };
 
+type ShiftAuditLogRow = {
+  id: string;
+  action: "edit" | "soft_delete" | "hard_delete";
+  reason: string;
+  actor_user_id: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+};
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ shiftId: string }> }
@@ -172,6 +181,7 @@ export async function GET(
       dailySalesRes,
       shiftSalesRes,
       safeCloseoutRes,
+      auditLogsRes,
     ] = await Promise.all([
       supabaseServer
         .from("stores")
@@ -224,6 +234,13 @@ export async function GET(
         .eq("shift_id", shift.id)
         .maybeSingle()
         .returns<SafeCloseoutRow>(),
+      supabaseServer
+        .from("shift_change_audit_logs")
+        .select("id,action,reason,actor_user_id,metadata,created_at")
+        .eq("shift_id", shift.id)
+        .order("created_at", { ascending: false })
+        .limit(30)
+        .returns<ShiftAuditLogRow[]>(),
     ]);
 
     for (const result of [
@@ -234,11 +251,29 @@ export async function GET(
       dailySalesRes,
       shiftSalesRes,
       safeCloseoutRes,
+      auditLogsRes,
     ]) {
       if (result.error) {
         return NextResponse.json({ error: result.error.message }, { status: 500 });
       }
     }
+
+    const actorIds = Array.from(
+      new Set((auditLogsRes.data ?? []).map((row) => row.actor_user_id).filter(Boolean))
+    );
+    const actorNamesRes = actorIds.length
+      ? await supabaseServer
+          .from("app_users")
+          .select("id,display_name")
+          .in("id", actorIds)
+          .returns<Array<{ id: string; display_name: string }>>()
+      : { data: [], error: null };
+    if (actorNamesRes.error) {
+      return NextResponse.json({ error: actorNamesRes.error.message }, { status: 500 });
+    }
+    const actorNameMap = new Map<string, string>(
+      (actorNamesRes.data ?? []).map((row) => [row.id, row.display_name] as [string, string])
+    );
 
     const scheduleShift = scheduleShiftRes.data;
     const scheduleRes = scheduleShift
@@ -404,6 +439,15 @@ export async function GET(
             })),
           }
         : null,
+      auditLogs: (auditLogsRes.data ?? []).map((row) => ({
+        id: row.id,
+        action: row.action,
+        reason: row.reason,
+        actorUserId: row.actor_user_id,
+        actorDisplayName: actorNameMap.get(row.actor_user_id) ?? null,
+        metadata: row.metadata ?? {},
+        createdAt: row.created_at,
+      })),
     };
 
     return NextResponse.json(response);

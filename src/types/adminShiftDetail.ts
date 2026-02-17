@@ -121,4 +121,13 @@ export type ShiftDetailResponse = {
       createdAt: string;
     }>;
   } | null;
+  auditLogs: Array<{
+    id: string;
+    action: "edit" | "soft_delete" | "hard_delete";
+    reason: string;
+    actorUserId: string;
+    actorDisplayName: string | null;
+    metadata: Record<string, unknown>;
+    createdAt: string;
+  }>;
 };

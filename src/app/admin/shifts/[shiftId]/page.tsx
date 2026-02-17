@@ -867,6 +867,33 @@ export default function AdminShiftDetailPage() {
                 </button>
               </CardContent>
             </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle>Audit History</CardTitle>
+                <CardDescription>Most recent admin edits/deletes with reason.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {data.auditLogs.length === 0 ? (
+                  <div className="text-sm text-slate-400">No audit history yet.</div>
+                ) : (
+                  data.auditLogs.map((log) => (
+                    <div key={log.id} className="rounded border border-slate-800 bg-slate-900/70 p-2 text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <Badge variant={log.action === "hard_delete" ? "destructive" : "outline"}>
+                          {log.action}
+                        </Badge>
+                        <span className="text-xs text-slate-400">{fmtDateTime(log.createdAt)}</span>
+                      </div>
+                      <div className="mt-1 text-slate-200">{log.reason}</div>
+                      <div className="mt-1 text-xs text-slate-400">
+                        By: {log.actorDisplayName ?? log.actorUserId}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>
