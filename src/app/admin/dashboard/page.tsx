@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -35,6 +36,16 @@ function dateDaysAgo(days: number): string {
 
 function money(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
+}
+
+function weekdayLabel(dateKey: string): string {
+  const date = new Date(`${dateKey}T00:00:00`);
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    weekday: "short",
+  })
+    .format(date)
+    .toUpperCase();
 }
 
 function gradeTone(grade: "A" | "B" | "C" | "D" | undefined) {
@@ -99,6 +110,44 @@ export default function AdminDashboardPage() {
         }))
     );
   }, [data]);
+
+  const salesRows = useMemo(() => {
+    if (!data) return [];
+    const perDate = new Map<
+      string,
+      { date: string; cash: number; card: number; other: number; total: number; statuses: string[] }
+    >();
+    const targetStoreIds = storeId === "all" ? data.stores.map((store) => store.id) : [storeId];
+
+    for (const sid of targetStoreIds) {
+      const rows = data.salesHistory[sid] ?? [];
+      for (const row of rows) {
+        const existing = perDate.get(row.date) ?? {
+          date: row.date,
+          cash: 0,
+          card: 0,
+          other: 0,
+          total: 0,
+          statuses: [],
+        };
+        existing.cash += row.cash;
+        existing.card += row.card;
+        existing.other += row.other;
+        existing.total += row.total;
+        existing.statuses.push(row.status);
+        perDate.set(row.date, existing);
+      }
+    }
+
+    return Array.from(perDate.values())
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .map((row) => {
+        const hasFail = row.statuses.includes("fail");
+        const hasWarn = row.statuses.includes("warn");
+        const status = hasFail ? "fail" : hasWarn ? "warn" : row.statuses[0] ?? "pass";
+        return { ...row, status };
+      });
+  }, [data, storeId]);
 
   useEffect(() => {
     let alive = true;
@@ -346,12 +395,69 @@ export default function AdminDashboardPage() {
               <Card className="lg:col-span-7">
                 <CardHeader className="pb-2">
                   <CardTitle>Sales Block</CardTitle>
-                  <CardDescription>Phase 2 shell: chart/table tabs follow in next steps.</CardDescription>
+                  <CardDescription>Sales by date for selected store scope and date range.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="rounded border border-slate-800 bg-slate-900/60 p-3 text-sm text-slate-300">
-                    Sales data is wired. Next: tabbed table + trend chart.
-                  </div>
+                  <Tabs defaultValue="table" className="w-full">
+                    <TabsList>
+                      <TabsTrigger value="table">Table</TabsTrigger>
+                      <TabsTrigger value="chart">Chart</TabsTrigger>
+                    </TabsList>
+                    <TabsContent value="table">
+                      <div className="max-h-[320px] overflow-auto rounded border border-slate-800">
+                        <table className="min-w-full text-sm">
+                          <thead className="sticky top-0 bg-slate-900 text-slate-300">
+                            <tr>
+                              <th className="px-3 py-2 text-left">Date</th>
+                              <th className="px-3 py-2 text-left">Day</th>
+                              <th className="px-3 py-2 text-right">Cash</th>
+                              <th className="px-3 py-2 text-right">Card</th>
+                              <th className="px-3 py-2 text-right">Other</th>
+                              <th className="px-3 py-2 text-right">Total</th>
+                              <th className="px-3 py-2 text-left">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {salesRows.map((row) => (
+                              <tr key={row.date} className="border-t border-slate-800 text-slate-100">
+                                <td className="px-3 py-2">{row.date}</td>
+                                <td className="px-3 py-2">{weekdayLabel(row.date)}</td>
+                                <td className="px-3 py-2 text-right">{money(row.cash)}</td>
+                                <td className="px-3 py-2 text-right">{money(row.card)}</td>
+                                <td className="px-3 py-2 text-right">{money(row.other)}</td>
+                                <td className="px-3 py-2 text-right font-semibold">{money(row.total)}</td>
+                                <td className="px-3 py-2">
+                                  <Badge
+                                    variant={
+                                      row.status === "fail"
+                                        ? "destructive"
+                                        : row.status === "warn"
+                                          ? "outline"
+                                          : "secondary"
+                                    }
+                                  >
+                                    {row.status.toUpperCase()}
+                                  </Badge>
+                                </td>
+                              </tr>
+                            ))}
+                            {salesRows.length === 0 ? (
+                              <tr>
+                                <td colSpan={7} className="px-3 py-4 text-center text-slate-400">
+                                  No sales rows in selected range.
+                                </td>
+                              </tr>
+                            ) : null}
+                          </tbody>
+                        </table>
+                      </div>
+                    </TabsContent>
+                    <TabsContent value="chart">
+                      <div className="rounded border border-slate-800 bg-slate-900/60 p-3 text-sm text-slate-300">
+                        Chart view queued for Phase 2 (recharts).
+                      </div>
+                    </TabsContent>
+                  </Tabs>
                 </CardContent>
               </Card>
             </section>
