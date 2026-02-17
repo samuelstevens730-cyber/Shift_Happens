@@ -179,9 +179,9 @@ export async function GET(req: Request) {
         closeoutStatus: null,
         closeoutVariance: 0,
       };
-      const total = row.cash_sales_cents + row.card_sales_cents + row.other_sales_cents;
       topline[row.store_id] = {
-        totalSales: existing.totalSales + total,
+        // Command Center sales should not include shift changeover X-report carry values.
+        totalSales: existing.totalSales + (row.cash_sales_cents + row.card_sales_cents),
         cashSales: existing.cashSales + row.cash_sales_cents,
         cardSales: existing.cardSales + row.card_sales_cents,
         otherSales: existing.otherSales + row.other_sales_cents,
@@ -199,7 +199,8 @@ export async function GET(req: Request) {
         cash: row.cash_sales_cents,
         card: row.card_sales_cents,
         other: row.other_sales_cents,
-        total: row.cash_sales_cents + row.card_sales_cents + row.other_sales_cents,
+        // Keep "other" field available for diagnostics, but do not include in sales totals.
+        total: row.cash_sales_cents + row.card_sales_cents,
         status: row.status,
       });
     }

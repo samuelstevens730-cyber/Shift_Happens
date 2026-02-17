@@ -541,7 +541,7 @@ export default function AdminDashboardPage() {
                   <CardTitle>{money(topline.totalSales)}</CardTitle>
                 </CardHeader>
                 <CardContent className="text-xs text-slate-400">
-                  Cash {money(topline.cashSales)} Â· Card {money(topline.cardSales)} Â· Other {money(topline.otherSales)}
+                  Cash {money(topline.cashSales)} · Card {money(topline.cardSales)} · X-Report Carry {money(topline.otherSales)} (excluded from Total)
                 </CardContent>
               </Card>
 
@@ -595,7 +595,7 @@ export default function AdminDashboardPage() {
                                 <th className="px-3 py-2 text-left">Day</th>
                                 <th className="px-3 py-2 text-right">Cash</th>
                                 <th className="px-3 py-2 text-right">Card</th>
-                                <th className="px-3 py-2 text-right">Other</th>
+                                <th className="px-3 py-2 text-right">X-Report Carry</th>
                                 <th className="px-3 py-2 text-right">Total</th>
                                 <th className="px-3 py-2 text-left">Status</th>
                               </tr>
