@@ -4,6 +4,16 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import {
+  Activity,
+  AlertTriangle,
+  CheckCircle2,
+  Clock3,
+  MessageSquare,
+  Send,
+  TrendingUp,
+  Wallet,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -84,6 +94,21 @@ export default function AdminDashboardPage() {
   const [chartMode, setChartMode] = useState<"total" | "detailed">("detailed");
   const [actionOpen, setActionOpen] = useState(true);
   const [quickViewItem, setQuickViewItem] = useState<DashboardActionItem | null>(null);
+  const [users, setUsers] = useState<Array<{ id: string; name: string; active: boolean; storeIds: string[] }>>([]);
+  const [sendingAssignment, setSendingAssignment] = useState(false);
+  const [quickSend, setQuickSend] = useState<{
+    type: "task" | "message";
+    targetType: "store" | "employee";
+    targetStoreId: string;
+    targetProfileId: string;
+    message: string;
+  }>({
+    type: "message",
+    targetType: "store",
+    targetStoreId: "",
+    targetProfileId: "",
+    message: "",
+  });
 
   const topline = useMemo(() => {
     if (!data) {
@@ -233,6 +258,14 @@ export default function AdminDashboardPage() {
         if (!res.ok) throw new Error(json?.error || "Failed to load dashboard.");
         if (!alive) return;
         setData(json as DashboardResponse);
+
+        const usersRes = await fetch("/api/admin/users", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const usersJson = await usersRes.json();
+        if (!usersRes.ok) throw new Error(usersJson?.error || "Failed to load dashboard users.");
+        if (!alive) return;
+        setUsers((usersJson?.users ?? []) as Array<{ id: string; name: string; active: boolean; storeIds: string[] }>);
       } catch (e: unknown) {
         if (!alive) return;
         setError(e instanceof Error ? e.message : "Failed to load dashboard.");
@@ -244,6 +277,66 @@ export default function AdminDashboardPage() {
       alive = false;
     };
   }, [from, to, storeId, router]);
+
+  useEffect(() => {
+    if (!data) return;
+    setQuickSend((prev) => ({
+      ...prev,
+      targetStoreId: prev.targetStoreId || data.stores[0]?.id || "",
+    }));
+  }, [data]);
+
+  const visibleUsers = useMemo(() => {
+    if (storeId === "all") return users.filter((u) => u.active);
+    return users.filter((u) => u.active && u.storeIds.includes(storeId));
+  }, [users, storeId]);
+
+  async function sendQuickAssignment() {
+    try {
+      if (!quickSend.message.trim()) {
+        setError("Quick Send message is required.");
+        return;
+      }
+      if (quickSend.targetType === "store" && !quickSend.targetStoreId) {
+        setError("Select a store target.");
+        return;
+      }
+      if (quickSend.targetType === "employee" && !quickSend.targetProfileId) {
+        setError("Select an employee target.");
+        return;
+      }
+
+      setSendingAssignment(true);
+      setError(null);
+      const { data: auth } = await supabase.auth.getSession();
+      const token = auth.session?.access_token ?? "";
+      if (!token) {
+        router.replace("/login?next=/admin/dashboard");
+        return;
+      }
+
+      const res = await fetch("/api/admin/assignments", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          type: quickSend.type,
+          message: quickSend.message.trim(),
+          targetStoreId: quickSend.targetType === "store" ? quickSend.targetStoreId : undefined,
+          targetProfileId: quickSend.targetType === "employee" ? quickSend.targetProfileId : undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to send assignment.");
+      setQuickSend((prev) => ({ ...prev, message: "" }));
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to send assignment.");
+    } finally {
+      setSendingAssignment(false);
+    }
+  }
 
   return (
     <div className="app-shell p-3 sm:p-4 lg:p-6">
@@ -322,7 +415,7 @@ export default function AdminDashboardPage() {
             <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <Card>
                 <CardHeader className="pb-2">
-                  <CardDescription>Yesterday Sales</CardDescription>
+                  <CardDescription className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-cyan-300" /> Yesterday Sales</CardDescription>
                   <CardTitle>{money(topline.totalSales)}</CardTitle>
                 </CardHeader>
                 <CardContent className="text-xs text-slate-400">
@@ -332,7 +425,7 @@ export default function AdminDashboardPage() {
 
               <Card>
                 <CardHeader className="pb-2">
-                  <CardDescription>Yesterday Closeout</CardDescription>
+                  <CardDescription className="flex items-center gap-2"><Wallet className="h-4 w-4 text-emerald-300" /> Yesterday Closeout</CardDescription>
                   <CardTitle>{topline.closeoutStatus ? topline.closeoutStatus.toUpperCase() : "N/A"}</CardTitle>
                 </CardHeader>
                 <CardContent className="text-xs text-slate-400">
@@ -342,7 +435,7 @@ export default function AdminDashboardPage() {
 
               <Card>
                 <CardHeader className="pb-2">
-                  <CardDescription>Open Shifts</CardDescription>
+                  <CardDescription className="flex items-center gap-2"><Clock3 className="h-4 w-4 text-amber-300" /> Open Shifts</CardDescription>
                   <CardTitle>{data?.openShifts ?? 0}</CardTitle>
                 </CardHeader>
                 <CardContent className="text-xs text-slate-400">Currently started and not ended.</CardContent>
@@ -350,7 +443,7 @@ export default function AdminDashboardPage() {
 
               <Card>
                 <CardHeader className="pb-2">
-                  <CardDescription>Pending Approvals</CardDescription>
+                  <CardDescription className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-sky-300" /> Pending Approvals</CardDescription>
                   <CardTitle>{data?.pendingApprovals ?? 0}</CardTitle>
                 </CardHeader>
                 <CardContent className="text-xs text-slate-400">Swaps, time-off, and timesheet corrections.</CardContent>
@@ -360,7 +453,7 @@ export default function AdminDashboardPage() {
             <section className="grid grid-cols-1 gap-4 lg:grid-cols-12">
               <Card className="lg:col-span-12">
                 <CardHeader className="pb-2">
-                  <CardTitle>Store Health</CardTitle>
+                  <CardTitle className="flex items-center gap-2"><Activity className="h-5 w-5 text-cyan-300" /> Store Health</CardTitle>
                   <CardDescription>Weighted score model (Option B) with top drag signals.</CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -407,7 +500,7 @@ export default function AdminDashboardPage() {
 
               <Card className="lg:col-span-5">
                 <CardHeader className="pb-2">
-                  <CardTitle>Immediate Action Items</CardTitle>
+                  <CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-amber-300" /> Immediate Action Items</CardTitle>
                   <CardDescription>Priority buckets, quick triage, and drilldown in next phase.</CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -457,7 +550,7 @@ export default function AdminDashboardPage() {
 
               <Card className="lg:col-span-7">
                 <CardHeader className="pb-2">
-                  <CardTitle>Sales Block</CardTitle>
+                  <CardTitle className="flex items-center gap-2"><TrendingUp className="h-5 w-5 text-cyan-300" /> Sales Block</CardTitle>
                   <CardDescription>Sales by date for selected store scope and date range.</CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -614,6 +707,81 @@ export default function AdminDashboardPage() {
                       </div>
                     </TabsContent>
                   </Tabs>
+                </CardContent>
+              </Card>
+
+              <Card className="lg:col-span-12">
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2"><MessageSquare className="h-5 w-5 text-violet-300" /> Quick Send: Message / Task</CardTitle>
+                  <CardDescription>Send a task or message to a store or an individual employee.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-5">
+                    <div className="flex flex-col gap-1 text-sm text-slate-300">
+                      <span>Type</span>
+                      <Select value={quickSend.type} onValueChange={(value) => setQuickSend((prev) => ({ ...prev, type: value as "task" | "message" }))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="message">Message</SelectItem>
+                          <SelectItem value="task">Task</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex flex-col gap-1 text-sm text-slate-300">
+                      <span>Target Type</span>
+                      <Select value={quickSend.targetType} onValueChange={(value) => setQuickSend((prev) => ({ ...prev, targetType: value as "store" | "employee" }))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="store">Store</SelectItem>
+                          <SelectItem value="employee">Employee</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {quickSend.targetType === "store" ? (
+                      <div className="flex flex-col gap-1 text-sm text-slate-300">
+                        <span>Store</span>
+                        <Select value={quickSend.targetStoreId} onValueChange={(value) => setQuickSend((prev) => ({ ...prev, targetStoreId: value }))}>
+                          <SelectTrigger><SelectValue placeholder="Select store" /></SelectTrigger>
+                          <SelectContent>
+                            {(data?.stores ?? []).map((store) => (
+                              <SelectItem key={store.id} value={store.id}>{store.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-1 text-sm text-slate-300">
+                        <span>Employee</span>
+                        <Select value={quickSend.targetProfileId} onValueChange={(value) => setQuickSend((prev) => ({ ...prev, targetProfileId: value }))}>
+                          <SelectTrigger><SelectValue placeholder="Select employee" /></SelectTrigger>
+                          <SelectContent>
+                            {visibleUsers.map((user) => (
+                              <SelectItem key={user.id} value={user.id}>{user.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    <div className="md:col-span-2 lg:col-span-2 flex flex-col gap-1 text-sm text-slate-300">
+                      <span>Message / Task Details</span>
+                      <textarea
+                        className="min-h-[42px] rounded-md border border-slate-700 bg-slate-900 px-3 py-2 text-slate-100"
+                        value={quickSend.message}
+                        onChange={(e) => setQuickSend((prev) => ({ ...prev, message: e.target.value }))}
+                        placeholder="Type what should be done or communicated..."
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-3 flex justify-end">
+                    <button
+                      className="inline-flex items-center gap-2 rounded-md bg-violet-600 px-3 py-2 text-sm font-medium text-white hover:bg-violet-500 disabled:opacity-60"
+                      onClick={() => void sendQuickAssignment()}
+                      disabled={sendingAssignment}
+                    >
+                      <Send className="h-4 w-4" />
+                      {sendingAssignment ? "Sending..." : "Send"}
+                    </button>
+                  </div>
                 </CardContent>
               </Card>
             </section>
