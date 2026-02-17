@@ -760,12 +760,12 @@ export default function AdminDashboardPage() {
                   <CardDescription>Weighted score model (Option B) with top drag signals.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-2">
                     {visibleStores.map((store) => {
                       const health = data?.health[store.id];
                       const tone = gradeTone(health?.grade);
                       return (
-                        <div key={store.id} className={`rounded-lg border p-3 ${tone}`}>
+                        <div key={store.id} className={`rounded-lg border p-2.5 ${tone}`}>
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <div className="text-sm font-medium text-slate-100">{store.name}</div>
@@ -775,11 +775,11 @@ export default function AdminDashboardPage() {
                               {health?.grade ?? "D"}
                             </div>
                           </div>
-                          <div className="mt-3 text-xs font-medium uppercase tracking-wide text-slate-300">
+                          <div className="mt-2 text-[11px] font-medium uppercase tracking-wide text-slate-300">
                             What's Dragging Grade
                           </div>
-                          <div className="mt-2 space-y-1.5">
-                            {(health?.signals ?? []).map((signal) => (
+                          <div className="mt-1.5 space-y-1.5">
+                            {(health?.signals ?? []).slice(0, 2).map((signal) => (
                               <div key={signal.name} className="text-xs">
                                 <div className="mb-1 flex items-center justify-between text-slate-200">
                                   <span>{signal.name}</span>
