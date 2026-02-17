@@ -416,6 +416,7 @@ export async function GET(
 }
 
 type ShiftDetailPatchBody = {
+  reason?: string;
   shift?: {
     shiftType?: "open" | "close" | "double" | "other";
     plannedStartAt?: string;
@@ -482,6 +483,10 @@ export async function PATCH(
     }
 
     const body = (await req.json()) as ShiftDetailPatchBody;
+    const reason = (body.reason ?? "").trim();
+    if (!reason) {
+      return NextResponse.json({ error: "Edit reason is required." }, { status: 400 });
+    }
     const hasShift = Boolean(body.shift);
     const hasDrawer = Boolean(body.drawerCounts && body.drawerCounts.length > 0);
     const hasDailySales = Boolean(body.dailySalesRecord);
@@ -580,6 +585,23 @@ export async function PATCH(
         if (dailyUpdateErr) return NextResponse.json({ error: dailyUpdateErr.message }, { status: 500 });
       }
     }
+
+    const { error: auditErr } = await supabaseServer
+      .from("shift_change_audit_logs")
+      .insert({
+        shift_id: shiftId,
+        store_id: shift.store_id,
+        actor_user_id: user.id,
+        action: "edit",
+        reason,
+        metadata: {
+          hasShift,
+          hasDrawer,
+          hasDailySales,
+          drawerRowCount: body.drawerCounts?.length ?? 0,
+        },
+      });
+    if (auditErr) return NextResponse.json({ error: auditErr.message }, { status: 500 });
 
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {

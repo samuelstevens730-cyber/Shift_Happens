@@ -85,7 +85,12 @@ export async function PATCH(
       startedAt?: string;
       endedAt?: string | null;
       manualCloseReview?: "approved" | "edited";
+      reason?: string;
     };
+    const reason = (body.reason ?? "").trim();
+    if (!reason) {
+      return NextResponse.json({ error: "Edit reason is required." }, { status: 400 });
+    }
 
     const update: Record<string, string | null> = {};
     if (body.shiftType) update.shift_type = body.shiftType;
@@ -164,6 +169,24 @@ export async function PATCH(
       .eq("id", shiftId);
     if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
 
+    const { error: auditErr } = await supabaseServer
+      .from("shift_change_audit_logs")
+      .insert({
+        shift_id: shiftId,
+        store_id: shift.store_id,
+        actor_user_id: user.id,
+        action: "edit",
+        reason,
+        metadata: {
+          shiftType: body.shiftType ?? null,
+          plannedStartAt: body.plannedStartAt ?? null,
+          startedAt: body.startedAt ?? null,
+          endedAt: body.endedAt ?? null,
+          manualCloseReview: body.manualCloseReview ?? null,
+        },
+      });
+    if (auditErr) return NextResponse.json({ error: auditErr.message }, { status: 500 });
+
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Failed to update shift." }, { status: 500 });
@@ -197,6 +220,11 @@ export async function DELETE(
     if (!shift) return NextResponse.json({ error: "Shift not found." }, { status: 404 });
     if (shift.last_action === "removed") return NextResponse.json({ ok: true });
     if (!managerStoreIds.includes(shift.store_id)) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    const body = (await req.json().catch(() => ({}))) as { reason?: string };
+    const reason = (body.reason ?? "").trim();
+    if (!reason) {
+      return NextResponse.json({ error: "Delete reason is required." }, { status: 400 });
+    }
 
     const { error: updateErr } = await supabaseServer
       .from("shifts")
@@ -209,6 +237,20 @@ export async function DELETE(
       })
       .eq("id", shiftId);
     if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 });
+
+    const { error: auditErr } = await supabaseServer
+      .from("shift_change_audit_logs")
+      .insert({
+        shift_id: shiftId,
+        store_id: shift.store_id,
+        actor_user_id: user.id,
+        action: "soft_delete",
+        reason,
+        metadata: {
+          manualClosed: Boolean(shift.manual_closed),
+        },
+      });
+    if (auditErr) return NextResponse.json({ error: auditErr.message }, { status: 500 });
 
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {

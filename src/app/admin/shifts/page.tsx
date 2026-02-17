@@ -277,6 +277,11 @@ export default function AdminShiftsPage() {
   async function updateShift(id: string, data: Partial<ShiftRow>) {
     if (saving) return;
     if (!window.confirm("Confirm editing shift?")) return;
+    const reason = window.prompt("Reason for edit (required for audit log):", "")?.trim() ?? "";
+    if (!reason) {
+      setError("Edit reason is required.");
+      return;
+    }
     setSaving(true);
     setError(null);
     setSuccess(null);
@@ -307,6 +312,7 @@ export default function AdminShiftsPage() {
           plannedStartAt: planned ? planned.toISOString() : undefined,
           startedAt: started ? started.toISOString() : undefined,
           endedAt: ended === null ? null : ended ? ended.toISOString() : undefined,
+          reason,
         }),
       });
       const json = (await res.json()) as SimpleResponse;
@@ -328,6 +334,11 @@ export default function AdminShiftsPage() {
   async function removeShift(id: string) {
     if (saving) return;
     if (!window.confirm("Remove this shift? It will disappear from reports.")) return;
+    const reason = window.prompt("Reason for remove (required for audit log):", "")?.trim() ?? "";
+    if (!reason) {
+      setError("Delete reason is required.");
+      return;
+    }
     setSaving(true);
     setError(null);
     setSuccess(null);
@@ -341,7 +352,11 @@ export default function AdminShiftsPage() {
 
       const res = await fetch(`/api/admin/shifts/${id}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason }),
       });
       const json = (await res.json()) as SimpleResponse;
       if (!res.ok || "error" in json) {
@@ -360,6 +375,11 @@ export default function AdminShiftsPage() {
 
   async function approveManualClose(id: string) {
     if (saving) return;
+    const reason = window.prompt("Reason for manual-close approval (required):", "")?.trim() ?? "";
+    if (!reason) {
+      setError("Edit reason is required.");
+      return;
+    }
     setSaving(true);
     setError(null);
     setSuccess(null);
@@ -377,7 +397,7 @@ export default function AdminShiftsPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ manualCloseReview: "approved" }),
+        body: JSON.stringify({ manualCloseReview: "approved", reason }),
       });
       const json = (await res.json()) as SimpleResponse;
       if (!res.ok || "error" in json) {

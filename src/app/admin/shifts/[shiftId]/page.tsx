@@ -96,6 +96,9 @@ export default function AdminShiftDetailPage() {
     zReportCents: "",
     reviewNote: "",
   });
+  const [editReason, setEditReason] = useState("");
+  const [deleteReason, setDeleteReason] = useState("");
+  const [hardDeleteReason, setHardDeleteReason] = useState("");
 
   const shiftId = params.shiftId;
   const backHref = useMemo(() => {
@@ -230,6 +233,7 @@ export default function AdminShiftDetailPage() {
       });
 
       const body = {
+        reason: editReason.trim(),
         shift: {
           shiftType: shiftForm.shiftType,
           plannedStartAt: shiftForm.plannedStartAt
@@ -262,6 +266,9 @@ export default function AdminShiftDetailPage() {
           reviewNote: dailySalesForm.reviewNote.trim() || null,
         },
       };
+      if (!body.reason) {
+        throw new Error("Edit reason is required.");
+      }
 
       const res = await fetch(`/api/admin/shifts/${shiftId}/detail`, {
         method: "PATCH",
@@ -275,6 +282,7 @@ export default function AdminShiftDetailPage() {
       if (!res.ok) throw new Error(json?.error || "Failed to save shift detail.");
 
       await refreshDetail();
+      setEditReason("");
       setSuccess("Shift detail updated.");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to save shift detail.");
@@ -286,6 +294,11 @@ export default function AdminShiftDetailPage() {
   async function softDeleteShift() {
     if (!data || saving) return;
     if (!window.confirm("Soft delete this shift? It will be removed from reporting views.")) {
+      return;
+    }
+    const reason = deleteReason.trim();
+    if (!reason) {
+      setError("Soft delete reason is required.");
       return;
     }
     try {
@@ -303,13 +316,61 @@ export default function AdminShiftDetailPage() {
 
       const res = await fetch(`/api/admin/shifts/${shiftId}`, {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error || "Failed to remove shift.");
       router.push(backHref);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to remove shift.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function hardDeleteShift() {
+    if (!data || saving) return;
+    if (
+      !window.confirm(
+        "Hard delete permanently removes this shift and related records. Continue?"
+      )
+    ) {
+      return;
+    }
+    const reason = hardDeleteReason.trim();
+    if (!reason) {
+      setError("Hard delete reason is required.");
+      return;
+    }
+    try {
+      setSaving(true);
+      setError(null);
+      setSuccess(null);
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token ?? "";
+      if (!token) {
+        router.replace(`/login?next=/admin/shifts/${shiftId}`);
+        return;
+      }
+      const res = await fetch(`/api/admin/shifts/${shiftId}/hard`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to hard delete shift.");
+      router.push(backHref);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to hard delete shift.");
     } finally {
       setSaving(false);
     }
@@ -743,6 +804,16 @@ export default function AdminShiftDetailPage() {
                 <CardDescription>Edit/Delete paths stay centralized until Phase 2 write UI lands.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
+                <label className="block text-sm">
+                  Edit Reason (required to save):
+                  <textarea
+                    className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                    rows={2}
+                    value={editReason}
+                    onChange={(e) => setEditReason(e.target.value)}
+                    placeholder="What changed and why?"
+                  />
+                </label>
                 <button
                   className="w-full rounded bg-cyan-600 px-3 py-2 text-sm font-medium text-white hover:bg-cyan-500 disabled:opacity-60"
                   onClick={() => void saveAllChanges()}
@@ -768,6 +839,31 @@ export default function AdminShiftDetailPage() {
                   disabled={saving}
                 >
                   Soft Delete Shift
+                </button>
+                <label className="block text-sm">
+                  Soft Delete Reason:
+                  <input
+                    className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                    value={deleteReason}
+                    onChange={(e) => setDeleteReason(e.target.value)}
+                    placeholder="Reason for soft delete"
+                  />
+                </label>
+                <label className="block text-sm">
+                  Hard Delete Reason:
+                  <input
+                    className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                    value={hardDeleteReason}
+                    onChange={(e) => setHardDeleteReason(e.target.value)}
+                    placeholder="Required, minimum 8 chars"
+                  />
+                </label>
+                <button
+                  className="w-full rounded border border-red-500/70 px-3 py-2 text-sm text-red-200 hover:bg-red-900/30 disabled:opacity-60"
+                  onClick={() => void hardDeleteShift()}
+                  disabled={saving}
+                >
+                  Hard Delete Shift (Permanent)
                 </button>
               </CardContent>
             </Card>
