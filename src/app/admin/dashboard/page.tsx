@@ -110,6 +110,7 @@ export default function AdminDashboardPage() {
   const [quickViewItem, setQuickViewItem] = useState<DashboardActionItem | null>(null);
   const [users, setUsers] = useState<Array<{ id: string; name: string; active: boolean; storeIds: string[] }>>([]);
   const [sendingAssignment, setSendingAssignment] = useState(false);
+  const [reviewingUnscheduledIds, setReviewingUnscheduledIds] = useState<Set<string>>(new Set());
   const [quickSend, setQuickSend] = useState<{
     type: "task" | "message";
     targetType: "store" | "employee";
@@ -400,6 +401,57 @@ export default function AdminDashboardPage() {
       setError(e instanceof Error ? e.message : "Failed to send assignment.");
     } finally {
       setSendingAssignment(false);
+    }
+  }
+
+  async function markUnscheduledReviewed(item: DashboardActionItem) {
+    const shiftId = item.id.startsWith("scheduling-") ? item.id.replace("scheduling-", "") : null;
+    if (!shiftId || reviewingUnscheduledIds.has(shiftId)) return;
+
+    try {
+      setReviewingUnscheduledIds((prev) => new Set(prev).add(shiftId));
+      const { data: auth } = await supabase.auth.getSession();
+      const token = auth.session?.access_token ?? "";
+      if (!token) {
+        router.replace("/login?next=/admin/dashboard");
+        return;
+      }
+
+      const res = await fetch(`/api/admin/shifts/${shiftId}/unscheduled-review`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ note: "Reviewed from Command Center action item." }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to review unscheduled shift.");
+
+      setData((prev) => {
+        if (!prev) return prev;
+        const nextScheduling = prev.actions.scheduling.filter((row) => row.id !== item.id);
+        const nextCounts = Math.max(0, (prev.actionCounts.scheduling ?? 0) - 1);
+        return {
+          ...prev,
+          actions: {
+            ...prev.actions,
+            scheduling: nextScheduling,
+          },
+          actionCounts: {
+            ...prev.actionCounts,
+            scheduling: nextCounts,
+          },
+        };
+      });
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to review unscheduled shift.");
+    } finally {
+      setReviewingUnscheduledIds((prev) => {
+        const next = new Set(prev);
+        next.delete(shiftId);
+        return next;
+      });
     }
   }
 
@@ -914,6 +966,20 @@ export default function AdminDashboardPage() {
                                   {item.categoryLabel} · {item.description}
                                 </div>
                                 <div className="mt-2 flex justify-end gap-2">
+                                  {item.category === "scheduling" ? (
+                                    <button
+                                      className="rounded border border-emerald-700/60 px-2 py-1 text-xs text-emerald-300 hover:bg-emerald-900/20 disabled:opacity-60"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        void markUnscheduledReviewed(item);
+                                      }}
+                                      disabled={reviewingUnscheduledIds.has(item.id.replace("scheduling-", ""))}
+                                    >
+                                      {reviewingUnscheduledIds.has(item.id.replace("scheduling-", ""))
+                                        ? "Saving..."
+                                        : "Mark Reviewed"}
+                                    </button>
+                                  ) : null}
                                   <Link
                                     href={actionDestination(item)}
                                     className="rounded border border-cyan-700/60 px-2 py-1 text-xs text-cyan-300 hover:bg-cyan-900/20"

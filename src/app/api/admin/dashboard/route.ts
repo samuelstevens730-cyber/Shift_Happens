@@ -262,6 +262,7 @@ export async function GET(req: Request) {
         .in("store_id", activeStoreIds)
         .not("started_at", "is", null)
         .is("schedule_shift_id", null)
+        .is("unscheduled_reviewed_at", null)
         .gte("started_at", rangeFromIso)
         .lte("started_at", rangeToIso)
         .order("started_at", { ascending: false })
@@ -273,6 +274,7 @@ export async function GET(req: Request) {
         .in("store_id", activeStoreIds)
         .not("started_at", "is", null)
         .is("schedule_shift_id", null)
+        .is("unscheduled_reviewed_at", null)
         .gte("started_at", rangeFromIso)
         .lte("started_at", rangeToIso),
       supabaseServer
