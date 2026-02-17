@@ -534,6 +534,15 @@ export default function ShiftPage() {
   const hasChangeover = useMemo(() => {
     return (state?.counts || []).some(c => c.count_type === "changeover");
   }, [state]);
+  const hasStartDrawer = useMemo(() => {
+    return (state?.counts || []).some(c => c.count_type === "start");
+  }, [state]);
+  const requiresStartDrawerCapture = Boolean(
+    state &&
+      !state.shift.ended_at &&
+      state.shift.shift_type !== "other" &&
+      !hasStartDrawer
+  );
 
   // Get all required checklist group keys
   const requiredGroupKeys = useMemo(() => {
@@ -792,6 +801,15 @@ export default function ShiftPage() {
           Store: <b>{state.store.name}</b> · Employee: <b>{state.employee || "Unknown"}</b> · Type:{" "}
           <b>{state.shift.shift_type}</b>
         </div>
+        {requiresStartDrawerCapture && (
+          <StartDrawerCapturePanel
+            shiftId={shiftId}
+            expectedCents={state.store.expected_drawer_cents}
+            resolveAuthToken={resolveAuthToken}
+            managerSession={managerSession}
+            onDone={reloadShift}
+          />
+        )}
 
         {salesContextLoading && (
           <div className="text-xs text-slate-500">Loading sales rollover context...</div>
@@ -932,7 +950,7 @@ export default function ShiftPage() {
                           </div>
                           <button
                             onClick={() => checkGroup(g)}
-                            disabled={isDone}
+                            disabled={isDone || requiresStartDrawerCapture}
                             className={`px-3 py-1 rounded ${isDone ? "bg-emerald-500 text-black" : "bg-slate-200 text-black"}`}
                           >
                             {isDone ? "Done" : "Check"}
@@ -1083,14 +1101,14 @@ export default function ShiftPage() {
                             <div className="flex gap-2 justify-end">
                               <button
                                 className={`px-3 py-1 rounded ${isCompleted ? "bg-emerald-500 text-black" : "bg-slate-200 text-black"}`}
-                                disabled={isCompleted}
+                                disabled={isCompleted || requiresStartDrawerCapture}
                                 onClick={() => void completeCleaningTask(task)}
                               >
                                 {isCompleted ? "Done" : "Complete"}
                               </button>
                               <button
                                 className="px-3 py-1 rounded border border-amber-400 text-amber-800 disabled:opacity-50"
-                                disabled={isCompleted}
+                                disabled={isCompleted || requiresStartDrawerCapture}
                                 onClick={() => setSkipModalTask(task)}
                               >
                                 Skip
@@ -1125,6 +1143,7 @@ export default function ShiftPage() {
                       <input
                         type="checkbox"
                         checked={Boolean(m.acknowledged_at)}
+                        disabled={requiresStartDrawerCapture}
                         onChange={() => updateAssignment(m.id, "ack")}
                       />
                       <span>{m.message}</span>
@@ -1144,6 +1163,7 @@ export default function ShiftPage() {
                       <span>{t.message}</span>
                       <button
                         className="px-3 py-1 rounded border"
+                        disabled={requiresStartDrawerCapture}
                         onClick={() => updateAssignment(t.id, "complete")}
                       >
                         Mark Complete
@@ -1190,6 +1210,7 @@ export default function ShiftPage() {
           <button
             className="w-full rounded bg-black text-white py-2 disabled:opacity-50"
             disabled={
+              requiresStartDrawerCapture ||
               (shiftType !== "other" && remainingRequired > 0) ||
               pendingMessages.length > 0 ||
               pendingTasks.length > 0 ||
@@ -1338,6 +1359,151 @@ function SkipCleaningTaskModal({
             {saving ? "Saving..." : "Confirm Skip"}
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function StartDrawerCapturePanel({
+  shiftId,
+  expectedCents,
+  resolveAuthToken,
+  managerSession,
+  onDone,
+}: {
+  shiftId: string;
+  expectedCents: number;
+  resolveAuthToken: () => Promise<string | null>;
+  managerSession: boolean;
+  onDone: () => Promise<boolean>;
+}) {
+  const [drawer, setDrawer] = useState("200");
+  const [changeDrawer, setChangeDrawer] = useState("200");
+  const [confirm, setConfirm] = useState(false);
+  const [notify, setNotify] = useState(false);
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const drawerCents = Math.round(Number(drawer) * 100);
+  const changeCents = Math.round(Number(changeDrawer) * 100);
+  const hasValidDrawer = Number.isFinite(drawerCents) && drawerCents >= 0;
+  const hasValidChange = Number.isFinite(changeCents) && changeCents >= 0;
+  const outOfThreshold = hasValidDrawer ? shouldShowVarianceControls(drawerCents, expectedCents) : false;
+  const changeNot200 = hasValidChange ? changeCents !== 20000 : false;
+  const thresholdMsg = hasValidDrawer ? thresholdMessage(drawerCents, expectedCents) : "Enter a valid drawer count.";
+
+  useEffect(() => {
+    if (!outOfThreshold) setConfirm(false);
+    if (!outOfThreshold && !changeNot200) setNotify(false);
+  }, [outOfThreshold, changeNot200]);
+
+  const canSubmit =
+    !saving &&
+    hasValidDrawer &&
+    hasValidChange &&
+    (!outOfThreshold || confirm) &&
+    (!(outOfThreshold || changeNot200) || notify);
+
+  return (
+    <div className="card card-pad rounded-2xl border-amber-400/50 bg-amber-950/20 text-amber-100 space-y-3">
+      <div className="text-sm font-semibold">Step 1: Enter Start Drawer</div>
+      <div className="text-xs text-amber-200">
+        This must be completed before checklist/tasks/clock-out actions are unlocked.
+      </div>
+
+      <label className="text-sm">Beginning drawer count ($)</label>
+      <input
+        className="w-full border border-amber-300/40 bg-black/20 text-amber-50 rounded p-2"
+        inputMode="decimal"
+        value={drawer}
+        onChange={e => setDrawer(e.target.value)}
+        disabled={saving}
+      />
+
+      <div className="text-xs border border-amber-300/40 rounded p-2">{thresholdMsg}</div>
+
+      <label className="text-sm">Change drawer count ($)</label>
+      <input
+        className="w-full border border-amber-300/40 bg-black/20 text-amber-50 rounded p-2"
+        inputMode="decimal"
+        value={changeDrawer}
+        onChange={e => setChangeDrawer(e.target.value)}
+        disabled={saving}
+      />
+
+      {changeNot200 && (
+        <div className="text-xs border border-amber-300/40 rounded p-2">
+          Change drawer should be exactly $200.00.
+        </div>
+      )}
+
+      {outOfThreshold && (
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={confirm} onChange={e => setConfirm(e.target.checked)} />
+          I confirm this count is correct.
+        </label>
+      )}
+
+      {(outOfThreshold || changeNot200) && (
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={notify} onChange={e => setNotify(e.target.checked)} />
+          I notified manager.
+        </label>
+      )}
+
+      <label className="text-sm">Note (optional)</label>
+      <input
+        className="w-full border border-amber-300/40 bg-black/20 text-amber-50 rounded p-2"
+        value={note}
+        onChange={e => setNote(e.target.value)}
+        disabled={saving}
+      />
+
+      {err && (
+        <div className="text-sm border border-red-300 rounded p-2 text-red-700 bg-red-50">{err}</div>
+      )}
+
+      <div className="flex justify-end">
+        <button
+          className="px-3 py-1.5 rounded bg-amber-300 text-black font-semibold disabled:opacity-50"
+          disabled={!canSubmit}
+          onClick={async () => {
+            setErr(null);
+            const authToken = await resolveAuthToken();
+            if (!authToken) {
+              setErr(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
+              return;
+            }
+
+            setSaving(true);
+            try {
+              const res = await fetch(`/api/shift/${shiftId}/start-drawer`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${authToken}`,
+                },
+                body: JSON.stringify({
+                  startDrawerCents: drawerCents,
+                  changeDrawerCents: changeCents,
+                  confirmed: outOfThreshold ? confirm : false,
+                  notifiedManager: outOfThreshold || changeNot200 ? notify : false,
+                  note: note.trim() || null,
+                }),
+              });
+              const json = await res.json();
+              if (!res.ok) throw new Error(json?.error || "Failed to save start drawer.");
+              await onDone();
+            } catch (e: unknown) {
+              setErr(e instanceof Error ? e.message : "Failed to save start drawer.");
+            } finally {
+              setSaving(false);
+            }
+          }}
+        >
+          {saving ? "Saving..." : "Save Start Drawer"}
+        </button>
       </div>
     </div>
   );

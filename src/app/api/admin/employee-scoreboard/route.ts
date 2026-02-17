@@ -55,6 +55,15 @@ function percentile(value: number, population: number[]): number {
   return clamp((countLE - 1) / (sorted.length - 1), 0, 1);
 }
 
+function punctualityShiftScore(effectiveLateMinutes: number): number {
+  if (effectiveLateMinutes <= 0) return 1;
+  // 5-minute grace is already removed upstream; this curve applies for 0..10 minutes late (9:05-9:15 on a 9:00 shift).
+  // Quadratic decay makes each additional minute hurt more than the previous one.
+  if (effectiveLateMinutes >= 10) return 0;
+  const ratio = effectiveLateMinutes / 10;
+  return clamp(1 - ratio * ratio, 0, 1);
+}
+
 function cstMinutesOfDay(iso: string): number | null {
   const dt = new Date(iso);
   if (Number.isNaN(dt.getTime())) return null;
@@ -411,7 +420,8 @@ export async function GET(req: Request) {
         const actualMin = cstMinutesOfDay(worked.startedAt);
         const scheduledMin = parseTimeToMinutes(scheduleShift.scheduled_start);
         if (actualMin != null && scheduledMin != null) {
-          stats.lateMinutes.push(Math.max(0, actualMin - scheduledMin));
+          // Apply 5-minute grace period before counting as late.
+          stats.lateMinutes.push(Math.max(0, actualMin - scheduledMin - 5));
         }
       }
     }
@@ -465,8 +475,13 @@ export async function GET(req: Request) {
         stats.lateMinutes.length > 0
           ? stats.lateMinutes.reduce((sum, v) => sum + v, 0) / stats.lateMinutes.length
           : null;
+      const avgPunctualityScore =
+        stats.lateMinutes.length > 0
+          ? stats.lateMinutes.reduce((sum, v) => sum + punctualityShiftScore(v), 0) /
+            stats.lateMinutes.length
+          : null;
       const punctualityPoints =
-        avgLateMinutes == null ? null : 15 * clamp(1 - avgLateMinutes / 15, 0, 1);
+        avgPunctualityScore == null ? null : 15 * avgPunctualityScore;
 
       const avgDrawerDelta =
         stats.drawerAbsDelta.length > 0
@@ -516,7 +531,9 @@ export async function GET(req: Request) {
           "Punctuality",
           15,
           punctualityPoints,
-          avgLateMinutes == null ? "No punctuality data" : `Avg late ${round(avgLateMinutes, 1)} min`
+          avgLateMinutes == null
+            ? "No punctuality data"
+            : `Avg late ${round(avgLateMinutes, 1)} min (5m grace, steeper after 9:10)`
         ),
         category(
           "accuracy",

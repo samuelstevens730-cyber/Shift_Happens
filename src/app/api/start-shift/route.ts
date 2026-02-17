@@ -13,8 +13,8 @@
  * - profileId: string - Employee profile ID (must match authenticated user)
  * - shiftTypeHint?: "open" | "close" | "double" | "other" - Optional hint (server derives shift_type)
  * - plannedStartAt: string - ISO timestamp of planned start time (required)
- * - startDrawerCents?: number | null - Starting drawer count in cents (required for non-"other" shifts)
- * - changeDrawerCents?: number | null - Change drawer count in cents (required for non-"other" shifts)
+ * - startDrawerCents?: number | null - Starting drawer count in cents (optional, can be submitted immediately after clock-in)
+ * - changeDrawerCents?: number | null - Change drawer count in cents (optional, can be submitted immediately after clock-in)
  * - confirmed?: boolean - Whether the drawer count was confirmed (required if out of threshold)
  * - notifiedManager?: boolean - Whether manager was notified of discrepancy
  * - note?: string | null - Optional note about the drawer count
@@ -29,7 +29,7 @@
  * - Resolves store by QR token or store ID
  * - Validates employee exists, is active, and is assigned to the store
  * - Rounds planned start time to nearest 30 minutes for payroll consistency
- * - For non-"other" shifts, requires starting drawer count
+ * - Start drawer can be captured after clock-in (separate flow)
  * - If drawer count is outside expected threshold, requires manager notification
  * - Prevents duplicate active shifts - returns existing shift if employee already clocked in at same store
  * - Blocks clock-in if employee has active shift at different store
@@ -48,7 +48,7 @@ type Body = {
   profileId: string;
   shiftTypeHint?: ShiftType;
   plannedStartAt: string; // ISO string
-  startDrawerCents?: number | null; // required for non-"other"
+  startDrawerCents?: number | null; // optional (captured pre- or post-clock-in)
   changeDrawerCents?: number | null; // change drawer count in cents
   confirmed?: boolean; // required if out of threshold
   notifiedManager?: boolean;
@@ -266,51 +266,30 @@ export async function POST(req: Request) {
     const startCents = body.startDrawerCents ?? null;
     const changeCents = body.changeDrawerCents ?? null;
 
-    if (resolvedShiftType !== "other") {
-      // Required for open/close/double
-      if (startCents === null || startCents === undefined) {
-        return NextResponse.json(
-          { error: "Missing startDrawerCents (required for this shift type)." },
-          { status: 400 }
-        );
+    // Start drawer capture is optional at clock-in and may be submitted immediately after clock-in.
+    // If caller provides drawer values here, still enforce manager-notify rules.
+    if (startCents !== null && startCents !== undefined) {
+      if (!Number.isFinite(startCents)) {
+        return NextResponse.json({ error: "Invalid startDrawerCents." }, { status: 400 });
       }
-      if (changeCents === null || changeCents === undefined || !Number.isFinite(changeCents)) {
-        return NextResponse.json(
-          { error: "Missing changeDrawerCents (required for this shift type)." },
-          { status: 400 }
-        );
-      }
-
       const out = isOutOfThreshold(startCents, store.expected_drawer_cents);
-      const changeNot200 = changeCents !== 20000;
-      if ((out || changeNot200) && !body.notifiedManager) {
+      if (out && !body.notifiedManager) {
         return NextResponse.json(
-          { error: "Start drawer or change drawer requires manager notification.", requiresConfirm: true },
+          { error: "Start drawer outside threshold. Must notify manager.", requiresConfirm: true },
           { status: 400 }
         );
       }
-    } else {
-      // "other" is exempt, but if they provide a number, still enforce confirm if it's wild
-      if (startCents !== null && startCents !== undefined) {
-        const out = isOutOfThreshold(startCents, store.expected_drawer_cents);
-        if (out && !body.notifiedManager) {
-          return NextResponse.json(
-            { error: "Start drawer outside threshold. Must notify manager.", requiresConfirm: true },
-            { status: 400 }
-          );
-        }
+    }
+    if (changeCents !== null && changeCents !== undefined) {
+      if (!Number.isFinite(changeCents)) {
+        return NextResponse.json({ error: "Invalid changeDrawerCents." }, { status: 400 });
       }
-      if (changeCents !== null && changeCents !== undefined) {
-        if (!Number.isFinite(changeCents)) {
-          return NextResponse.json({ error: "Invalid changeDrawerCents." }, { status: 400 });
-        }
-        const changeNot200 = changeCents !== 20000;
-        if (changeNot200 && !body.notifiedManager) {
-          return NextResponse.json(
-            { error: "Change drawer not $200. Must notify manager.", requiresConfirm: true },
-            { status: 400 }
-          );
-        }
+      const changeNot200 = changeCents !== 20000;
+      if (changeNot200 && !body.notifiedManager) {
+        return NextResponse.json(
+          { error: "Change drawer not $200. Must notify manager.", requiresConfirm: true },
+          { status: 400 }
+        );
       }
     }
 

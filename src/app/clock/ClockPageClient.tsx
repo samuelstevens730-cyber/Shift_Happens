@@ -9,10 +9,9 @@
  * 1. Select store (or auto-selected via QR)
  * 2. Select employee name
  * 3. Enter planned start time (rounded to 30-min increments for payroll)
- * 4. Enter starting drawer count (required for open/close/double, optional for other)
- * 5. If drawer out of threshold: must confirm count and notify manager
- * 6. Confirmation modal before submitting
- * 7. Redirect to shift detail page on success
+ * 4. Confirmation modal before submitting
+ * 5. Redirect to shift detail page on success
+ * 6. Capture start drawer on shift page (separate step)
  *
  * Local storage persists last-used store/employee for faster repeat clock-ins.
  */
@@ -184,11 +183,6 @@ export default function ClockPageClient() {
     toLocalInputValue(roundTo30Minutes(new Date()))
   );
 
-  // Drawer count state - default $200 to speed up entry
-  const [startDrawer, setStartDrawer] = useState<string>("200");
-  const [changeDrawer, setChangeDrawer] = useState<string>("200");
-  const [startConfirmThreshold, setStartConfirmThreshold] = useState(false);
-  const [startNotifiedManager, setStartNotifiedManager] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmChecked, setConfirmChecked] = useState(false);
   const [clockWindowModal, setClockWindowModal] = useState<{ open: boolean; label: string }>({
@@ -229,52 +223,6 @@ export default function ClockPageClient() {
   const [pinLoading, setPinLoading] = useState(false);
   const [pinShake, setPinShake] = useState(false);
   const pinInputRef = useRef<HTMLInputElement | null>(null);
-
-  // "other" shifts don't require drawer counts (e.g., training, inventory)
-  const requiresStartDrawer = shiftKind !== "other";
-
-  // Get expected drawer amount for selected store (used for threshold checking)
-  const expectedDrawerCents = useMemo(() => {
-    const s = stores.find(x => x.id === storeId);
-    return s?.expected_drawer_cents ?? 20000; // safe default
-  }, [stores, storeId]);
-
-  // Parse drawer input to cents (null if invalid)
-  const parsedStart = useMemo(() => {
-    const dollars = Number(startDrawer);
-    if (Number.isNaN(dollars) || dollars < 0) return null;
-    return Math.round(dollars * 100);
-  }, [startDrawer]);
-
-  const parsedChange = useMemo(() => {
-    const dollars = Number(changeDrawer);
-    if (Number.isNaN(dollars) || dollars < 0) return null;
-    return Math.round(dollars * 100);
-  }, [changeDrawer]);
-
-  // Check if drawer count is outside acceptable variance range
-  const startOutOfThreshold = useMemo(() => {
-    if (!requiresStartDrawer) return false;
-    if (parsedStart == null) return false;
-    return isOutOfThreshold(parsedStart, expectedDrawerCents);
-  }, [requiresStartDrawer, parsedStart, expectedDrawerCents]);
-
-  const changeNot200 = useMemo(() => {
-    if (!requiresStartDrawer) return false;
-    if (parsedChange == null) return false;
-    return parsedChange !== 20000;
-  }, [requiresStartDrawer, parsedChange]);
-
-  const requiresManagerNotify = useMemo(() => {
-    return startOutOfThreshold || changeNot200;
-  }, [startOutOfThreshold, changeNot200]);
-
-  // Generate threshold warning message for display
-  const thresholdMsg = useMemo(() => {
-    if (!requiresStartDrawer) return null;
-    if (parsedStart == null) return "Enter a valid drawer amount.";
-    return thresholdMessage(parsedStart, expectedDrawerCents);
-  }, [requiresStartDrawer, parsedStart, expectedDrawerCents]);
 
   const selectedStoreName = useMemo(() => {
     return stores.find(s => s.id === storeId)?.name ?? "Unknown Store";
@@ -342,26 +290,11 @@ export default function ClockPageClient() {
 
     const plannedMs = new Date(plannedStartLocal).getTime();
     if (Number.isNaN(plannedMs)) return false;
-
-    if (!requiresStartDrawer) return true;
-
-    if (parsedStart == null) return false;
-    if (parsedChange == null) return false;
-
-    // If outside threshold, user must confirm they notified a manager.
-    if (requiresManagerNotify && !startNotifiedManager) return false;
-
     return true;
   }, [
     storeId,
     profileId,
     plannedStartLocal,
-    requiresStartDrawer,
-    parsedStart,
-    parsedChange,
-    startOutOfThreshold,
-    requiresManagerNotify,
-    startNotifiedManager,
   ]);
 
   // Load stores and validate QR token on mount (NO profiles fetch for security)
@@ -591,12 +524,6 @@ export default function ClockPageClient() {
     setConfirmOpen(false);
   }, [storeId, profileId, plannedStartLocal, shiftKind]);
 
-  useEffect(() => {
-    if (!requiresManagerNotify) {
-      setStartNotifiedManager(false);
-    }
-  }, [requiresManagerNotify]);
-
   async function startShift(force = false) {
     setError(null);
 
@@ -611,32 +538,6 @@ export default function ClockPageClient() {
     if (!windowCheck.ok) {
       triggerClockWindowModal(windowCheck.label);
       return;
-    }
-
-    let startDrawerCents: number | null = null;
-    let changeDrawerCents: number | null = null;
-    let confirmed = false;
-
-    if (requiresStartDrawer) {
-      if (parsedStart == null) {
-        setError("Enter a valid starting drawer amount.");
-        return;
-      }
-      if (parsedChange == null) {
-        setError("Enter a valid change drawer amount.");
-        return;
-      }
-
-      startDrawerCents = parsedStart;
-      changeDrawerCents = parsedChange;
-
-      const out = isOutOfThreshold(parsedStart, expectedDrawerCents);
-      confirmed = out ? Boolean(startConfirmThreshold) : false;
-
-      if ((out || parsedChange !== 20000) && !startNotifiedManager) {
-        setError("Notify manager to proceed.");
-        return;
-      }
     }
 
     // Determine auth token - manager uses Supabase access token, employee uses PIN token
@@ -660,10 +561,10 @@ export default function ClockPageClient() {
           profileId,
           shiftTypeHint: shiftKind,
           plannedStartAt: roundedPlanned.toISOString(),
-          startDrawerCents, // null allowed for "other"
-          changeDrawerCents, // change drawer count in cents
-          confirmed,
-          notifiedManager: startDrawerCents == null ? false : startNotifiedManager,
+          startDrawerCents: null,
+          changeDrawerCents: null,
+          confirmed: false,
+          notifiedManager: false,
           note: null,
           force,
         }),
@@ -867,66 +768,8 @@ export default function ClockPageClient() {
           </div>
         </div>
 
-          <div className="space-y-2">
-            <label className="text-sm muted">
-              Beginning drawer count ($){requiresStartDrawer ? "" : " (optional)"}
-            </label>
-            <input
-              className="input"
-              inputMode="decimal"
-              value={startDrawer}
-              onChange={e => setStartDrawer(e.target.value)}
-              disabled={submitting}
-            />
-
-            {/* Threshold warning message */}
-            {requiresStartDrawer && thresholdMsg && (
-              <div className="banner text-sm">
-                {thresholdMsg}
-              </div>
-            )}
-
-            <label className="text-sm muted">
-              Change drawer count ($){requiresStartDrawer ? "" : " (optional)"}
-            </label>
-            <input
-              className="input"
-              inputMode="decimal"
-              value={changeDrawer}
-              onChange={e => setChangeDrawer(e.target.value)}
-              disabled={submitting}
-            />
-
-            {requiresStartDrawer && parsedChange != null && changeNot200 && (
-              <div className="banner text-sm">
-                Change drawer should be exactly $200.00.
-              </div>
-            )}
-
-            {/* Threshold confirmation checkboxes - shown only when drawer is out of range */}
-            {requiresStartDrawer && startOutOfThreshold && (
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={startConfirmThreshold}
-                  onChange={e => setStartConfirmThreshold(e.target.checked)}
-                  disabled={submitting}
-                />
-                I confirm this count is correct (required if outside threshold)
-              </label>
-            )}
-
-            {requiresStartDrawer && requiresManagerNotify && (
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={startNotifiedManager}
-                  onChange={e => setStartNotifiedManager(e.target.checked)}
-                  disabled={submitting}
-                />
-                I notified manager
-              </label>
-            )}
+          <div className="banner text-sm">
+            Start drawer count is collected right after clock-in on the shift page.
           </div>
 
           <div className="sticky-cta">
