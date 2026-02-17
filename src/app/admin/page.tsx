@@ -176,6 +176,17 @@ export default function AdminIndex() {
             </p>
           </Link>
 
+          {/* Shift Sales - per-shift sales formulas and leaderboard source data */}
+          <Link href="/admin/shift-sales" className="tile">
+            <div className="flex items-center gap-2">
+              <span className="tile-dot" />
+              <div className="text-lg font-medium">Shift Sales</div>
+            </div>
+            <p className="mt-2 text-sm muted">
+              View all shifts with AM/PM sales math and rollover handling.
+            </p>
+          </Link>
+
           {/* Manual Shift Closures - review employee-ended shifts */}
           <Link href="/admin/shifts?review=manual" className="tile">
             <div className="flex items-center gap-2">
