@@ -565,12 +565,22 @@ export default function SafeCloseoutWizard({
                   <div className="text-sm font-semibold">5) Evidence & Submit</div>
                   <div className="space-y-1">
                     <label className="text-sm">Deposit Slip (Required)</label>
-                    <input type="file" accept="image/*" onChange={(e) => setDepositFile(e.target.files?.[0] ?? null)} />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={(e) => setDepositFile(e.target.files?.[0] ?? null)}
+                    />
                     {depositPath && <div className="text-xs text-emerald-300">✅ Deposit slip uploaded.</div>}
                   </div>
                   <div className="space-y-1">
                     <label className="text-sm">Z-Report (Optional)</label>
-                    <input type="file" accept="image/*" onChange={(e) => setPosFile(e.target.files?.[0] ?? null)} />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={(e) => setPosFile(e.target.files?.[0] ?? null)}
+                    />
                     {posPath && <div className="text-xs text-emerald-300">✅ Z-report uploaded.</div>}
                   </div>
                 </div>
