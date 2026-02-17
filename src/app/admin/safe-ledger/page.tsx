@@ -41,6 +41,19 @@ type ListRow = {
 type Store = { id: string; name: string };
 type AdminUser = { id: string; name: string; active: boolean; storeIds: string[] };
 
+type SafePickup = {
+  id: string;
+  store_id: string;
+  store_name: string | null;
+  pickup_date: string;
+  pickup_at: string;
+  amount_cents: number;
+  note: string | null;
+  recorded_by: string;
+  recorded_by_name: string | null;
+  created_at: string;
+};
+
 type DetailResponse = {
   closeout: ListRow & {
     employee_name: string | null;
@@ -138,6 +151,8 @@ export default function SafeLedgerDashboardPage() {
   const [rows, setRows] = useState<ListRow[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [pickups, setPickups] = useState<SafePickup[]>([]);
+  const [currentSafeBalanceByStore, setCurrentSafeBalanceByStore] = useState<Record<string, number>>({});
   const [storeId, setStoreId] = useState<string>("all");
   const [from, setFrom] = useState<string>(() => {
     const d = new Date();
@@ -154,7 +169,9 @@ export default function SafeLedgerDashboardPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [savingEdit, setSavingEdit] = useState(false);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isPickupOpen, setIsPickupOpen] = useState(false);
   const [savingAdd, setSavingAdd] = useState(false);
+  const [savingPickup, setSavingPickup] = useState(false);
   const [zoomPhoto, setZoomPhoto] = useState<{ url: string; label: string } | null>(null);
   const [editDepositPhotoFile, setEditDepositPhotoFile] = useState<File | null>(null);
   const [editPosPhotoFile, setEditPosPhotoFile] = useState<File | null>(null);
@@ -195,6 +212,12 @@ export default function SafeLedgerDashboardPage() {
     d5: "0",
     d2: "0",
     d1: "0",
+  });
+  const [pickupForm, setPickupForm] = useState({
+    storeId: "",
+    pickupDate: toDateKey(new Date()),
+    amount: "",
+    note: "",
   });
   const [quickViewMode, setQuickViewMode] = useState<"week" | "month">("week");
   const [selectedWeek, setSelectedWeek] = useState<string>("1");
@@ -285,6 +308,8 @@ export default function SafeLedgerDashboardPage() {
     const json = await res.json();
     if (!res.ok) throw new Error(json?.error || "Failed to load safe ledger.");
     setRows((json?.rows ?? []) as ListRow[]);
+    setPickups((json?.pickups ?? []) as SafePickup[]);
+    setCurrentSafeBalanceByStore((json?.current_safe_balance_by_store ?? {}) as Record<string, number>);
   }
 
   async function loadDetail(token: string, closeoutId: string) {
@@ -421,10 +446,43 @@ export default function SafeLedgerDashboardPage() {
     }
   }, [isAddOpen, addForm.storeId, addForm.profileId, users]);
 
+  const pickupStoreId = useMemo(() => {
+    if (pickupForm.storeId) return pickupForm.storeId;
+    if (storeId !== "all") return storeId;
+    return stores[0]?.id ?? "";
+  }, [pickupForm.storeId, storeId, stores]);
+
+  const suggestedPickupCents = useMemo(
+    () => Math.max(0, currentSafeBalanceByStore[pickupStoreId] ?? 0),
+    [currentSafeBalanceByStore, pickupStoreId]
+  );
+
+  useEffect(() => {
+    if (!isPickupOpen) return;
+    const defaultStoreId = storeId !== "all" ? storeId : stores[0]?.id ?? "";
+    setPickupForm((prev) => ({
+      ...prev,
+      storeId: prev.storeId || defaultStoreId,
+      pickupDate: prev.pickupDate || toDateKey(new Date()),
+      amount: prev.amount || toMoneyInput(Math.max(0, currentSafeBalanceByStore[defaultStoreId] ?? 0)),
+    }));
+  }, [isPickupOpen, storeId, stores, currentSafeBalanceByStore]);
+
+  useEffect(() => {
+    if (!isPickupOpen || !pickupStoreId) return;
+    setPickupForm((prev) => ({
+      ...prev,
+      amount: toMoneyInput(Math.max(0, currentSafeBalanceByStore[pickupStoreId] ?? 0)),
+    }));
+  }, [isPickupOpen, pickupStoreId, currentSafeBalanceByStore]);
+
   const storeReconciliationSummaries = useMemo(() => {
     const byStore = new Map<string, {
       storeId: string;
       storeName: string;
+      grossExpectedCents: number;
+      grossActualCents: number;
+      pickupTotalCents: number;
       expectedTotalCents: number;
       actualTotalCents: number;
       denomTotalCents: number;
@@ -437,6 +495,9 @@ export default function SafeLedgerDashboardPage() {
         byStore.set(key, {
           storeId: row.store_id,
           storeName: (row.store_name ?? "Unknown Store").toUpperCase(),
+          grossExpectedCents: 0,
+          grossActualCents: 0,
+          pickupTotalCents: 0,
           expectedTotalCents: 0,
           actualTotalCents: 0,
           denomTotalCents: 0,
@@ -444,8 +505,8 @@ export default function SafeLedgerDashboardPage() {
         });
       }
       const summary = byStore.get(key)!;
-      summary.expectedTotalCents += row.cash_sales_cents - row.expense_total_cents;
-      summary.actualTotalCents += row.denom_total_cents;
+      summary.grossExpectedCents += row.cash_sales_cents - row.expense_total_cents;
+      summary.grossActualCents += row.denom_total_cents;
       summary.denomTotalCents += row.denom_total_cents;
       summary.denoms["1"] += Number(row.denoms_jsonb?.["1"] ?? 0);
       summary.denoms["2"] += Number(row.denoms_jsonb?.["2"] ?? 0);
@@ -456,8 +517,31 @@ export default function SafeLedgerDashboardPage() {
       summary.denoms["100"] += Number(row.denoms_jsonb?.["100"] ?? 0);
     }
 
+    for (const pickup of pickups) {
+      if (!byStore.has(pickup.store_id)) {
+        byStore.set(pickup.store_id, {
+          storeId: pickup.store_id,
+          storeName: (pickup.store_name ?? "Unknown Store").toUpperCase(),
+          grossExpectedCents: 0,
+          grossActualCents: 0,
+          pickupTotalCents: 0,
+          expectedTotalCents: 0,
+          actualTotalCents: 0,
+          denomTotalCents: 0,
+          denoms: { "1": 0, "2": 0, "5": 0, "10": 0, "20": 0, "50": 0, "100": 0 },
+        });
+      }
+      const summary = byStore.get(pickup.store_id)!;
+      summary.pickupTotalCents += pickup.amount_cents;
+    }
+
+    for (const summary of byStore.values()) {
+      summary.expectedTotalCents = summary.grossExpectedCents - summary.pickupTotalCents;
+      summary.actualTotalCents = summary.grossActualCents - summary.pickupTotalCents;
+    }
+
     return Array.from(byStore.values()).sort((a, b) => a.storeName.localeCompare(b.storeName));
-  }, [filteredRows]);
+  }, [filteredRows, pickups]);
 
   async function copyText(text: string, successMsg: string) {
     try {
@@ -735,12 +819,57 @@ export default function SafeLedgerDashboardPage() {
     }
   }
 
+  async function createSafePickup() {
+    const amountCents = parseMoneyInputToCents(pickupForm.amount);
+    if (!pickupStoreId || !pickupForm.pickupDate || amountCents == null) {
+      setError("Enter a valid pickup store, date, and amount.");
+      return;
+    }
+
+    try {
+      setSavingPickup(true);
+      const token = await withToken();
+      if (!token) return;
+
+      const res = await fetch("/api/admin/safe-ledger/pickups", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          store_id: pickupStoreId,
+          pickup_date: pickupForm.pickupDate,
+          amount_cents: amountCents,
+          note: pickupForm.note.trim() || null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to record pickup.");
+
+      await loadRows(token);
+      setIsPickupOpen(false);
+      setPickupForm({
+        storeId: "",
+        pickupDate: toDateKey(new Date()),
+        amount: "",
+        note: "",
+      });
+      setToast("Safe pickup recorded.");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to record safe pickup.");
+    } finally {
+      setSavingPickup(false);
+    }
+  }
+
   return (
     <div className="space-y-4 p-6 text-slate-100">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <h1 className="text-2xl font-semibold">Safe Ledger Dashboard</h1>
         <div className="flex items-center gap-2">
           <Button className="bg-cyan-600 text-white hover:bg-cyan-700" onClick={() => setIsAddOpen(true)}>Add Manual Closeout</Button>
+          <Button className="bg-amber-600 text-white hover:bg-amber-700" onClick={() => setIsPickupOpen(true)}>Record Full Pickup</Button>
           <Button className="bg-purple-600 text-white hover:bg-purple-700" onClick={() => void copyText(buildSalesTsv(), "Copied Sales TSV")}>Copy Sales TSV</Button>
           <Button className="bg-purple-600 text-white hover:bg-purple-700" onClick={() => void copyText(buildDenomTsv(), "Copied Denom TSV")}>Copy Denom TSV</Button>
         </div>
@@ -806,19 +935,32 @@ export default function SafeLedgerDashboardPage() {
           <div className="grid gap-3 md:grid-cols-2">
             {storeReconciliationSummaries.map((summary) => {
               const safeVariance = summary.actualTotalCents - summary.expectedTotalCents;
+              const safeCleared = summary.expectedTotalCents === 0;
               return (
                 <div key={summary.storeId} className="rounded border border-cyan-400/30 bg-slate-900/40 p-3">
-                  <div className="mb-2 text-sm font-semibold text-cyan-200">{summary.storeName}</div>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="text-sm font-semibold text-cyan-200">{summary.storeName}</div>
+                    {safeCleared ? (
+                      <span className="rounded-full border border-emerald-300 bg-emerald-900/30 px-2 py-0.5 text-xs font-semibold text-emerald-200">
+                        SAFE CLEARED
+                      </span>
+                    ) : null}
+                  </div>
                   <div className="grid gap-2 text-sm md:grid-cols-2">
                     <div>
                       <div className="text-xs uppercase text-slate-400">Expected Total</div>
                       <div>{money(summary.expectedTotalCents)}</div>
-                      <div className="text-xs text-slate-500">Cash Sales - Expenses</div>
+                      <div className="text-xs text-slate-500">(Cash Sales - Expenses) - Pickups</div>
                     </div>
                     <div>
                       <div className="text-xs uppercase text-slate-400">Actual Total</div>
                       <div>{money(summary.actualTotalCents)}</div>
-                      <div className="text-xs text-slate-500">Sum of Denomination Counts</div>
+                      <div className="text-xs text-slate-500">Denomination Counts - Pickups</div>
+                    </div>
+                    <div>
+                      <div className="text-xs uppercase text-slate-400">Pickup Total</div>
+                      <div>{money(summary.pickupTotalCents)}</div>
+                      <div className="text-xs text-slate-500">Owner/manager removals in range</div>
                     </div>
                     <div className={`rounded border px-2 py-1 ${varianceTone(safeVariance)}`}>
                       <div className="text-xs uppercase">Variance (Actual - Expected)</div>
@@ -1158,6 +1300,87 @@ export default function SafeLedgerDashboardPage() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isPickupOpen}
+        onOpenChange={(open) => {
+          setIsPickupOpen(open);
+          if (!open) {
+            setPickupForm({
+              storeId: "",
+              pickupDate: toDateKey(new Date()),
+              amount: "",
+              note: "",
+            });
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record Full Pickup</DialogTitle>
+            <DialogDescription>
+              Default amount is current safe cash on hand. Edit if needed, then save pickup to clear safe balance.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-3">
+              <label className="flex flex-col gap-1 text-xs text-slate-300">
+                Store
+                <select
+                  className="rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                  value={pickupStoreId}
+                  onChange={(e) => setPickupForm((prev) => ({ ...prev, storeId: e.target.value }))}
+                >
+                  <option value="">Select store</option>
+                  {stores.map((store) => (
+                    <option key={store.id} value={store.id}>{store.name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-slate-300">
+                Pickup Date
+                <input
+                  type="date"
+                  className="rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                  value={pickupForm.pickupDate}
+                  onChange={(e) => setPickupForm((prev) => ({ ...prev, pickupDate: e.target.value }))}
+                />
+              </label>
+              <label className="flex flex-col gap-1 text-xs text-slate-300">
+                Pickup Amount ($)
+                <input
+                  className="rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                  value={pickupForm.amount}
+                  onChange={(e) => setPickupForm((prev) => ({ ...prev, amount: e.target.value }))}
+                />
+              </label>
+            </div>
+
+            <div className="rounded border border-amber-400/30 bg-amber-900/20 p-2 text-xs text-amber-100">
+              Suggested full pickup: <span className="font-semibold">{money(suggestedPickupCents)}</span>
+            </div>
+
+            <label className="flex flex-col gap-1 text-xs text-slate-300">
+              Note
+              <input
+                className="rounded border border-cyan-400/30 bg-slate-900/60 px-2 py-1"
+                placeholder="Owner pickup / end-of-period clear"
+                value={pickupForm.note}
+                onChange={(e) => setPickupForm((prev) => ({ ...prev, note: e.target.value }))}
+              />
+            </label>
+
+            <div className="flex justify-end gap-2">
+              <Button className="border border-cyan-400/40 bg-slate-900/60 text-slate-100 hover:bg-slate-800" onClick={() => setIsPickupOpen(false)} disabled={savingPickup}>
+                Cancel
+              </Button>
+              <Button className="bg-amber-600 text-white hover:bg-amber-700" onClick={() => void createSafePickup()} disabled={savingPickup}>
+                {savingPickup ? "Saving..." : "Record Pickup"}
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 

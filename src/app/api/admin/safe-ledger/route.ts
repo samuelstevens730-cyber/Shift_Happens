@@ -43,6 +43,17 @@ type CloseoutJoinRow = SafeCloseoutRow & {
   } | null;
 };
 
+type SafePickupRow = {
+  id: string;
+  store_id: string;
+  pickup_date: string;
+  pickup_at: string;
+  amount_cents: number;
+  note: string | null;
+  recorded_by: string;
+  created_at: string;
+};
+
 function isDateOnly(value: string | null): value is string {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
 }
@@ -182,11 +193,99 @@ export async function GET(req: Request) {
       }
     }
 
+    const { data: pickupRows, error: pickupErr } = await supabaseServer
+      .from("safe_pickups")
+      .select("id,store_id,pickup_date,pickup_at,amount_cents,note,recorded_by,created_at")
+      .in("store_id", managerStoreIds)
+      .gte("pickup_date", from)
+      .lte("pickup_date", to)
+      .order("pickup_date", { ascending: false })
+      .returns<SafePickupRow[]>();
+    if (pickupErr) return NextResponse.json({ error: pickupErr.message }, { status: 500 });
+
+    const { data: balanceCloseouts, error: balanceCloseoutsErr } = await supabaseServer
+      .from("safe_closeouts")
+      .select("id,store_id,cash_sales_cents")
+      .in("store_id", managerStoreIds)
+      .lte("business_date", to)
+      .returns<Array<{ id: string; store_id: string; cash_sales_cents: number }>>();
+    if (balanceCloseoutsErr) return NextResponse.json({ error: balanceCloseoutsErr.message }, { status: 500 });
+
+    const balanceCloseoutByStore = new Map<string, number>();
+    for (const row of balanceCloseouts ?? []) {
+      balanceCloseoutByStore.set(row.store_id, (balanceCloseoutByStore.get(row.store_id) ?? 0) + Number(row.cash_sales_cents ?? 0));
+    }
+
+    const balanceCloseoutIds = (balanceCloseouts ?? []).map((row) => row.id);
+    const balanceExpenseByStore = new Map<string, number>();
+    if (balanceCloseoutIds.length > 0) {
+      const { data: balanceExpenses, error: balanceExpensesErr } = await supabaseServer
+        .from("safe_closeout_expenses")
+        .select("closeout_id,amount_cents")
+        .in("closeout_id", balanceCloseoutIds)
+        .returns<Array<{ closeout_id: string; amount_cents: number }>>();
+      if (balanceExpensesErr) return NextResponse.json({ error: balanceExpensesErr.message }, { status: 500 });
+
+      const storeIdByCloseoutId = new Map((balanceCloseouts ?? []).map((row) => [row.id, row.store_id]));
+      for (const row of balanceExpenses ?? []) {
+        const sid = storeIdByCloseoutId.get(row.closeout_id);
+        if (!sid) continue;
+        balanceExpenseByStore.set(sid, (balanceExpenseByStore.get(sid) ?? 0) + Number(row.amount_cents ?? 0));
+      }
+    }
+
+    const { data: pickupTotalsForBalance, error: pickupTotalsErr } = await supabaseServer
+      .from("safe_pickups")
+      .select("store_id,amount_cents,pickup_date")
+      .in("store_id", managerStoreIds)
+      .lte("pickup_date", to)
+      .returns<Array<{ store_id: string; amount_cents: number; pickup_date: string }>>();
+    if (pickupTotalsErr) return NextResponse.json({ error: pickupTotalsErr.message }, { status: 500 });
+
+    const pickupBalanceByStore = new Map<string, number>();
+    for (const row of pickupTotalsForBalance ?? []) {
+      pickupBalanceByStore.set(row.store_id, (pickupBalanceByStore.get(row.store_id) ?? 0) + Number(row.amount_cents ?? 0));
+    }
+
+    const currentSafeBalanceByStore: Record<string, number> = {};
+    for (const sid of managerStoreIds) {
+      currentSafeBalanceByStore[sid] =
+        (balanceCloseoutByStore.get(sid) ?? 0) -
+        (balanceExpenseByStore.get(sid) ?? 0) -
+        (pickupBalanceByStore.get(sid) ?? 0);
+    }
+
+    const pickupEditorIds = Array.from(new Set((pickupRows ?? []).map((row) => row.recorded_by).filter((id): id is string => Boolean(id))));
+    let pickupEditorById = new Map<string, string>();
+    if (pickupEditorIds.length > 0) {
+      const { data: pickupEditors, error: pickupEditorsErr } = await supabaseServer
+        .from("app_users")
+        .select("id, display_name")
+        .in("id", pickupEditorIds)
+        .returns<Array<{ id: string; display_name: string | null }>>();
+      if (pickupEditorsErr) return NextResponse.json({ error: pickupEditorsErr.message }, { status: 500 });
+      pickupEditorById = new Map((pickupEditors ?? []).map((row) => [row.id, (row.display_name ?? "").trim()]));
+    }
+
+    const { data: pickupStores, error: pickupStoresErr } = await supabaseServer
+      .from("stores")
+      .select("id,name")
+      .in("id", managerStoreIds)
+      .returns<Array<{ id: string; name: string }>>();
+    if (pickupStoresErr) return NextResponse.json({ error: pickupStoresErr.message }, { status: 500 });
+    const storeNameById = new Map((pickupStores ?? []).map((store) => [store.id, store.name]));
+
     return NextResponse.json({
       rows: rows.map((row) => ({
         ...row,
         expense_total_cents: expenseTotalByCloseoutId.get(row.id) ?? 0,
       })),
+      pickups: (pickupRows ?? []).map((pickup) => ({
+        ...pickup,
+        store_name: storeNameById.get(pickup.store_id) ?? null,
+        recorded_by_name: pickupEditorById.get(pickup.recorded_by) ?? null,
+      })),
+      current_safe_balance_by_store: currentSafeBalanceByStore,
     });
   } catch (e: unknown) {
     return NextResponse.json(
