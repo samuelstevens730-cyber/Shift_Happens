@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -106,6 +106,7 @@ export default function AdminDashboardPage() {
   const [isMobileChart, setIsMobileChart] = useState(false);
   const [chartMode, setChartMode] = useState<"total" | "detailed">("detailed");
   const [actionOpen, setActionOpen] = useState(true);
+  const [actionFilter, setActionFilter] = useState<"all" | "people" | "money" | "scheduling" | "approvals">("all");
   const [quickViewItem, setQuickViewItem] = useState<DashboardActionItem | null>(null);
   const [users, setUsers] = useState<Array<{ id: string; name: string; active: boolean; storeIds: string[] }>>([]);
   const [sendingAssignment, setSendingAssignment] = useState(false);
@@ -165,6 +166,21 @@ export default function AdminDashboardPage() {
           ...item,
           categoryLabel: labels[category],
         }))
+    );
+  }, [data]);
+
+  const filteredActionRows = useMemo(() => {
+    if (actionFilter === "all") return actionRows;
+    return actionRows.filter((item) => item.category === actionFilter);
+  }, [actionFilter, actionRows]);
+
+  const actionCountsTotal = useMemo(() => {
+    if (!data) return 0;
+    return (
+      (data.actionCounts.people ?? 0) +
+      (data.actionCounts.money ?? 0) +
+      (data.actionCounts.scheduling ?? 0) +
+      (data.actionCounts.approvals ?? 0)
     );
   }, [data]);
 
@@ -387,6 +403,36 @@ export default function AdminDashboardPage() {
     }
   }
 
+  function actionDestination(item: DashboardActionItem): string {
+    switch (item.category) {
+      case "people":
+        return "/admin/overrides";
+      case "money":
+        return "/admin/safe-ledger";
+      case "scheduling":
+        return "/admin/open-shifts";
+      case "approvals":
+        return "/admin/requests";
+      default:
+        return "/admin";
+    }
+  }
+
+  function actionButtonLabel(item: DashboardActionItem): string {
+    switch (item.category) {
+      case "people":
+        return "Review Shift";
+      case "money":
+        return "Review Closeout";
+      case "scheduling":
+        return "Review Scheduling";
+      case "approvals":
+        return "Approve / Deny";
+      default:
+        return "Open";
+    }
+  }
+
   return (
     <div className="app-shell p-3 sm:p-4 lg:p-6">
       <div className="mx-auto w-full max-w-[1600px] space-y-4">
@@ -408,7 +454,7 @@ export default function AdminDashboardPage() {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <CardTitle>Filters</CardTitle>
-                  <CardDescription>{from} to {to} · {selectedStoreLabel}</CardDescription>
+                  <CardDescription>{from} to {to} Â· {selectedStoreLabel}</CardDescription>
                 </div>
                 <CollapsibleTrigger className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800">
                   {filtersOpen ? "Hide" : "Expand"}
@@ -480,7 +526,7 @@ export default function AdminDashboardPage() {
                   <CardTitle>{money(topline.totalSales)}</CardTitle>
                 </CardHeader>
                 <CardContent className="text-xs text-slate-400">
-                  Cash {money(topline.cashSales)} · Card {money(topline.cardSales)} · Other {money(topline.otherSales)}
+                  Cash {money(topline.cashSales)} Â· Card {money(topline.cardSales)} Â· Other {money(topline.otherSales)}
                 </CardContent>
               </Card>
 
@@ -800,55 +846,74 @@ export default function AdminDashboardPage() {
                   </div>
                 </CardContent>
                 </Card>
-
                 <Card className="h-[400px]">
-                <CardHeader className="pb-2">
-                  <CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-amber-300" /> Immediate Action Items</CardTitle>
-                  <CardDescription>Priority buckets, quick triage, and drilldown in next phase.</CardDescription>
-                </CardHeader>
-                <CardContent className="h-[calc(100%-80px)] overflow-y-auto">
-                  <Collapsible open={actionOpen} onOpenChange={setActionOpen}>
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex flex-wrap gap-2">
-                        <Badge variant="destructive">People: {data?.actionCounts.people ?? 0}</Badge>
-                        <Badge variant="secondary">Money: {data?.actionCounts.money ?? 0}</Badge>
-                        <Badge variant="secondary">Scheduling: {data?.actionCounts.scheduling ?? 0}</Badge>
-                        <Badge variant="secondary">Approvals: {data?.actionCounts.approvals ?? 0}</Badge>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="flex items-center gap-2"><AlertTriangle className="h-5 w-5 text-amber-300" /> Immediate Action Items</CardTitle>
+                    <CardDescription>Filter a bucket and jump straight to the fix path.</CardDescription>
+                  </CardHeader>
+                  <CardContent className="h-[calc(100%-80px)] overflow-y-auto">
+                    <Collapsible open={actionOpen} onOpenChange={setActionOpen}>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap gap-2">
+                          <button onClick={() => setActionFilter("all")} className="cursor-pointer">
+                            <Badge variant={actionFilter === "all" ? "default" : "outline"}>All: {actionCountsTotal}</Badge>
+                          </button>
+                          <button onClick={() => setActionFilter("people")} className="cursor-pointer">
+                            <Badge variant={actionFilter === "people" ? "destructive" : "secondary"}>People: {data?.actionCounts.people ?? 0}</Badge>
+                          </button>
+                          <button onClick={() => setActionFilter("money")} className="cursor-pointer">
+                            <Badge variant={actionFilter === "money" ? "default" : "secondary"}>Money: {data?.actionCounts.money ?? 0}</Badge>
+                          </button>
+                          <button onClick={() => setActionFilter("scheduling")} className="cursor-pointer">
+                            <Badge variant={actionFilter === "scheduling" ? "default" : "secondary"}>Scheduling: {data?.actionCounts.scheduling ?? 0}</Badge>
+                          </button>
+                          <button onClick={() => setActionFilter("approvals")} className="cursor-pointer">
+                            <Badge variant={actionFilter === "approvals" ? "default" : "secondary"}>Approvals: {data?.actionCounts.approvals ?? 0}</Badge>
+                          </button>
+                        </div>
+                        <CollapsibleTrigger className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800">
+                          {actionOpen ? "Collapse" : "Expand"}
+                        </CollapsibleTrigger>
                       </div>
-                      <CollapsibleTrigger className="rounded-md border border-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-800">
-                        {actionOpen ? "Collapse" : "Expand"}
-                      </CollapsibleTrigger>
-                    </div>
-                    <CollapsibleContent>
-                      <Separator className="my-3" />
-                      <div className="space-y-2 lg:max-h-[320px] lg:overflow-y-auto">
-                        {actionRows.length === 0 ? (
-                          <div className="rounded border border-slate-800 bg-slate-900/60 p-2 text-xs text-slate-400">
-                            No immediate action items.
-                          </div>
-                        ) : (
-                          actionRows.map((item) => (
-                            <button
-                              key={item.id}
-                              className="w-full rounded border border-slate-800 bg-slate-900/60 p-2 text-left hover:bg-slate-800/70"
-                              onClick={() => setQuickViewItem(item)}
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="text-sm font-medium text-slate-100">{item.title}</div>
-                                <Badge variant={item.severity === "high" ? "destructive" : "outline"}>
-                                  {item.severity.toUpperCase()}
-                                </Badge>
-                              </div>
-                              <div className="mt-1 text-xs text-slate-400">
-                                {item.categoryLabel} · {item.description}
-                              </div>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                    </CollapsibleContent>
-                  </Collapsible>
-                </CardContent>
+                      <CollapsibleContent>
+                        <Separator className="my-3" />
+                        <div className="space-y-2 lg:max-h-[320px] lg:overflow-y-auto">
+                          {filteredActionRows.length === 0 ? (
+                            <div className="rounded border border-slate-800 bg-slate-900/60 p-2 text-xs text-slate-400">
+                              No immediate action items.
+                            </div>
+                          ) : (
+                            filteredActionRows.map((item) => (
+                              <button
+                                key={item.id}
+                                className="w-full rounded border border-slate-800 bg-slate-900/60 p-2 text-left hover:bg-slate-800/70"
+                                onClick={() => setQuickViewItem(item)}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="text-sm font-medium text-slate-100">{item.title}</div>
+                                  <Badge variant={item.severity === "high" ? "destructive" : "outline"}>
+                                    {item.severity.toUpperCase()}
+                                  </Badge>
+                                </div>
+                                <div className="mt-1 text-xs text-slate-400">
+                                  {item.categoryLabel} · {item.description}
+                                </div>
+                                <div className="mt-2 flex justify-end gap-2">
+                                  <Link
+                                    href={actionDestination(item)}
+                                    className="rounded border border-cyan-700/60 px-2 py-1 text-xs text-cyan-300 hover:bg-cyan-900/20"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {actionButtonLabel(item)}
+                                  </Link>
+                                </div>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </CardContent>
                 </Card>
               </div>
             </section>
@@ -862,18 +927,27 @@ export default function AdminDashboardPage() {
             <DialogTitle>Quick View (Stub)</DialogTitle>
             <DialogDescription>This will become the unified action drilldown in Phase 2.</DialogDescription>
           </DialogHeader>
-          {quickViewItem ? (
-            <div className="space-y-2 text-sm text-slate-200">
-              <div><span className="text-slate-400">Title:</span> {quickViewItem.title}</div>
-              <div><span className="text-slate-400">Category:</span> {quickViewItem.category}</div>
-              <div><span className="text-slate-400">Severity:</span> {quickViewItem.severity}</div>
-              <div><span className="text-slate-400">Details:</span> {quickViewItem.description}</div>
-              <div><span className="text-slate-400">Store ID:</span> {quickViewItem.store_id ?? "N/A"}</div>
-              <div><span className="text-slate-400">Created:</span> {quickViewItem.created_at ?? "N/A"}</div>
-            </div>
-          ) : null}
+            {quickViewItem ? (
+              <div className="space-y-2 text-sm text-slate-200">
+                <div><span className="text-slate-400">Title:</span> {quickViewItem.title}</div>
+                <div><span className="text-slate-400">Category:</span> {quickViewItem.category}</div>
+                <div><span className="text-slate-400">Severity:</span> {quickViewItem.severity}</div>
+                <div><span className="text-slate-400">Details:</span> {quickViewItem.description}</div>
+                <div><span className="text-slate-400">Store ID:</span> {quickViewItem.store_id ?? "N/A"}</div>
+                <div><span className="text-slate-400">Created:</span> {quickViewItem.created_at ?? "N/A"}</div>
+                <div className="pt-2">
+                  <Link
+                    href={actionDestination(quickViewItem)}
+                    className="inline-flex rounded border border-cyan-700/60 px-2 py-1 text-xs text-cyan-300 hover:bg-cyan-900/20"
+                  >
+                    {actionButtonLabel(quickViewItem)}
+                  </Link>
+                </div>
+              </div>
+            ) : null}
         </DialogContent>
       </Dialog>
     </div>
   );
 }
+
