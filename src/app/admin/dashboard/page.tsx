@@ -103,6 +103,7 @@ export default function AdminDashboardPage() {
   const [from, setFrom] = useState<string>(() => dateDaysAgo(6));
   const [to, setTo] = useState<string>(() => cstDateKey(new Date()));
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [isMobileChart, setIsMobileChart] = useState(false);
   const [chartMode, setChartMode] = useState<"total" | "detailed">("detailed");
   const [actionOpen, setActionOpen] = useState(true);
   const [quickViewItem, setQuickViewItem] = useState<DashboardActionItem | null>(null);
@@ -321,6 +322,13 @@ export default function AdminDashboardPage() {
       targetStoreId: prev.targetStoreId || data.stores[0]?.id || "",
     }));
   }, [data]);
+
+  useEffect(() => {
+    const onResize = () => setIsMobileChart(window.innerWidth < 640);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
 
   const visibleUsers = useMemo(() => {
     if (storeId === "all") return users.filter((u) => u.active);
@@ -597,7 +605,7 @@ export default function AdminDashboardPage() {
                       ) : (
                         <div className="h-[320px] w-full">
                           <ResponsiveContainer width="100%" height="100%">
-                            <ComposedChart data={chartData}>
+                            <ComposedChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                               <defs>
                                 <linearGradient id="totalGradient" x1="0" y1="0" x2="0" y2="1">
                                   <stop offset="0%" stopColor="#22d3ee" stopOpacity={0.35} />
@@ -607,11 +615,12 @@ export default function AdminDashboardPage() {
                               <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
                               <XAxis dataKey="date" tick={{ fill: "#94a3b8", fontSize: 12 }} axisLine={{ stroke: "#334155" }} tickLine={{ stroke: "#334155" }} />
                               <YAxis
+                                hide={isMobileChart}
                                 tickFormatter={(value) => shortMoney(Number(value))}
                                 tick={{ fill: "#94a3b8", fontSize: 12 }}
                                 axisLine={{ stroke: "#334155" }}
                                 tickLine={{ stroke: "#334155" }}
-                                width={70}
+                                width={isMobileChart ? 0 : 70}
                                 domain={[0, chartYAxis.domainMax]}
                                 ticks={chartYAxis.ticks}
                               />
