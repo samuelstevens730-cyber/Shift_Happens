@@ -1,4 +1,5 @@
 "use client";
+import { useEffect, useMemo, useState } from "react";
 
 type AvatarMode = "full" | "head";
 
@@ -66,8 +67,37 @@ export default function UserAvatar({
     params.set("translateY", "10");
   }
 
-  const src = `https://api.dicebear.com/9.x/${resolvedStyle}/svg?${params.toString()}`;
-  return <img src={src} alt={alt} className={className} />;
+  const primarySrc = `https://api.dicebear.com/9.x/${resolvedStyle}/svg?${params.toString()}`;
+  const simpleParams = new URLSearchParams({ seed: resolvedSeed });
+  if (mode === "head") {
+    simpleParams.set("scale", "150");
+    simpleParams.set("translateY", "10");
+  }
+  const fallbackSimple = `https://api.dicebear.com/9.x/${resolvedStyle}/svg?${simpleParams.toString()}`;
+  const fallbackAltStyle = `https://api.dicebear.com/9.x/adventurer/svg?${simpleParams.toString()}`;
+  const fallbackAvataaarsNeutral = `https://api.dicebear.com/9.x/avataaars-neutral/svg?${simpleParams.toString()}`;
+
+  const fallbackChain = useMemo(() => {
+    const chain: string[] = [primarySrc, fallbackSimple];
+    if (resolvedStyle === "avataaars") chain.push(fallbackAvataaarsNeutral);
+    chain.push(fallbackAltStyle);
+    return chain;
+  }, [primarySrc, fallbackSimple, fallbackAvataaarsNeutral, fallbackAltStyle, resolvedStyle]);
+
+  const [srcIndex, setSrcIndex] = useState(0);
+  useEffect(() => {
+    setSrcIndex(0);
+  }, [primarySrc, resolvedStyle, resolvedSeed, mode, options?.top, options?.accessories, options?.facialHair, options?.skinColor]);
+  const src = fallbackChain[Math.min(srcIndex, fallbackChain.length - 1)];
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      onError={() => setSrcIndex((prev) => (prev < fallbackChain.length - 1 ? prev + 1 : prev))}
+    />
+  );
 }
 
 export type { AvatarOptions };
