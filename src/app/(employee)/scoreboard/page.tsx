@@ -158,14 +158,14 @@ export default function EmployeeScoreboardPage() {
               <div className="relative rounded-xl border border-dashed border-white/20 bg-white/5 p-2">
                 <div className="relative w-full overflow-hidden rounded-xl aspect-[14/9] sm:aspect-[18/9] lg:aspect-[22/9]">
                   <Image
-                    src="/KING_IMG.png"
+                    src="/KING_IMG_2.png"
                     alt="King throne"
                     fill
-                    className="object-cover"
+                    className="object-cover object-top"
                     sizes="(max-width: 768px) 100vw, 720px"
                     priority
                   />
-                  <div className="absolute left-1/2 top-[23%] h-[16%] w-[11%] -translate-x-1/2 -translate-y-1/2">
+                  <div className="absolute left-1/2 top-[29%] h-[23%] w-[17.5%] -translate-x-1/2 -translate-y-1/2 sm:top-[22%] sm:h-[18%] sm:w-[13%] lg:top-[22.5%] lg:h-[17.5%] lg:w-[12%]">
                     <UserAvatar
                       mode="head"
                       seed={winner?.avatarSeed ?? winner?.profileId}
@@ -180,7 +180,7 @@ export default function EmployeeScoreboardPage() {
                       alt=""
                       width={120}
                       height={72}
-                      className="pointer-events-none absolute left-1/2 top-[-48%] w-[80%] -translate-x-1/2 drop-shadow-[0_0_14px_rgba(251,191,36,0.65)]"
+                      className="pointer-events-none absolute left-[44%] top-[-59%] w-[117%] -translate-x-1/2 drop-shadow-[0_0_14px_rgba(251,191,36,0.65)] sm:top-[-61%] sm:w-[102%] lg:top-[-57%] lg:w-[108%]"
                     />
                   </div>
                   <div
