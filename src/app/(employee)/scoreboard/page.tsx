@@ -157,6 +157,13 @@ export default function EmployeeScoreboardPage() {
                       alt={winner?.employeeName ?? "Winner avatar"}
                       className="h-full w-full"
                     />
+                    <Image
+                      src="/crown.png"
+                      alt=""
+                      width={120}
+                      height={72}
+                      className="pointer-events-none absolute left-1/2 top-[-34%] w-[75%] -translate-x-1/2 drop-shadow-[0_0_14px_rgba(251,191,36,0.65)]"
+                    />
                   </div>
                   <div
                     className={`absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/85 via-black/35 to-transparent px-4 pb-4 pt-10 text-center transition-all duration-700 ${
