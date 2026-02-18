@@ -140,12 +140,14 @@ export default function UserAvatar({
           if (key === "accessories") {
             if (!VALID_ACCESSORIES.has(safeValue)) return;
             params.append("accessories", safeValue);
+            params.set("accessoriesProbability", "100");
             return;
           }
 
           if (key === "facialHair") {
             if (!VALID_FACIAL_HAIR.has(safeValue)) return;
             params.append("facialHair", safeValue);
+            params.set("facialHairProbability", "100");
             return;
           }
 
@@ -157,6 +159,16 @@ export default function UserAvatar({
 
           params.append(key, safeValue);
         });
+
+        const accessoriesSelected = normalized.accessories?.trim();
+        if (!accessoriesSelected || accessoriesSelected.toLowerCase() === "none") {
+          params.set("accessoriesProbability", "0");
+        }
+
+        const facialHairSelected = normalized.facialHair?.trim();
+        if (!facialHairSelected || facialHairSelected.toLowerCase() === "none") {
+          params.set("facialHairProbability", "0");
+        }
       }
 
       return params;
