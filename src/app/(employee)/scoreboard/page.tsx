@@ -40,6 +40,7 @@ export default function EmployeeScoreboardPage() {
   const [from, setFrom] = useState(() => cstDateKey(addDays(new Date(), -29)));
   const [to, setTo] = useState(() => cstDateKey(new Date()));
   const [storeId, setStoreId] = useState("all");
+  const [showWinnerOverlay, setShowWinnerOverlay] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -85,6 +86,12 @@ export default function EmployeeScoreboardPage() {
   }, [data]);
 
   const winner = data?.winner ?? null;
+
+  useEffect(() => {
+    setShowWinnerOverlay(false);
+    const raf = window.requestAnimationFrame(() => setShowWinnerOverlay(true));
+    return () => window.cancelAnimationFrame(raf);
+  }, [winner?.profileId, winner?.score]);
 
   return (
     <div className="app-shell">
@@ -151,11 +158,17 @@ export default function EmployeeScoreboardPage() {
                       className="h-full w-full"
                     />
                   </div>
-                </div>
-                <div className="mt-2 text-center text-xs">
-                  <div className="font-semibold">{winner?.employeeName ?? "No winner yet"}</div>
-                  <div className={`font-semibold ${winner ? gradeTone(winner.grade) : "muted"}`}>
-                    {winner ? `${winner.grade} · ${winner.score.toFixed(1)}` : "Waiting on data"}
+                  <div
+                    className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent px-4 pb-4 pt-10 text-center transition-all duration-700 ${
+                      showWinnerOverlay ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
+                    }`}
+                  >
+                    <div className="text-xl font-black tracking-wide text-white sm:text-3xl">
+                      {winner?.employeeName ?? "NO WINNER YET"}
+                    </div>
+                    <div className={`text-lg font-extrabold sm:text-2xl ${winner ? gradeTone(winner.grade) : "text-slate-300"}`}>
+                      {winner ? `${winner.grade} • ${winner.score.toFixed(1)}` : "WAITING ON DATA"}
+                    </div>
                   </div>
                 </div>
               </div>
