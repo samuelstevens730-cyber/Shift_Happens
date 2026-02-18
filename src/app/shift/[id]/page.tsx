@@ -1806,6 +1806,7 @@ function ClockOutModal({
     (shiftType === "close" || shiftType === "double") &&
     !isRolloverNight &&
     !useSafeCloseoutSalesForClose;
+  const isCloseOrDouble = shiftType === "close" || shiftType === "double";
   const salesInputsValid =
     (!requiresSalesForOpen || salesXReportCents != null) &&
     (!requiresSalesForClose || (salesZReportCents != null && salesPriorXCents != null));
@@ -2020,9 +2021,22 @@ function ClockOutModal({
               </>
             )}
             {(shiftType === "close" || shiftType === "double") && !isRolloverNight && useSafeCloseoutSalesForClose && (
-              <div className="text-xs border rounded p-2 text-emerald-700 border-emerald-300 bg-emerald-50">
-                Using submitted Safe Closeout totals for close-shift sales. No extra sales entry needed at clock out.
-              </div>
+              <>
+                <div className="text-xs border rounded p-2 text-emerald-700 border-emerald-300 bg-emerald-50">
+                  Using submitted Safe Closeout totals for close-shift sales.
+                </div>
+                <label className="text-sm">Prior X Report ($)</label>
+                <input
+                  className="w-full border rounded p-2"
+                  inputMode="decimal"
+                  value={salesPriorX}
+                  onChange={e => setSalesPriorX(e.target.value)}
+                  placeholder="Enter if missing"
+                />
+                <div className="text-xs text-slate-500">
+                  Only needed if opener X report was not entered earlier.
+                </div>
+              </>
             )}
             {(shiftType === "close" || shiftType === "double") && isRolloverNight && (
               <div className="text-xs border rounded p-2 text-blue-700 border-blue-300">
@@ -2113,7 +2127,7 @@ function ClockOutModal({
                     changeDrawerCents: isOther ? (hasValidChange ? changeCents : null) : changeCents,
                     salesXReportCents: requiresSalesForOpen ? salesXReportCents : null,
                     salesZReportCents: requiresSalesForClose ? salesZReportCents : null,
-                    salesPriorXCents: requiresSalesForClose ? salesPriorXCents : null,
+                    salesPriorXCents: isCloseOrDouble ? salesPriorXCents : null,
                     salesConfirmed: salesNeedsConfirm ? salesConfirmChecked : false,
                     confirmed: outOfThreshold ? confirm : false,
                     notifiedManager: (outOfThreshold || changeNot200) ? notify : false,
