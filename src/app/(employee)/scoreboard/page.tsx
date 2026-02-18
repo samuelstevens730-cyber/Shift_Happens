@@ -140,7 +140,7 @@ export default function EmployeeScoreboardPage() {
                     sizes="(max-width: 768px) 100vw, 720px"
                     priority
                   />
-                  <div className="absolute left-1/2 top-[31%] h-[18%] w-[18%] -translate-x-1/2 -translate-y-1/2">
+                  <div className="absolute left-1/2 top-[21%] h-[14%] w-[14%] -translate-x-1/2 -translate-y-1/2">
                     <UserAvatar
                       mode="head"
                       seed={winner?.avatarSeed ?? winner?.profileId}
