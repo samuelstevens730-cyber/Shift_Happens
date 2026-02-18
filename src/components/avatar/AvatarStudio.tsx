@@ -9,19 +9,27 @@ import UserAvatar, { type AvatarOptions } from "@/components/UserAvatar";
 const PIN_TOKEN_KEY = "sh_pin_token";
 
 const TOP_OPTIONS = [
-  "longHair",
-  "shortHair",
-  "eyepatch",
+  "longButNotTooLong",
+  "shortFlat",
   "hat",
   "hijab",
   "turban",
   "winterHat1",
-  "winterHat2",
-  "winterHat3",
+  "winterHat02",
+  "winterHat03",
   "frida",
   "shavedSides",
 ] as const;
-const ACCESSORY_OPTIONS = ["none", "kurt", "prescription01", "prescription02", "round", "sunglasses", "wayfarers"] as const;
+const ACCESSORY_OPTIONS = [
+  "none",
+  "eyepatch",
+  "kurt",
+  "prescription01",
+  "prescription02",
+  "round",
+  "sunglasses",
+  "wayfarers",
+] as const;
 const FACIAL_HAIR_OPTIONS = ["none", "beardMedium", "beardLight", "beardMajestic", "moustacheFancy", "moustacheMagnum"] as const;
 const SKIN_OPTIONS = ["f8d25c", "fd9841", "ffdbb4", "edb98a", "d08b5b", "ae5d29", "614335"] as const;
 const CLOTHING_OPTIONS = [
@@ -38,6 +46,26 @@ const CLOTHING_OPTIONS = [
 ] as const;
 const STYLE_OPTIONS = ["avataaars", "adventurer", "bottts", "fun-emoji", "lorelei"] as const;
 
+const TOP_LABELS: Record<(typeof TOP_OPTIONS)[number], string> = {
+  longButNotTooLong: "longHair",
+  shortFlat: "shortHair",
+  hat: "hat",
+  hijab: "hijab",
+  turban: "turban",
+  winterHat1: "winterHat1",
+  winterHat02: "winterHat2",
+  winterHat03: "winterHat3",
+  frida: "frida",
+  shavedSides: "shavedSides",
+};
+
+const LEGACY_TOP_MAP: Record<string, (typeof TOP_OPTIONS)[number]> = {
+  longHair: "longButNotTooLong",
+  shortHair: "shortFlat",
+  winterHat2: "winterHat02",
+  winterHat3: "winterHat03",
+};
+
 function randomSeed() {
   return `avatar_${Math.random().toString(36).slice(2, 10)}`;
 }
@@ -51,7 +79,7 @@ export default function AvatarStudio() {
 
   const [style, setStyle] = useState<(typeof STYLE_OPTIONS)[number]>("avataaars");
   const [seed, setSeed] = useState("shift_happens");
-  const [top, setTop] = useState<(typeof TOP_OPTIONS)[number]>("shortHair");
+  const [top, setTop] = useState<(typeof TOP_OPTIONS)[number]>("shortFlat");
   const [accessories, setAccessories] = useState<(typeof ACCESSORY_OPTIONS)[number]>("none");
   const [facialHair, setFacialHair] = useState<(typeof FACIAL_HAIR_OPTIONS)[number]>("none");
   const [skinColor, setSkinColor] = useState<(typeof SKIN_OPTIONS)[number]>("ffdbb4");
@@ -97,8 +125,9 @@ export default function AvatarStudio() {
         setStyle((json.avatar_style ?? "avataaars") as (typeof STYLE_OPTIONS)[number]);
         setSeed(json.avatar_seed ?? "shift_happens");
         const opts = (json.avatar_options ?? {}) as AvatarOptions;
-        if (opts.top && TOP_OPTIONS.includes(opts.top as (typeof TOP_OPTIONS)[number])) {
-          setTop(opts.top as (typeof TOP_OPTIONS)[number]);
+        const normalizedTop = opts.top ? LEGACY_TOP_MAP[opts.top] ?? opts.top : undefined;
+        if (normalizedTop && TOP_OPTIONS.includes(normalizedTop as (typeof TOP_OPTIONS)[number])) {
+          setTop(normalizedTop as (typeof TOP_OPTIONS)[number]);
         }
         if (
           opts.accessories &&
@@ -193,7 +222,7 @@ export default function AvatarStudio() {
                     >
                       {TOP_OPTIONS.map((item) => (
                         <option key={item} value={item}>
-                          {item}
+                          {TOP_LABELS[item]}
                         </option>
                       ))}
                     </select>
