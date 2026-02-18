@@ -131,7 +131,7 @@ export default function EmployeeScoreboardPage() {
             <div className="card card-pad">
               <div className="mb-2 text-sm font-semibold">Crown Seat</div>
               <div className="relative rounded-xl border border-dashed border-white/20 bg-white/5 p-2">
-                <div className="relative mx-auto aspect-[4/3] w-full max-w-[720px] overflow-hidden rounded-xl">
+                <div className="relative mx-auto aspect-[8/5] w-full max-w-[720px] overflow-hidden rounded-xl">
                   <Image
                     src="/KING_IMG.png"
                     alt="King throne"
