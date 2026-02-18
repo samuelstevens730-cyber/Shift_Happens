@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import Image from "next/image";
@@ -155,7 +155,7 @@ export default function EmployeeScoreboardPage() {
                 <div className="mt-2 text-center text-xs">
                   <div className="font-semibold">{winner?.employeeName ?? "No winner yet"}</div>
                   <div className={`font-semibold ${winner ? gradeTone(winner.grade) : "muted"}`}>
-                    {winner ? `${winner.grade} � ${winner.score.toFixed(1)}` : "Waiting on data"}
+                    {winner ? `${winner.grade} · ${winner.score.toFixed(1)}` : "Waiting on data"}
                   </div>
                 </div>
               </div>
@@ -278,4 +278,5 @@ export default function EmployeeScoreboardPage() {
     </div>
   );
 }
+
 
