@@ -524,6 +524,24 @@ export default function ShiftPage() {
     !safeCloseout.isPassed
   );
   const safeCloseoutWindowReason = safeCloseout.context?.window?.reason ?? null;
+  const [safeCloseoutNowTick, setSafeCloseoutNowTick] = useState(() => Date.now());
+  useEffect(() => {
+    if (!safeCloseout.context?.window?.allowedFromIso) return;
+    const timer = window.setInterval(() => setSafeCloseoutNowTick(Date.now()), 30000);
+    return () => window.clearInterval(timer);
+  }, [safeCloseout.context?.window?.allowedFromIso]);
+  const safeCloseoutUnlockCountdown = useMemo(() => {
+    const unlockIso = safeCloseout.context?.window?.allowedFromIso;
+    if (!unlockIso) return null;
+    const unlockAt = new Date(unlockIso).getTime();
+    if (!Number.isFinite(unlockAt)) return null;
+    const remainingMs = unlockAt - safeCloseoutNowTick;
+    if (remainingMs <= 0) return null;
+    const totalMinutes = Math.ceil(remainingMs / 60000);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+  }, [safeCloseout.context?.window?.allowedFromIso, safeCloseoutNowTick]);
 
   useEffect(() => {
     if (!safeCloseoutFlash) return;
@@ -871,6 +889,9 @@ export default function ShiftPage() {
             {safeCloseoutWindowReason && (
               <div className="text-xs border border-amber-400/40 rounded p-2 text-amber-200 bg-amber-900/20">
                 NOTE: Safe closeout is for end-of-day drawer closeout only. {safeCloseoutWindowReason}
+                {safeCloseoutUnlockCountdown && (
+                  <div className="mt-1 font-semibold">Unlocks in: {safeCloseoutUnlockCountdown}</div>
+                )}
               </div>
             )}
             {safeCloseout.isEnabled && splitSafeCloseoutFromClockoutFlow && (
