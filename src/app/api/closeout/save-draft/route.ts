@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authenticateShiftRequest, validateStoreAccess } from "@/lib/shiftAuth";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { checkSafeCloseoutWindow } from "@/lib/safeCloseoutWindow";
 import type { SafeCloseoutDenoms, SafeCloseoutRow } from "@/types/safeLedger";
 
 type DraftExpenseInput = {
@@ -71,6 +72,9 @@ export async function POST(req: Request) {
     const expenses = body.expenses ?? null;
     const shiftId = body.shiftId ?? null;
 
+    if (!shiftId) {
+      return NextResponse.json({ error: "shiftId is required for safe closeout." }, { status: 400 });
+    }
     if (shiftId && !isUuid(shiftId)) {
       return NextResponse.json({ error: "shiftId must be a valid UUID." }, { status: 400 });
     }
@@ -79,6 +83,14 @@ export async function POST(req: Request) {
     }
     if (expenses && !Array.isArray(expenses)) {
       return NextResponse.json({ error: "expenses must be an array." }, { status: 400 });
+    }
+
+    const windowCheck = await checkSafeCloseoutWindow(shiftId);
+    if (!windowCheck.allowed) {
+      return NextResponse.json(
+        { error: windowCheck.reason ?? "Safe closeout is not available yet for this shift." },
+        { status: 400 }
+      );
     }
 
     const { data: existing, error: existingErr } = await supabaseServer

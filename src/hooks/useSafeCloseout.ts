@@ -15,6 +15,12 @@ export type SafeCloseoutContext = {
   closeout: SafeCloseoutRow | null;
   expenses: SafeCloseoutExpenseRow[];
   photos: SafeCloseoutPhotoRow[];
+  window?: {
+    allowed: boolean;
+    reason: string | null;
+    allowedFromIso: string | null;
+    scheduledEndIso: string | null;
+  };
 };
 
 export type SafeCloseoutMode = "task" | "gate";
@@ -53,6 +59,7 @@ export function useSafeCloseout({
     setError(null);
     try {
       const query = new URLSearchParams({ storeId, date: businessDate });
+      if (shiftId) query.set("shiftId", shiftId);
       const res = await fetch(`/api/closeout/context?${query.toString()}`, {
         headers: { Authorization: `Bearer ${authToken}` },
       });
@@ -67,15 +74,15 @@ export function useSafeCloseout({
     } finally {
       setLoading(false);
     }
-  }, [authToken, businessDate, canUseSafeCloseout, storeId]);
+  }, [authToken, businessDate, canUseSafeCloseout, shiftId, storeId]);
 
   useEffect(() => {
     void loadContext();
   }, [loadContext]);
 
   const isEnabled = useMemo(() => {
-    return Boolean(canUseSafeCloseout && context?.settings?.safe_ledger_enabled);
-  }, [canUseSafeCloseout, context?.settings?.safe_ledger_enabled]);
+    return Boolean(canUseSafeCloseout && context?.settings?.safe_ledger_enabled && context?.window?.allowed !== false);
+  }, [canUseSafeCloseout, context?.settings?.safe_ledger_enabled, context?.window?.allowed]);
 
   const status = context?.closeout?.status ?? null;
   const hasDraft = status === "draft" || status === "warn" || status === "fail";

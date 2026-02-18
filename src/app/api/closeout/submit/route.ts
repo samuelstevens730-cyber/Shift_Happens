@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authenticateShiftRequest, validateStoreAccess } from "@/lib/shiftAuth";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { checkSafeCloseoutWindow } from "@/lib/safeCloseoutWindow";
 import type { SafeCloseoutDenoms, SafeCloseoutRow, SubmitSafeCloseoutResult } from "@/types/safeLedger";
 
 type ExpenseInput = {
@@ -102,6 +103,16 @@ export async function POST(req: Request) {
     if (!closeout) return NextResponse.json({ error: "Closeout not found." }, { status: 404 });
     if (!validateStoreAccess(auth, closeout.store_id)) {
       return NextResponse.json({ error: "You do not have access to this store." }, { status: 403 });
+    }
+    if (!closeout.shift_id) {
+      return NextResponse.json({ error: "Safe closeout is not linked to a shift." }, { status: 400 });
+    }
+    const windowCheck = await checkSafeCloseoutWindow(closeout.shift_id);
+    if (!windowCheck.allowed) {
+      return NextResponse.json(
+        { error: windowCheck.reason ?? "Safe closeout is not available yet for this shift." },
+        { status: 400 }
+      );
     }
 
     const { data: rpcData, error: rpcErr } = await supabaseServer.rpc("submit_safe_closeout", {

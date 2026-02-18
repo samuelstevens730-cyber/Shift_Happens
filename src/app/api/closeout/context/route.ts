@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authenticateShiftRequest, validateStoreAccess } from "@/lib/shiftAuth";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { checkSafeCloseoutWindow } from "@/lib/safeCloseoutWindow";
 import type { SafeCloseoutExpenseRow, SafeCloseoutPhotoRow, SafeCloseoutRow } from "@/types/safeLedger";
 
 type StoreSettings = {
@@ -16,6 +17,10 @@ function isDateOnly(value: string): boolean {
   return /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 export async function GET(req: Request) {
   try {
     const authResult = await authenticateShiftRequest(req);
@@ -27,6 +32,7 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const storeId = url.searchParams.get("storeId") ?? "";
     const date = url.searchParams.get("date") ?? "";
+    const shiftId = (url.searchParams.get("shiftId") ?? "").trim();
 
     if (!storeId) {
       return NextResponse.json({ error: "Missing storeId." }, { status: 400 });
@@ -36,6 +42,9 @@ export async function GET(req: Request) {
     }
     if (!validateStoreAccess(auth, storeId)) {
       return NextResponse.json({ error: "You do not have access to this store." }, { status: 403 });
+    }
+    if (shiftId && !isUuid(shiftId)) {
+      return NextResponse.json({ error: "shiftId must be a valid UUID." }, { status: 400 });
     }
 
     const [settingsRes, closeoutRes] = await Promise.all([
@@ -99,11 +108,21 @@ export async function GET(req: Request) {
       photos = photosRes.data ?? [];
     }
 
+    const window = shiftId
+      ? await checkSafeCloseoutWindow(shiftId)
+      : {
+          allowed: true,
+          reason: null,
+          allowedFromIso: null,
+          scheduledEndIso: null,
+        };
+
     return NextResponse.json({
       settings,
       closeout,
       expenses,
       photos,
+      window,
     });
   } catch (e: unknown) {
     return NextResponse.json(

@@ -523,6 +523,7 @@ export default function ShiftPage() {
     safeCloseout.isEnabled &&
     !safeCloseout.isPassed
   );
+  const safeCloseoutWindowReason = safeCloseout.context?.window?.reason ?? null;
 
   useEffect(() => {
     if (!safeCloseoutFlash) return;
@@ -867,6 +868,11 @@ export default function ShiftPage() {
             {safeCloseout.error && (
               <div className="text-xs border border-red-400/40 rounded p-2 text-red-300 bg-red-900/20">❌ {safeCloseout.error}</div>
             )}
+            {safeCloseoutWindowReason && (
+              <div className="text-xs border border-amber-400/40 rounded p-2 text-amber-200 bg-amber-900/20">
+                NOTE: Safe closeout is for end-of-day drawer closeout only. {safeCloseoutWindowReason}
+              </div>
+            )}
             {safeCloseout.isEnabled && splitSafeCloseoutFromClockoutFlow && (
               <div className="text-xs text-cyan-200">
                 Friday/Saturday late-night mode: safe closeout is entered separately before clock out.
@@ -880,7 +886,7 @@ export default function ShiftPage() {
             <div className="flex justify-end">
               <button
                 className="px-3 py-1.5 rounded bg-cyan-400 text-black font-semibold disabled:opacity-50"
-                disabled={!safeCloseout.isEnabled || safeCloseout.loading}
+                disabled={!safeCloseout.isEnabled || safeCloseout.loading || Boolean(safeCloseoutWindowReason)}
                 onClick={() => safeCloseout.openWizard("task")}
               >
                 {safeCloseout.hasDraft && !safeCloseout.isPassed ? "Continue Safe Closeout" : "Perform Safe Closeout"}
@@ -1187,8 +1193,15 @@ export default function ShiftPage() {
           {(shiftType === "close" || shiftType === "double") && (
             <button
               className="w-full rounded bg-cyan-400 text-black py-2 font-semibold disabled:opacity-50"
-              disabled={safeCloseout.loading}
+              disabled={safeCloseout.loading || Boolean(safeCloseoutWindowReason)}
               onClick={() => {
+                if (safeCloseoutWindowReason) {
+                  setSafeCloseoutFlash({
+                    tone: "warn",
+                    message: `Safe closeout is for end-of-day only. ${safeCloseoutWindowReason}`,
+                  });
+                  return;
+                }
                 if (!safeCloseout.isEnabled) {
                   setSafeCloseoutFlash({
                     tone: "error",
@@ -2151,3 +2164,4 @@ function ClockOutModal({
     </div>
   );
 }
+
