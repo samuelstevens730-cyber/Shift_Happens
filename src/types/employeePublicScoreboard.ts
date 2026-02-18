@@ -9,6 +9,7 @@ export type PublicScoreRow = {
   avatarStyle: string | null;
   avatarSeed: string | null;
   avatarOptions: AvatarOptions;
+  avatarUploadUrl: string | null;
 };
 
 export type EmployeePublicScoreboardResponse = {

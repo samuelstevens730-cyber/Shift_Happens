@@ -136,6 +136,7 @@ export default function EmployeeScoreboardPage() {
                     seed={winner?.avatarSeed ?? winner?.profileId}
                     style={winner?.avatarStyle ?? "avataaars"}
                     options={winner?.avatarOptions}
+                    uploadUrl={winner?.avatarUploadUrl}
                     alt={winner?.employeeName ?? "Winner avatar"}
                   />
                 </div>
@@ -160,6 +161,7 @@ export default function EmployeeScoreboardPage() {
                           seed={row.avatarSeed ?? row.profileId}
                           style={row.avatarStyle ?? "avataaars"}
                           options={row.avatarOptions}
+                          uploadUrl={row.avatarUploadUrl}
                           alt={`${row.employeeName ?? "Employee"} avatar`}
                         />
                       </div>
@@ -201,6 +203,7 @@ export default function EmployeeScoreboardPage() {
                             seed={myPublicRow.avatarSeed ?? myPublicRow.profileId}
                             style={myPublicRow.avatarStyle ?? "avataaars"}
                             options={myPublicRow.avatarOptions}
+                            uploadUrl={myPublicRow.avatarUploadUrl}
                             alt="My avatar"
                           />
                         </div>

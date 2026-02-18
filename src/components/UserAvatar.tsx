@@ -16,6 +16,7 @@ interface UserAvatarProps {
   seed?: string | null;
   style?: string;
   options?: AvatarOptions;
+  uploadUrl?: string | null;
   className?: string;
   mode?: "full" | "head";
   alt?: string;
@@ -88,6 +89,7 @@ export default function UserAvatar({
   seed,
   style = "avataaars",
   options = {},
+  uploadUrl,
   className,
   mode = "full",
   alt = "User Avatar",
@@ -179,10 +181,11 @@ export default function UserAvatar({
     const minimal = `${baseUrl}?${buildParams("minimal").toString()}`;
     const neutral = `https://api.dicebear.com/9.x/avataaars-neutral/svg?${buildParams("minimal").toString()}`;
     const adventurer = `https://api.dicebear.com/9.x/adventurer/svg?${buildParams("minimal").toString()}`;
+    const uploaded = uploadUrl?.trim();
 
     console.log("Generated Avatar URL:", primary);
-    return [primary, mapped, minimal, neutral, adventurer];
-  }, [seed, style, options, mode]);
+    return uploaded ? [uploaded, primary, mapped, minimal, neutral, adventurer] : [primary, mapped, minimal, neutral, adventurer];
+  }, [seed, style, options, mode, uploadUrl]);
 
   const [urlIndex, setUrlIndex] = useState(0);
   useEffect(() => {

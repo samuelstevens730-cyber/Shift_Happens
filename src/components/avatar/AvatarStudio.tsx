@@ -74,6 +74,7 @@ export default function AvatarStudio() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string | null>(null);
 
@@ -84,6 +85,9 @@ export default function AvatarStudio() {
   const [facialHair, setFacialHair] = useState<(typeof FACIAL_HAIR_OPTIONS)[number]>("none");
   const [skinColor, setSkinColor] = useState<(typeof SKIN_OPTIONS)[number]>("ffdbb4");
   const [clothing, setClothing] = useState<(typeof CLOTHING_OPTIONS)[number]>("none");
+  const [uploadPath, setUploadPath] = useState<string | null>(null);
+  const [uploadUrl, setUploadUrl] = useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
 
   const options = useMemo<AvatarOptions>(
     () => ({
@@ -124,6 +128,8 @@ export default function AvatarStudio() {
         if (!alive) return;
         setStyle((json.avatar_style ?? "avataaars") as (typeof STYLE_OPTIONS)[number]);
         setSeed(json.avatar_seed ?? "shift_happens");
+        setUploadPath(json.avatar_upload_path ?? null);
+        setUploadUrl(json.avatar_upload_url ?? null);
         const opts = (json.avatar_options ?? {}) as AvatarOptions;
         const normalizedTop = opts.top ? LEGACY_TOP_MAP[opts.top] ?? opts.top : undefined;
         if (normalizedTop && TOP_OPTIONS.includes(normalizedTop as (typeof TOP_OPTIONS)[number])) {
@@ -174,9 +180,11 @@ export default function AvatarStudio() {
                     seed={seed}
                     style={style}
                     options={style === "avataaars" ? options : undefined}
+                    uploadUrl={uploadUrl}
                     className="h-full w-full"
                   />
                 </div>
+                {uploadUrl && <div className="mt-2 text-xs text-emerald-300">Custom upload active</div>}
               </div>
             </div>
 
@@ -289,6 +297,108 @@ export default function AvatarStudio() {
                   </label>
                 </>
               )}
+
+              <div className="sm:col-span-2 rounded-xl border border-white/15 bg-white/5 p-3">
+                <div className="mb-2 text-sm font-semibold">Upload Custom Avatar (optional)</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    className="input max-w-sm"
+                    type="file"
+                    accept="image/png,image/jpeg,image/jpg,image/webp"
+                    onChange={(e) => setAvatarFile(e.target.files?.[0] ?? null)}
+                  />
+                  <button
+                    className="btn-secondary px-3 py-1.5 text-sm disabled:opacity-50"
+                    disabled={!avatarFile || uploading}
+                    onClick={async () => {
+                      if (!avatarFile) return;
+                      setError(null);
+                      setSaved(null);
+                      const token = await getAuthToken();
+                      if (!token) {
+                        setError("Session expired. Please log in again.");
+                        return;
+                      }
+                      setUploading(true);
+                      try {
+                        const signedRes = await fetch("/api/me/avatar/upload-url", {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${token}`,
+                          },
+                          body: JSON.stringify({
+                            filename: avatarFile.name,
+                            fileType: avatarFile.type,
+                          }),
+                        });
+                        const signedJson = await signedRes.json();
+                        if (!signedRes.ok) throw new Error(signedJson?.error || "Failed to prepare upload.");
+
+                        const { error: uploadError } = await supabase.storage
+                          .from("avatars")
+                          .uploadToSignedUrl(signedJson.path, signedJson.token, avatarFile);
+                        if (uploadError) throw new Error(uploadError.message);
+
+                        const patchRes = await fetch("/api/me/avatar", {
+                          method: "PATCH",
+                          headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${token}`,
+                          },
+                          body: JSON.stringify({ avatar_upload_path: signedJson.path }),
+                        });
+                        const patchJson = await patchRes.json();
+                        if (!patchRes.ok) throw new Error(patchJson?.error || "Failed to save avatar upload.");
+
+                        const { data } = supabase.storage.from("avatars").getPublicUrl(signedJson.path);
+                        setUploadPath(signedJson.path);
+                        setUploadUrl(data.publicUrl ?? null);
+                        setAvatarFile(null);
+                        setSaved("Custom avatar uploaded and saved.");
+                      } catch (e: unknown) {
+                        setError(e instanceof Error ? e.message : "Failed to upload avatar.");
+                      } finally {
+                        setUploading(false);
+                      }
+                    }}
+                  >
+                    {uploading ? "Uploading..." : "Upload Custom"}
+                  </button>
+                  {uploadUrl && (
+                    <button
+                      className="btn-secondary px-3 py-1.5 text-sm"
+                      onClick={async () => {
+                        setError(null);
+                        setSaved(null);
+                        const token = await getAuthToken();
+                        if (!token) {
+                          setError("Session expired. Please log in again.");
+                          return;
+                        }
+                        const res = await fetch("/api/me/avatar", {
+                          method: "PATCH",
+                          headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${token}`,
+                          },
+                          body: JSON.stringify({ avatar_upload_path: null }),
+                        });
+                        const json = await res.json();
+                        if (!res.ok) {
+                          setError(json?.error || "Failed to clear custom avatar.");
+                          return;
+                        }
+                        setUploadPath(null);
+                        setUploadUrl(null);
+                        setSaved("Custom avatar cleared. DiceBear is active.");
+                      }}
+                    >
+                      Use DiceBear
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -319,6 +429,7 @@ export default function AvatarStudio() {
                       avatar_style: style,
                       avatar_seed: seed.trim() || "shift_happens",
                       avatar_options: style === "avataaars" ? options : {},
+                      avatar_upload_path: uploadPath,
                     }),
                   });
                   const json = await res.json();

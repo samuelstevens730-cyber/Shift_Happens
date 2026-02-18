@@ -114,7 +114,15 @@ type ProfileRow = {
   avatar_style: string | null;
   avatar_seed: string | null;
   avatar_options: AvatarOptions | null;
+  avatar_upload_path: string | null;
 };
+
+function toAvatarPublicUrl(path: string | null | undefined): string | null {
+  const safePath = path?.trim();
+  if (!safePath) return null;
+  const { data } = supabaseServer.storage.from("avatars").getPublicUrl(safePath);
+  return data.publicUrl ?? null;
+}
 
 export async function GET(req: Request) {
   try {
@@ -248,7 +256,7 @@ export async function GET(req: Request) {
           >(),
         supabaseServer
           .from("profiles")
-          .select("id,name,avatar_style,avatar_seed,avatar_options")
+          .select("id,name,avatar_style,avatar_seed,avatar_options,avatar_upload_path")
           .returns<Array<ProfileRow>>(),
         supabaseServer
           .from("store_managers")
@@ -633,6 +641,7 @@ export async function GET(req: Request) {
         avatarStyle: profileById.get(row.profileId)?.avatar_style ?? null,
         avatarSeed: profileById.get(row.profileId)?.avatar_seed ?? null,
         avatarOptions: (profileById.get(row.profileId)?.avatar_options ?? {}) as AvatarOptions,
+        avatarUploadUrl: toAvatarPublicUrl(profileById.get(row.profileId)?.avatar_upload_path),
       }));
     const managerRows = rows
       .filter((row) => managerProfileIdSet.has(row.profileId))
@@ -644,6 +653,7 @@ export async function GET(req: Request) {
         avatarStyle: profileById.get(row.profileId)?.avatar_style ?? null,
         avatarSeed: profileById.get(row.profileId)?.avatar_seed ?? null,
         avatarOptions: (profileById.get(row.profileId)?.avatar_options ?? {}) as AvatarOptions,
+        avatarUploadUrl: toAvatarPublicUrl(profileById.get(row.profileId)?.avatar_upload_path),
       }));
     const winner = publicRows[0] ?? null;
     const myRow = rows.find((row) => row.profileId === auth.profileId) ?? null;
