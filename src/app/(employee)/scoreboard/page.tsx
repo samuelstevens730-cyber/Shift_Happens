@@ -40,6 +40,7 @@ export default function EmployeeScoreboardPage() {
   const [from, setFrom] = useState(() => cstDateKey(addDays(new Date(), -29)));
   const [to, setTo] = useState(() => cstDateKey(new Date()));
   const [storeId, setStoreId] = useState("all");
+  const [showFilters, setShowFilters] = useState(false);
   const [showWinnerOverlay, setShowWinnerOverlay] = useState(false);
 
   useEffect(() => {
@@ -103,31 +104,48 @@ export default function EmployeeScoreboardPage() {
           </Link>
         </div>
 
-        <div className="card card-pad grid gap-3 sm:grid-cols-4">
-          <label className="text-sm">
-            From
-            <input className="input mt-1" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-          </label>
-          <label className="text-sm">
-            To
-            <input className="input mt-1" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
-          </label>
-          <label className="text-sm">
-            Store
-            <select className="select mt-1" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
-              <option value="all">All Stores</option>
-              {(data?.stores ?? []).map((store) => (
-                <option key={store.id} value={store.id}>
-                  {store.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="flex items-end justify-end">
+        <div className="card card-pad">
+          <div className="flex items-center justify-between gap-2">
+            <button
+              className="flex-1 text-left text-sm"
+              onClick={() => setShowFilters((v) => !v)}
+              aria-expanded={showFilters}
+            >
+              <span className="font-semibold">Filters:</span> {from} to {to} ·{" "}
+              {storeId === "all"
+                ? "All Stores"
+                : data?.stores.find((s) => s.id === storeId)?.name ?? "Selected Store"}
+            </button>
+            <button className="btn-secondary px-3 py-1.5 text-sm" onClick={() => setShowFilters((v) => !v)}>
+              {showFilters ? "Collapse" : "Expand"}
+            </button>
             <Link href="/avatar" className="btn-primary px-3 py-1.5 text-sm">
               Customize Look
             </Link>
           </div>
+          {showFilters && (
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <label className="text-sm">
+                From
+                <input className="input mt-1" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
+              </label>
+              <label className="text-sm">
+                To
+                <input className="input mt-1" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
+              </label>
+              <label className="text-sm">
+                Store
+                <select className="select mt-1" value={storeId} onChange={(e) => setStoreId(e.target.value)}>
+                  <option value="all">All Stores</option>
+                  {(data?.stores ?? []).map((store) => (
+                    <option key={store.id} value={store.id}>
+                      {store.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
         </div>
 
         {loading && <div className="card card-pad">Loading rankings...</div>}
@@ -138,7 +156,7 @@ export default function EmployeeScoreboardPage() {
             <div className="card card-pad">
               <div className="mb-2 text-sm font-semibold">Crown Seat</div>
               <div className="relative rounded-xl border border-dashed border-white/20 bg-white/5 p-2">
-                <div className="relative mx-auto aspect-[8/5] w-full max-w-[720px] overflow-hidden rounded-xl">
+                <div className="relative w-full overflow-hidden rounded-xl aspect-[14/9] sm:aspect-[18/9] lg:aspect-[22/9]">
                   <Image
                     src="/KING_IMG.png"
                     alt="King throne"
@@ -147,7 +165,7 @@ export default function EmployeeScoreboardPage() {
                     sizes="(max-width: 768px) 100vw, 720px"
                     priority
                   />
-                  <div className="absolute left-1/2 top-[21%] h-[14%] w-[14%] -translate-x-1/2 -translate-y-1/2">
+                  <div className="absolute left-1/2 top-[23%] h-[16%] w-[11%] -translate-x-1/2 -translate-y-1/2">
                     <UserAvatar
                       mode="head"
                       seed={winner?.avatarSeed ?? winner?.profileId}
@@ -162,7 +180,7 @@ export default function EmployeeScoreboardPage() {
                       alt=""
                       width={120}
                       height={72}
-                      className="pointer-events-none absolute left-1/2 top-[-34%] w-[75%] -translate-x-1/2 drop-shadow-[0_0_14px_rgba(251,191,36,0.65)]"
+                      className="pointer-events-none absolute left-1/2 top-[-48%] w-[80%] -translate-x-1/2 drop-shadow-[0_0_14px_rgba(251,191,36,0.65)]"
                     />
                   </div>
                   <div
