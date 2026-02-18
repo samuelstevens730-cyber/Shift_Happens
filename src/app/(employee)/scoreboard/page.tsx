@@ -242,7 +242,20 @@ export default function EmployeeScoreboardPage() {
                 <div className="grid gap-2 sm:grid-cols-2">
                   {data.managerRows.map((row) => (
                     <div key={row.profileId} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm">
-                      {row.employeeName ?? "Manager"}: <b>{row.score.toFixed(1)}</b> ({row.grade})
+                      <div className="flex items-center gap-2">
+                        <div className="h-8 w-8 overflow-hidden rounded-full border border-white/20 bg-black">
+                          <UserAvatar
+                            seed={row.avatarSeed ?? row.profileId}
+                            style={row.avatarStyle ?? "avataaars"}
+                            options={row.avatarOptions}
+                            uploadUrl={row.avatarUploadUrl}
+                            alt={`${row.employeeName ?? "Manager"} avatar`}
+                          />
+                        </div>
+                        <div>
+                          {row.employeeName ?? "Manager"}: <b>{row.score.toFixed(1)}</b> ({row.grade})
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
