@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
@@ -129,23 +130,33 @@ export default function EmployeeScoreboardPage() {
           <>
             <div className="card card-pad">
               <div className="mb-2 text-sm font-semibold">Crown Seat</div>
-              <div className="relative min-h-[210px] rounded-xl border border-dashed border-white/20 bg-white/5">
-                <div className="absolute left-1/2 top-6 h-20 w-20 -translate-x-1/2 overflow-hidden rounded-full border-2 border-amber-300 bg-black">
-                  <UserAvatar
-                    mode="head"
-                    seed={winner?.avatarSeed ?? winner?.profileId}
-                    style={winner?.avatarStyle ?? "avataaars"}
-                    options={winner?.avatarOptions}
-                    uploadUrl={winner?.avatarUploadUrl}
-                    alt={winner?.employeeName ?? "Winner avatar"}
+              <div className="relative rounded-xl border border-dashed border-white/20 bg-white/5 p-2">
+                <div className="relative mx-auto aspect-[4/3] w-full max-w-[720px] overflow-hidden rounded-xl">
+                  <Image
+                    src="/KING_IMG.png"
+                    alt="King throne"
+                    fill
+                    className="object-cover"
+                    sizes="(max-width: 768px) 100vw, 720px"
+                    priority
                   />
+                  <div className="absolute left-1/2 top-[31%] h-[18%] w-[18%] -translate-x-1/2 -translate-y-1/2">
+                    <UserAvatar
+                      mode="head"
+                      seed={winner?.avatarSeed ?? winner?.profileId}
+                      style={winner?.avatarStyle ?? "avataaars"}
+                      options={winner?.avatarOptions}
+                      uploadUrl={winner?.avatarUploadUrl}
+                      alt={winner?.employeeName ?? "Winner avatar"}
+                      className="h-full w-full"
+                    />
+                  </div>
                 </div>
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-center text-xs">
+                <div className="mt-2 text-center text-xs">
                   <div className="font-semibold">{winner?.employeeName ?? "No winner yet"}</div>
                   <div className={`font-semibold ${winner ? gradeTone(winner.grade) : "muted"}`}>
-                    {winner ? `${winner.grade} Â· ${winner.score.toFixed(1)}` : "Waiting on data"}
+                    {winner ? `${winner.grade} · ${winner.score.toFixed(1)}` : "Waiting on data"}
                   </div>
-                  <div className="muted">King base image goes here.</div>
                 </div>
               </div>
             </div>
@@ -267,3 +278,4 @@ export default function EmployeeScoreboardPage() {
     </div>
   );
 }
+
