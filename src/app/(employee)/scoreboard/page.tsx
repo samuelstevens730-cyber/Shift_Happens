@@ -159,20 +159,43 @@ export default function EmployeeScoreboardPage() {
                     />
                   </div>
                   <div
-                    className={`absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/85 via-black/35 to-transparent px-4 pb-4 pt-10 text-center transition-all duration-700 ${
+                    className={`absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/85 via-black/35 to-transparent px-4 pb-4 pt-10 text-center transition-all duration-700 ${
                       showWinnerOverlay ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
                     }`}
+                    style={{
+                      animation: showWinnerOverlay ? "winnerOverlayIn 700ms cubic-bezier(0.16,1,0.3,1)" : "none",
+                    }}
                   >
-                    <div className="text-xl font-black tracking-wide text-white sm:text-3xl">
+                    <div
+                      className="text-xl font-black tracking-wide text-white sm:text-3xl"
+                      style={{ textShadow: "0 0 10px rgba(255,255,255,0.45), 0 0 24px rgba(56,189,248,0.45)" }}
+                    >
                       {winner?.employeeName ?? "NO WINNER YET"}
                     </div>
-                    <div className={`text-lg font-extrabold sm:text-2xl ${winner ? gradeTone(winner.grade) : "text-slate-300"}`}>
+                    <div
+                      className={`text-lg font-extrabold sm:text-2xl ${winner ? gradeTone(winner.grade) : "text-slate-300"}`}
+                      style={{ textShadow: "0 0 8px rgba(56,189,248,0.45), 0 0 18px rgba(56,189,248,0.35)" }}
+                    >
                       {winner ? `${winner.grade} • ${winner.score.toFixed(1)}` : "WAITING ON DATA"}
                     </div>
                   </div>
                 </div>
               </div>
             </div>
+            <style jsx>{`
+              @keyframes winnerOverlayIn {
+                0% {
+                  opacity: 0;
+                  transform: translateY(16px) scale(0.98);
+                  filter: blur(3px);
+                }
+                100% {
+                  opacity: 1;
+                  transform: translateY(0) scale(1);
+                  filter: blur(0);
+                }
+              }
+            `}</style>
 
             <div className="card card-pad">
               <div className="mb-3 text-sm font-semibold">Team Score Cards</div>
