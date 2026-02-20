@@ -20,6 +20,7 @@
  */
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
@@ -674,6 +675,9 @@ function ShiftCard({
       </div>
 
       <div className="flex flex-wrap gap-2">
+        <Link href={`/admin/shifts/${row.id}`} className="btn-secondary px-4 py-2">
+          Open Full Details
+        </Link>
         {showApprove && onApprove && (
           <button
             className="btn-primary px-4 py-2"
