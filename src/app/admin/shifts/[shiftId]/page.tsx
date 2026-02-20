@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { pdf, Document, Page, Text, View, StyleSheet } from "@react-pdf/renderer";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -61,6 +62,61 @@ function durationLabel(startedAt: string, endedAt: string | null): string {
   return `${hours}h ${String(mins).padStart(2, "0")}m`;
 }
 
+const pdfStyles = StyleSheet.create({
+  page: { padding: 24, fontSize: 10, fontFamily: "Helvetica" },
+  title: { fontSize: 16, marginBottom: 6, fontWeight: 700 },
+  sectionTitle: { fontSize: 12, marginTop: 10, marginBottom: 4, fontWeight: 700 },
+  row: { marginBottom: 2 },
+});
+
+function ShiftDetailPdfDocument({ data }: { data: ShiftDetailResponse }) {
+  return (
+    <Document>
+      <Page size="LETTER" style={pdfStyles.page}>
+        <Text style={pdfStyles.title}>Shift Detail Export</Text>
+        <Text style={pdfStyles.row}>Shift ID: {data.shift.id}</Text>
+        <Text style={pdfStyles.row}>Store: {data.store?.name ?? "--"}</Text>
+        <Text style={pdfStyles.row}>Employee: {data.profile?.name ?? "--"}</Text>
+        <Text style={pdfStyles.row}>Shift Type: {data.shift.shiftType}</Text>
+        <Text style={pdfStyles.row}>Planned Start: {fmtDateTime(data.shift.plannedStartAt)}</Text>
+        <Text style={pdfStyles.row}>Started At: {fmtDateTime(data.shift.startedAt)}</Text>
+        <Text style={pdfStyles.row}>Ended At: {fmtDateTime(data.shift.endedAt)}</Text>
+
+        <Text style={pdfStyles.sectionTitle}>Drawer Counts</Text>
+        {data.drawerCounts.length === 0 ? (
+          <Text style={pdfStyles.row}>No drawer counts.</Text>
+        ) : (
+          data.drawerCounts.map((row) => (
+            <Text key={row.id} style={pdfStyles.row}>
+              {row.countType.toUpperCase()} - {fmtMoney(row.drawerCents)} at {fmtDateTime(row.countedAt)}
+            </Text>
+          ))
+        )}
+
+        <Text style={pdfStyles.sectionTitle}>Daily Sales</Text>
+        <Text style={pdfStyles.row}>Business Date: {fmtDate(data.dailySalesRecord?.businessDate)}</Text>
+        <Text style={pdfStyles.row}>Open X: {fmtMoney(data.dailySalesRecord?.openXReportCents)}</Text>
+        <Text style={pdfStyles.row}>Close Sales: {fmtMoney(data.dailySalesRecord?.closeSalesCents)}</Text>
+        <Text style={pdfStyles.row}>Z Report: {fmtMoney(data.dailySalesRecord?.zReportCents)}</Text>
+
+        <Text style={pdfStyles.sectionTitle}>Safe Closeout</Text>
+        {data.safeCloseout ? (
+          <View>
+            <Text style={pdfStyles.row}>Status: {data.safeCloseout.status}</Text>
+            <Text style={pdfStyles.row}>Cash: {fmtMoney(data.safeCloseout.cashSalesCents)}</Text>
+            <Text style={pdfStyles.row}>Card: {fmtMoney(data.safeCloseout.cardSalesCents)}</Text>
+            <Text style={pdfStyles.row}>Expected Deposit: {fmtMoney(data.safeCloseout.expectedDepositCents)}</Text>
+            <Text style={pdfStyles.row}>Actual Deposit: {fmtMoney(data.safeCloseout.actualDepositCents)}</Text>
+            <Text style={pdfStyles.row}>Variance: {fmtMoney(data.safeCloseout.varianceCents)}</Text>
+          </View>
+        ) : (
+          <Text style={pdfStyles.row}>No linked safe closeout.</Text>
+        )}
+      </Page>
+    </Document>
+  );
+}
+
 export default function AdminShiftDetailPage() {
   const params = useParams<{ shiftId: string }>();
   const searchParams = useSearchParams();
@@ -99,6 +155,7 @@ export default function AdminShiftDetailPage() {
   const [editReason, setEditReason] = useState("");
   const [deleteReason, setDeleteReason] = useState("");
   const [hardDeleteReason, setHardDeleteReason] = useState("");
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   const shiftId = params.shiftId;
   const backHref = useMemo(() => {
@@ -291,6 +348,24 @@ export default function AdminShiftDetailPage() {
     }
   }
 
+  async function exportPdf() {
+    if (!data || exportingPdf) return;
+    try {
+      setExportingPdf(true);
+      const blob = await pdf(<ShiftDetailPdfDocument data={data} />).toBlob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `shift-detail-${data.shift.id}.pdf`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to export shift PDF.");
+    } finally {
+      setExportingPdf(false);
+    }
+  }
+
   async function softDeleteShift() {
     if (!data || saving) return;
     if (!window.confirm("Soft delete this shift? It will be removed from reporting views.")) {
@@ -412,6 +487,13 @@ export default function AdminShiftDetailPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <button
+              className="rounded border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-100 hover:bg-slate-800 disabled:opacity-50"
+              onClick={() => void exportPdf()}
+              disabled={exportingPdf}
+            >
+              {exportingPdf ? "Exporting PDF..." : "Export PDF"}
+            </button>
             <Badge variant={data.shift.endedAt ? "outline" : "destructive"}>{shiftState}</Badge>
             <Badge variant="outline">{data.shift.shiftType.toUpperCase()}</Badge>
             {data.shift.manualClosed ? <Badge variant="secondary">Manual Closed</Badge> : null}
