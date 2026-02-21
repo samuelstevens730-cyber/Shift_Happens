@@ -2,6 +2,7 @@ import { supabaseServer } from "@/lib/supabaseServer";
 
 type ShiftRow = {
   id: string;
+  store_id: string;
   shift_type: "open" | "close" | "double" | "other";
   schedule_shift_id: string | null;
 };
@@ -83,10 +84,17 @@ function formatLocalCst(iso: string | null): string {
   }).format(dt);
 }
 
+function dayOfWeekFromDateOnly(dateOnly: string): number | null {
+  const match = dateOnly.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const [, y, m, d] = match;
+  return new Date(Date.UTC(Number(y), Number(m) - 1, Number(d), 0, 0, 0)).getUTCDay();
+}
+
 export async function checkSafeCloseoutWindow(shiftId: string): Promise<SafeCloseoutWindowCheck> {
   const { data: shift, error: shiftErr } = await supabaseServer
     .from("shifts")
-    .select("id,shift_type,schedule_shift_id")
+    .select("id,store_id,shift_type,schedule_shift_id")
     .eq("id", shiftId)
     .maybeSingle<ShiftRow>();
   if (shiftErr) {
@@ -169,7 +177,35 @@ export async function checkSafeCloseoutWindow(shiftId: string): Promise<SafeClos
     endDate = nextDate;
   }
 
-  const scheduledEndMs = cstLocalDateTimeToUtcMs(endDate, endMin);
+  let effectiveEndDate = endDate;
+  let effectiveEndMin = endMin;
+
+  const shiftDow = dayOfWeekFromDateOnly(schedule.shift_date);
+  if (shiftDow != null) {
+    const [{ data: rolloverSettings }, { data: rolloverConfig }] = await Promise.all([
+      supabaseServer
+        .from("store_settings")
+        .select("sales_rollover_enabled")
+        .eq("store_id", shift.store_id)
+        .maybeSingle<{ sales_rollover_enabled: boolean | null }>(),
+      supabaseServer
+        .from("store_rollover_config")
+        .select("has_rollover")
+        .eq("store_id", shift.store_id)
+        .eq("day_of_week", shiftDow)
+        .maybeSingle<{ has_rollover: boolean | null }>(),
+    ]);
+
+    const rolloverNight = Boolean(rolloverSettings?.sales_rollover_enabled) && Boolean(rolloverConfig?.has_rollover);
+    if (rolloverNight) {
+      // On rollover nights, the drawer closeout still happens at 10:00 PM CST.
+      // Gate safe closeout 30 minutes before that (9:30 PM CST), regardless of overnight scheduled end.
+      effectiveEndDate = schedule.shift_date;
+      effectiveEndMin = 22 * 60;
+    }
+  }
+
+  const scheduledEndMs = cstLocalDateTimeToUtcMs(effectiveEndDate, effectiveEndMin);
   if (scheduledEndMs == null) {
     return {
       allowed: false,
