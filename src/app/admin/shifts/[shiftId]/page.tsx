@@ -164,6 +164,23 @@ export default function AdminShiftDetailPage() {
     return "/admin/shifts";
   }, [searchParams]);
 
+  const prefilledSafeLedgerHref = useMemo(() => {
+    if (!data) return "/admin/safe-ledger";
+    const businessDate =
+      data.safeCloseout?.businessDate ??
+      data.dailySalesRecord?.businessDate ??
+      data.scheduleShift?.shiftDate ??
+      data.shift.plannedStartAt.slice(0, 10);
+    const params = new URLSearchParams({
+      prefillAdd: "1",
+      prefillStoreId: data.shift.storeId,
+      prefillProfileId: data.shift.profileId,
+      prefillBusinessDate: businessDate,
+      prefillShiftId: data.shift.id,
+    });
+    return `/admin/safe-ledger?${params.toString()}`;
+  }, [data]);
+
   useEffect(() => {
     let active = true;
     (async () => {
@@ -842,7 +859,15 @@ export default function AdminShiftDetailPage() {
               </CardHeader>
               <CardContent className="space-y-2 text-sm">
                 {!data.safeCloseout ? (
-                  <div className="text-slate-400">No safe closeout linked to this shift.</div>
+                  <>
+                    <div className="text-slate-400">No safe closeout linked to this shift.</div>
+                    <Link
+                      href={prefilledSafeLedgerHref}
+                      className="inline-block rounded border border-cyan-400/50 px-3 py-1.5 text-xs font-medium text-cyan-200 hover:bg-cyan-950/40"
+                    >
+                      Add Safe Closeout For This Shift
+                    </Link>
+                  </>
                 ) : (
                   <>
                     <div className="flex flex-wrap items-center gap-2">
@@ -907,10 +932,14 @@ export default function AdminShiftDetailPage() {
                   Open Shifts Admin (edit/remove)
                 </Link>
                 <Link
-                  href={data.safeCloseout ? `/admin/safe-ledger?actionId=money-${data.safeCloseout.id}&source=dashboard` : "/admin/safe-ledger"}
+                  href={
+                    data.safeCloseout
+                      ? `/admin/safe-ledger?actionId=money-${data.safeCloseout.id}&source=dashboard`
+                      : prefilledSafeLedgerHref
+                  }
                   className="block rounded border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800"
                 >
-                  Open Safe Ledger Review
+                  {data.safeCloseout ? "Open Safe Ledger Review" : "Add Safe Closeout"}
                 </Link>
                 <Link href="/admin/open-shifts" className="block rounded border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800">
                   Open Open-Shifts Queue

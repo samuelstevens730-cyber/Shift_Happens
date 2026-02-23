@@ -144,6 +144,13 @@ function weekdayLabel(dateKey: string): string {
   return labels[day] ?? "UNK";
 }
 
+function isUuid(value: string | null | undefined): value is string {
+  if (!value) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
+}
+
 function SafeLedgerDashboardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -151,6 +158,11 @@ function SafeLedgerDashboardContent() {
   const actionId = searchParams.get("actionId");
   const actionStoreId = searchParams.get("storeId");
   const actionCreatedAt = searchParams.get("createdAt");
+  const prefillAdd = searchParams.get("prefillAdd") === "1";
+  const prefillStoreId = searchParams.get("prefillStoreId");
+  const prefillProfileId = searchParams.get("prefillProfileId");
+  const prefillBusinessDate = searchParams.get("prefillBusinessDate");
+  const prefillShiftId = searchParams.get("prefillShiftId");
   const targetCloseoutId = actionId?.startsWith("money-") ? actionId.replace("money-", "") : null;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -203,6 +215,7 @@ function SafeLedgerDashboardContent() {
   const [addForm, setAddForm] = useState({
     storeId: "",
     profileId: "",
+    shiftId: "",
     businessDate: toDateKey(new Date()),
     cashSales: "",
     cardSales: "",
@@ -228,6 +241,7 @@ function SafeLedgerDashboardContent() {
   const [quickViewMode, setQuickViewMode] = useState<"week" | "month">("week");
   const [selectedWeek, setSelectedWeek] = useState<string>("1");
   const [hasAppliedDeepLink, setHasAppliedDeepLink] = useState(false);
+  const [hasAppliedAddPrefill, setHasAppliedAddPrefill] = useState(false);
 
   const weekRanges = useMemo(() => {
     const today = new Date();
@@ -484,6 +498,52 @@ function SafeLedgerDashboardContent() {
       setAddForm((prev) => ({ ...prev, profileId: validUsers[0].id }));
     }
   }, [isAddOpen, addForm.storeId, addForm.profileId, users]);
+
+  useEffect(() => {
+    if (!prefillAdd || hasAppliedAddPrefill) return;
+    if (stores.length === 0) return;
+
+    const selectedStoreId = isUuid(prefillStoreId) && stores.some((s) => s.id === prefillStoreId)
+      ? prefillStoreId
+      : storeId !== "all"
+      ? storeId
+      : stores[0]?.id ?? "";
+
+    if (!selectedStoreId) {
+      setHasAppliedAddPrefill(true);
+      return;
+    }
+
+    const scopedUsers = users.filter((user) => user.storeIds.includes(selectedStoreId));
+    const selectedProfileId = isUuid(prefillProfileId) && scopedUsers.some((user) => user.id === prefillProfileId)
+      ? prefillProfileId
+      : scopedUsers[0]?.id ?? "";
+
+    const selectedBusinessDate =
+      prefillBusinessDate && /^\d{4}-\d{2}-\d{2}$/.test(prefillBusinessDate)
+        ? prefillBusinessDate
+        : toDateKey(new Date());
+
+    setAddForm((prev) => ({
+      ...prev,
+      storeId: selectedStoreId,
+      profileId: selectedProfileId,
+      shiftId: isUuid(prefillShiftId) ? prefillShiftId : "",
+      businessDate: selectedBusinessDate,
+    }));
+    setIsAddOpen(true);
+    setHasAppliedAddPrefill(true);
+  }, [
+    prefillAdd,
+    hasAppliedAddPrefill,
+    stores,
+    users,
+    storeId,
+    prefillStoreId,
+    prefillProfileId,
+    prefillBusinessDate,
+    prefillShiftId,
+  ]);
 
   const pickupStoreId = useMemo(() => {
     if (pickupForm.storeId) return pickupForm.storeId;
@@ -809,6 +869,7 @@ function SafeLedgerDashboardContent() {
         body: JSON.stringify({
           store_id: addForm.storeId,
           profile_id: addForm.profileId,
+          shift_id: addForm.shiftId || null,
           business_date: addForm.businessDate,
           cash_sales_cents: cashSalesCents,
           card_sales_cents: cardSalesCents,
@@ -830,6 +891,7 @@ function SafeLedgerDashboardContent() {
       setAddPosPhotoFile(null);
       setAddForm((prev) => ({
         ...prev,
+        shiftId: "",
         businessDate: toDateKey(new Date()),
         cashSales: "",
         cardSales: "",
@@ -1478,6 +1540,26 @@ function SafeLedgerDashboardContent() {
                   onChange={(e) => setAddForm((prev) => ({ ...prev, businessDate: e.target.value }))}
                 />
               </label>
+            </div>
+
+            <div className="rounded border border-cyan-400/20 bg-slate-900/30 p-2 text-xs text-slate-300">
+              <div className="font-medium text-slate-100">Linked Shift (optional)</div>
+              {addForm.shiftId ? (
+                <div className="mt-1 flex flex-wrap items-center gap-2">
+                  <code className="rounded bg-slate-950 px-2 py-1 text-[11px]">{addForm.shiftId}</code>
+                  <button
+                    type="button"
+                    className="rounded border border-slate-600 px-2 py-1 text-[11px] hover:bg-slate-800"
+                    onClick={() => setAddForm((prev) => ({ ...prev, shiftId: "" }))}
+                  >
+                    Clear Shift Link
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-1 text-slate-400">
+                  No shift prefilled. Open this modal from shift detail to auto-link.
+                </div>
+              )}
             </div>
 
             <div className="grid gap-3 md:grid-cols-4">

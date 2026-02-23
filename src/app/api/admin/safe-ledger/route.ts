@@ -22,6 +22,7 @@ type ManualPhotoInput = {
 type ManualCreateBody = {
   store_id?: string;
   business_date?: string;
+  shift_id?: string | null;
   profile_id?: string;
   cash_sales_cents?: number;
   card_sales_cents?: number;
@@ -317,6 +318,9 @@ export async function POST(req: Request) {
     if (!isUuid(body.profile_id ?? null)) {
       return NextResponse.json({ error: "Invalid profile_id." }, { status: 400 });
     }
+    if (body.shift_id != null && !isUuid(body.shift_id)) {
+      return NextResponse.json({ error: "Invalid shift_id." }, { status: 400 });
+    }
     if (!isDateOnly(body.business_date ?? null)) {
       return NextResponse.json({ error: "business_date must be YYYY-MM-DD." }, { status: 400 });
     }
@@ -330,6 +334,22 @@ export async function POST(req: Request) {
     if (membershipErr) return NextResponse.json({ error: membershipErr.message }, { status: 500 });
     if (!membership) {
       return NextResponse.json({ error: "Selected employee is not assigned to this store." }, { status: 400 });
+    }
+
+    if (body.shift_id) {
+      const { data: shiftRow, error: shiftErr } = await supabaseServer
+        .from("shifts")
+        .select("id,store_id,profile_id")
+        .eq("id", body.shift_id)
+        .maybeSingle<{ id: string; store_id: string; profile_id: string }>();
+      if (shiftErr) return NextResponse.json({ error: shiftErr.message }, { status: 500 });
+      if (!shiftRow) return NextResponse.json({ error: "shift_id not found." }, { status: 400 });
+      if (shiftRow.store_id !== body.store_id) {
+        return NextResponse.json({ error: "shift_id does not belong to selected store." }, { status: 400 });
+      }
+      if (shiftRow.profile_id !== body.profile_id) {
+        return NextResponse.json({ error: "shift_id does not belong to selected employee." }, { status: 400 });
+      }
     }
 
     const cashSales = intOrZero(body.cash_sales_cents);
@@ -378,7 +398,7 @@ export async function POST(req: Request) {
       .insert({
         store_id: body.store_id,
         business_date: body.business_date,
-        shift_id: null,
+        shift_id: body.shift_id ?? null,
         profile_id: body.profile_id,
         status,
         cash_sales_cents: cashSales,
