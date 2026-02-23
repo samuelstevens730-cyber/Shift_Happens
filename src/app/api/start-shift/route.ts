@@ -58,6 +58,15 @@ type Body = {
 
 const ALLOWED_SHIFT_TYPES: ShiftType[] = ["open", "close", "double", "other"];
 
+function resolveScheduledShiftType(
+  shiftType: ShiftType,
+  shiftMode: string | null | undefined
+): ShiftType {
+  // Scheduler stores double coverage as open/close rows with shift_mode = "double".
+  if (shiftMode === "double" || shiftType === "double") return "double";
+  return shiftType;
+}
+
 function parseClockWindowError(message: string) {
   const token = "CLOCK_WINDOW_VIOLATION:";
   if (!message.includes(token)) return null;
@@ -159,7 +168,7 @@ export async function POST(req: Request) {
 
     const { data: scheduledRows, error: schedErr } = await supabaseServer
       .from("schedule_shifts")
-      .select("id, shift_type, scheduled_start, scheduled_end, shift_date, schedules!inner(status)")
+      .select("id, shift_type, shift_mode, scheduled_start, scheduled_end, shift_date, schedules!inner(status)")
       // Source-of-truth store scope should come from parent schedule record.
       // schedule_shifts.store_id can be null/stale on legacy rows.
       .eq("schedules.store_id", store.id)
@@ -175,7 +184,11 @@ export async function POST(req: Request) {
     let doubleSchedule: { id: string; shift_type: ShiftType } | null = null;
     if (plannedMinutes != null && scheduledRows?.length) {
       for (const row of scheduledRows) {
-        if (!doubleSchedule && row.shift_type === "double") {
+        const scheduledType = resolveScheduledShiftType(
+          row.shift_type as ShiftType,
+          row.shift_mode ?? null
+        );
+        if (!doubleSchedule && scheduledType === "double") {
           doubleSchedule = { id: row.id, shift_type: "double" };
         }
         const [h, m] = row.scheduled_start.split(":");
@@ -183,19 +196,25 @@ export async function POST(req: Request) {
         const diff = plannedMinutes - schedMinutes;
         const score = Math.abs(diff);
         if (!nearestSchedule || score < nearestSchedule.score) {
-          nearestSchedule = { id: row.id, shift_type: row.shift_type as ShiftType, score };
+          nearestSchedule = { id: row.id, shift_type: scheduledType, score };
         }
         if (diff >= -5 && diff <= 15) {
           if (bestWithinWindowScore == null || score < bestWithinWindowScore) {
-            matchedSchedule = { id: row.id, shift_type: row.shift_type as ShiftType };
+            matchedSchedule = { id: row.id, shift_type: scheduledType };
             bestWithinWindowScore = score;
           }
         }
       }
     } else if (scheduledRows?.length) {
       const first = scheduledRows[0];
-      nearestSchedule = { id: first.id, shift_type: first.shift_type as ShiftType, score: 0 };
-      const foundDouble = scheduledRows.find(row => row.shift_type === "double");
+      nearestSchedule = {
+        id: first.id,
+        shift_type: resolveScheduledShiftType(first.shift_type as ShiftType, first.shift_mode ?? null),
+        score: 0,
+      };
+      const foundDouble = scheduledRows.find(
+        (row) => resolveScheduledShiftType(row.shift_type as ShiftType, row.shift_mode ?? null) === "double"
+      );
       if (foundDouble) {
         doubleSchedule = { id: foundDouble.id, shift_type: "double" };
       }
