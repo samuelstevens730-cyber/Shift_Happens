@@ -81,8 +81,8 @@ export function useSafeCloseout({
   }, [loadContext]);
 
   const isEnabled = useMemo(() => {
-    return Boolean(canUseSafeCloseout && context?.settings?.safe_ledger_enabled && context?.window?.allowed !== false);
-  }, [canUseSafeCloseout, context?.settings?.safe_ledger_enabled, context?.window?.allowed]);
+    return Boolean(canUseSafeCloseout && context?.settings?.safe_ledger_enabled);
+  }, [canUseSafeCloseout, context?.settings?.safe_ledger_enabled]);
 
   const status = context?.closeout?.status ?? null;
   const hasDraft = status === "draft" || status === "warn" || status === "fail";
