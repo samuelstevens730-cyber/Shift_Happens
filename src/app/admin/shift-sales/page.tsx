@@ -40,6 +40,19 @@ function cstDateTime(value: string): string {
   });
 }
 
+function hoursBetween(startIso: string, endIso: string | null): number | null {
+  if (!endIso) return null;
+  const start = new Date(startIso).getTime();
+  const end = new Date(endIso).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return null;
+  return (end - start) / 3_600_000;
+}
+
+function csvCell(value: string | number | null): string {
+  const text = value == null ? "" : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
 export default function AdminShiftSalesPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
@@ -194,14 +207,216 @@ export default function AdminShiftSalesPage() {
       );
   }, [data]);
 
+  const employeeExport = useMemo(() => {
+    const rows = (data?.rows ?? []).filter(
+      (row): row is ShiftSalesRow & { salesCents: number } => row.salesCents != null
+    );
+    if (rows.length === 0) return [];
+
+    const salesByStore = new Map<string, number>();
+    for (const row of rows) {
+      salesByStore.set(row.storeId, (salesByStore.get(row.storeId) ?? 0) + row.salesCents);
+    }
+    const storeTotals = Array.from(salesByStore.values()).filter((value) => value > 0);
+    const networkAvgStoreTotal =
+      storeTotals.length > 0
+        ? storeTotals.reduce((sum, value) => sum + value, 0) / storeTotals.length
+        : 0;
+    const factorByStore = new Map<string, number>();
+    for (const [sid, total] of salesByStore.entries()) {
+      factorByStore.set(sid, total > 0 && networkAvgStoreTotal > 0 ? networkAvgStoreTotal / total : 1);
+    }
+
+    const normalized = rows.map((row) => {
+      const factor = factorByStore.get(row.storeId) ?? 1;
+      const adjustedSalesCents = Math.round(row.salesCents * factor);
+      const shiftHours = hoursBetween(row.startedAt, row.endedAt);
+      return {
+        ...row,
+        adjustedSalesCents,
+        shiftHours,
+        rawSalesPerHourCents:
+          shiftHours && shiftHours > 0 ? Math.round(row.salesCents / shiftHours) : null,
+        adjustedSalesPerHourCents:
+          shiftHours && shiftHours > 0 ? Math.round(adjustedSalesCents / shiftHours) : null,
+      };
+    });
+
+    const byEmployee = new Map<
+      string,
+      {
+        profileId: string;
+        employeeName: string;
+        rows: typeof normalized;
+        rawTotalCents: number;
+        adjustedTotalCents: number;
+      }
+    >();
+
+    for (const row of normalized) {
+      const key = row.profileId;
+      const existing = byEmployee.get(key) ?? {
+        profileId: key,
+        employeeName: row.employeeName ?? "Unknown",
+        rows: [],
+        rawTotalCents: 0,
+        adjustedTotalCents: 0,
+      };
+      existing.rows.push(row);
+      existing.rawTotalCents += row.salesCents;
+      existing.adjustedTotalCents += row.adjustedSalesCents;
+      byEmployee.set(key, existing);
+    }
+
+    return Array.from(byEmployee.values())
+      .map((employee) => {
+        const shiftCount = employee.rows.length;
+        const rawAvgCents = shiftCount > 0 ? Math.round(employee.rawTotalCents / shiftCount) : 0;
+        const adjustedAvgCents =
+          shiftCount > 0 ? Math.round(employee.adjustedTotalCents / shiftCount) : 0;
+        const totalHours = employee.rows.reduce((sum, row) => sum + (row.shiftHours ?? 0), 0);
+
+        const rowsWithFlags = employee.rows
+          .map((row) => {
+            const varianceRatio = rawAvgCents > 0 ? (row.salesCents - rawAvgCents) / rawAvgCents : 0;
+            const varianceFlag = varianceRatio >= 0.2 ? "HIGH" : varianceRatio <= -0.2 ? "LOW" : "NORMAL";
+            return { ...row, varianceFlag };
+          })
+          .sort((a, b) =>
+            `${a.businessDate}-${a.startedAt}`.localeCompare(`${b.businessDate}-${b.startedAt}`)
+          );
+
+        return {
+          ...employee,
+          rows: rowsWithFlags,
+          shiftCount,
+          rawAvgCents,
+          adjustedAvgCents,
+          totalHours,
+          rawSalesPerHourCents:
+            totalHours > 0 ? Math.round(employee.rawTotalCents / totalHours) : null,
+          adjustedSalesPerHourCents:
+            totalHours > 0 ? Math.round(employee.adjustedTotalCents / totalHours) : null,
+        };
+      })
+      .sort((a, b) => a.employeeName.localeCompare(b.employeeName));
+  }, [data]);
+
+  function downloadEmployeeCsv() {
+    if (employeeExport.length === 0) return;
+    const lines: string[] = [];
+    lines.push([
+      csvCell("Employee Shift Sales Report"),
+      csvCell(`From ${from} To ${to}`),
+      csvCell(storeId === "all" ? "All Stores" : storeId),
+    ].join(","));
+    lines.push("");
+
+    for (const employee of employeeExport) {
+      lines.push([csvCell("Employee"), csvCell(employee.employeeName)].join(","));
+      lines.push(
+        [
+          "Date",
+          "Store",
+          "Shift Type",
+          "Started CST",
+          "Ended CST",
+          "Shift Hours",
+          "Raw Sales",
+          "Adjusted Sales",
+          "Variance vs Employee Avg",
+          "Raw Sales / Hour",
+          "Adjusted Sales / Hour",
+        ]
+          .map((v) => csvCell(v))
+          .join(",")
+      );
+      for (const row of employee.rows) {
+        lines.push(
+          [
+            row.businessDate,
+            row.storeName ?? "--",
+            row.shiftType,
+            cstDateTime(row.startedAt),
+            row.endedAt ? cstDateTime(row.endedAt) : "--",
+            row.shiftHours == null ? "--" : row.shiftHours.toFixed(2),
+            money(row.salesCents),
+            money(row.adjustedSalesCents),
+            row.varianceFlag,
+            money(row.rawSalesPerHourCents),
+            money(row.adjustedSalesPerHourCents),
+          ]
+            .map((v) => csvCell(v))
+            .join(",")
+        );
+      }
+      lines.push(
+        [
+          "TOTAL",
+          "",
+          "",
+          "",
+          "",
+          employee.totalHours > 0 ? employee.totalHours.toFixed(2) : "--",
+          money(employee.rawTotalCents),
+          money(employee.adjustedTotalCents),
+          "",
+          money(employee.rawSalesPerHourCents),
+          money(employee.adjustedSalesPerHourCents),
+        ]
+          .map((v) => csvCell(v))
+          .join(",")
+      );
+      lines.push(
+        [
+          "AVERAGE / SHIFT",
+          "",
+          "",
+          "",
+          "",
+          "",
+          money(employee.rawAvgCents),
+          money(employee.adjustedAvgCents),
+          "",
+          "",
+          "",
+        ]
+          .map((v) => csvCell(v))
+          .join(",")
+      );
+      lines.push("");
+    }
+
+    const csv = lines.join("\r\n");
+    const blob = new Blob([`\uFEFF${csv}`], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `employee-shift-sales-${from}-to-${to}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
   return (
     <div className="app-shell">
       <div className="mx-auto max-w-7xl space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h1 className="text-2xl font-semibold">Shift Sales Report</h1>
-          <Link href="/admin" className="btn-secondary px-3 py-1.5">
-            Back to Admin
-          </Link>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn-secondary px-3 py-1.5 disabled:opacity-50"
+              onClick={downloadEmployeeCsv}
+              disabled={employeeExport.length === 0}
+            >
+              Export Employee CSV
+            </button>
+            <Link href="/admin" className="btn-secondary px-3 py-1.5">
+              Back to Admin
+            </Link>
+          </div>
         </div>
 
         <div className="card card-pad grid gap-3 sm:grid-cols-4">
