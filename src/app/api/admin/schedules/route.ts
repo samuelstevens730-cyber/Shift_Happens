@@ -6,7 +6,7 @@
  */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
-import { getBearerToken } from "@/lib/adminAuth";
+import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
 
 type StoreRow = { id: string; name: string };
 type TemplateRow = {
@@ -37,14 +37,12 @@ export async function GET(req: Request) {
   const { data: { user }, error: authErr } = await supabaseServer.auth.getUser(token);
   if (authErr || !user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-  const { data: managed, error: managedErr } = await supabaseServer
-    .from("store_managers")
-    .select("store_id")
-    .eq("user_id", user.id)
-    .returns<{ store_id: string }[]>();
-  if (managedErr) return NextResponse.json({ error: "Failed to load stores." }, { status: 500 });
-
-  const storeIds = (managed ?? []).map(m => m.store_id);
+  let storeIds: string[] = [];
+  try {
+    storeIds = await getManagerStoreIds(user.id);
+  } catch {
+    return NextResponse.json({ error: "Failed to load stores." }, { status: 500 });
+  }
   if (!storeIds.length) return NextResponse.json({ error: "No managed stores." }, { status: 403 });
 
   const { data: stores } = await supabaseServer
@@ -95,14 +93,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing periodStart or periodEnd." }, { status: 400 });
   }
 
-  const { data: managed, error: managedErr } = await supabaseServer
-    .from("store_managers")
-    .select("store_id")
-    .eq("user_id", user.id)
-    .returns<{ store_id: string }[]>();
-  if (managedErr) return NextResponse.json({ error: "Failed to load stores." }, { status: 500 });
-
-  const storeIds = (managed ?? []).map(m => m.store_id);
+  let storeIds: string[] = [];
+  try {
+    storeIds = await getManagerStoreIds(user.id);
+  } catch {
+    return NextResponse.json({ error: "Failed to load stores." }, { status: 500 });
+  }
   if (!storeIds.length) return NextResponse.json({ error: "No managed stores." }, { status: 403 });
 
   const payload = storeIds.map(storeId => ({
