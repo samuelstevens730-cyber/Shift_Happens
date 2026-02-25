@@ -28,7 +28,7 @@
  */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
-import { getBearerToken } from "@/lib/adminAuth";
+import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
 
 type ReviewBody = {
   reviewNote?: string;
@@ -67,10 +67,27 @@ export async function POST(
   if (authErr || !user) {
     return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
   }
+  const managerStoreIds = await getManagerStoreIds(user.id);
+  if (managerStoreIds.length === 0) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
 
   const { countId } = await params;
   if (!countId) {
     return NextResponse.json({ error: "Missing countId." }, { status: 400 });
+  }
+
+  const { data: targetCount, error: targetErr } = await supabaseServer
+    .from("shift_drawer_counts")
+    .select("id, shift:shift_id(store_id)")
+    .eq("id", countId)
+    .maybeSingle<{ id: string; shift: { store_id: string } | null }>();
+
+  if (targetErr) return NextResponse.json({ error: targetErr.message }, { status: 500 });
+  if (!targetCount) return NextResponse.json({ error: "Not found." }, { status: 404 });
+  const targetStoreId = targetCount.shift?.store_id ?? null;
+  if (!targetStoreId || !managerStoreIds.includes(targetStoreId)) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
   const body = parseBody(await req.json());

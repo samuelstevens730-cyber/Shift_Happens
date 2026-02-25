@@ -414,7 +414,7 @@ Build Order
 1 → open-shifts routes (CRITICAL) | 2 → variances review (CRITICAL) | 3 → schedules auth refactor (HIGH) | 4 → health endpoint (HIGH) | 5 → safe-ledger validation (MEDIUM) | 6 → advances null check (MEDIUM) | 7 → financial tables RLS migration (CRITICAL) | 8 → operational tables RLS migration (MEDIUM) | 9 → profiles clock-in policy review (LOW, optional)
 Implementation Tracker
 - [x] Step 1 - Fix open-shifts routes
-- [ ] Step 2 - Fix variances review route
+- [x] Step 2 - Fix variances review route
 - [ ] Step 3 - Refactor schedules route auth helper usage
 - [ ] Step 4 - Harden health endpoint response
 - [ ] Step 5 - Fix safe-ledger input validation
