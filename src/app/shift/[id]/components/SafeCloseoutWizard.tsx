@@ -247,18 +247,13 @@ export default function SafeCloseoutWizard({
     setErr(null);
     setStatusNote(null);
     if (currentStep === 1) {
-      const cents = centsFromInput(priorX);
-      if (cents == null || cents <= 0) {
-        setErr("❌ Prior X Report Total must be a positive value.");
-        return;
-      }
       setSaving(true);
       try {
         await saveDraft();
-        setStatusNote("✅ Step 1 saved.");
+        setStatusNote("? Step 1 saved.");
         setStep(2);
       } catch (e: unknown) {
-        setErr(`❌ ${e instanceof Error ? e.message : "Failed to save draft."}`);
+        setErr(`? ${e instanceof Error ? e.message : "Failed to save draft."}`);
       } finally {
         setSaving(false);
       }
