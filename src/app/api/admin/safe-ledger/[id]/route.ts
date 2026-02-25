@@ -181,7 +181,12 @@ export async function PATCH(
       return NextResponse.json({ error: "Invalid closeout id." }, { status: 400 });
     }
 
-    const body = (await req.json().catch(() => ({}))) as PatchBody;
+    let body: PatchBody;
+    try {
+      body = (await req.json()) as PatchBody;
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    }
 
     const { data: existing, error: existingErr } = await supabaseServer
       .from("safe_closeouts")

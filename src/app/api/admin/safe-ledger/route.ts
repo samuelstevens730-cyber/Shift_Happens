@@ -312,10 +312,13 @@ export async function POST(req: Request) {
     }
 
     const body = (await req.json().catch(() => ({}))) as ManualCreateBody;
-    if (!isUuid(body.store_id ?? null) || !managerStoreIds.includes(body.store_id!)) {
+    if (!body.store_id || !body.profile_id) {
+      return NextResponse.json({ error: "Missing required fields: store_id, profile_id." }, { status: 400 });
+    }
+    if (!isUuid(body.store_id) || !managerStoreIds.includes(body.store_id)) {
       return NextResponse.json({ error: "Invalid store_id." }, { status: 400 });
     }
-    if (!isUuid(body.profile_id ?? null)) {
+    if (!isUuid(body.profile_id)) {
       return NextResponse.json({ error: "Invalid profile_id." }, { status: 400 });
     }
     if (body.shift_id != null && !isUuid(body.shift_id)) {
@@ -328,8 +331,8 @@ export async function POST(req: Request) {
     const { data: membership, error: membershipErr } = await supabaseServer
       .from("store_memberships")
       .select("store_id")
-      .eq("store_id", body.store_id!)
-      .eq("profile_id", body.profile_id!)
+      .eq("store_id", body.store_id)
+      .eq("profile_id", body.profile_id)
       .maybeSingle<{ store_id: string }>();
     if (membershipErr) return NextResponse.json({ error: membershipErr.message }, { status: 500 });
     if (!membership) {
