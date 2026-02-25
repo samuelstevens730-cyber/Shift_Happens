@@ -109,7 +109,7 @@ safe_pickups:
 
 ALTER TABLE safe_pickups ENABLE ROW LEVEL SECURITY
 SELECT/INSERT for managers (store scope)
-SELECT for employee: own recorded_by_profile_id match
+SELECT for employee: own recorded_by match
 
 daily_sales_records:
 
@@ -312,81 +312,213 @@ FIX:
 DO NOT: Change the authorization logic. Only add the null guard before it.
 Verify: `npx tsc --noEmit` after changes.
 
-Prompt for Step 7 — RLS Migration: Financial Tables
-TASK: Write a forward-only SQL migration adding RLS to financial tables.
+### Prompt for Step 7a — RLS Migration: payroll_advances
+```
+TASK: Write a production-safe, idempotent SQL migration enabling RLS on payroll_advances.
+No staging environment — this goes straight to production. Be conservative.
 
 CONTEXT:
-- Forward-only migrations only. File: `src/app/sql/60_financial_tables_rls.sql`
-- Supabase Postgres with RLS. Service role bypasses RLS. Employee routes use service-role
-  RPCs. Direct `authenticated` role access uses RLS.
-- Auth model: managers authenticate via Supabase Auth (auth.uid() available). Employees
-  authenticate via custom JWT (NOT Supabase auth — their uid is NOT in auth.uid()).
-- For employee policies: use the custom JWT claim pattern. Read how `safe_closeouts`
-  employee policies work in `src/app/sql/47_safe_ledger_closeout.sql` for the exact pattern.
-- For manager policies: use subquery `store_id IN (SELECT store_id FROM store_managers WHERE user_id = auth.uid())`
-- Reference existing RLS in: `src/app/sql/11_rls.sql`, `src/app/sql/47_safe_ledger_closeout.sql`
+- Forward-only migration. File: `src/app/sql/60_rls_payroll_advances.sql`
+- Supabase Postgres. Service role bypasses RLS. Authenticated role uses RLS.
+- Manager auth: Supabase Auth → auth.uid() is the manager's user_id
+- Employee auth: custom ES256 JWT — auth.uid() is NOT set for employees. Employees
+  access this table via service-role RPCs only, so no employee RLS policy is needed.
+- Manager scope: store_id IN (SELECT store_id FROM store_managers WHERE user_id = auth.uid())
+- Reference existing policy patterns in: `src/app/sql/11_rls.sql`
 
-TABLES TO ADD RLS TO (read the relevant migration files to understand column names):
-- `payroll_advances` (read `src/app/sql/40_payroll_advances.sql` or similar for schema)
-  - Enable RLS
-  - Manager SELECT: via store_id scope
-  - Manager INSERT/UPDATE: via store_id scope
-  - Employee SELECT: own records only (where profile_id = JWT profile claim)
+PHASE 0 — PREFLIGHT (run these SELECT queries first, do not write migration until confirmed):
+  SELECT relname, relrowsecurity, relforcerowsecurity
+  FROM pg_class WHERE relname = 'payroll_advances';
 
-- `safe_pickups` (read the migration that created this table — search sql/ for "safe_pickups")
-  - Enable RLS
-  - Manager SELECT/INSERT: via store_id scope
-  - Employee SELECT: where recorded_by_profile_id = JWT profile claim
+  SELECT tablename, policyname, cmd, roles
+  FROM pg_policies WHERE tablename = 'payroll_advances';
 
-- `daily_sales_records` (read its migration for schema)
-  - Enable RLS
-  - Manager SELECT: via store_id scope
-  - No employee direct SELECT policy (employees use RPCs)
+  SELECT column_name, data_type FROM information_schema.columns
+  WHERE table_schema = 'public' AND table_name = 'payroll_advances'
+  ORDER BY ordinal_position;
 
-- `shift_sales_counts` (read its migration for schema)
-  - Enable RLS
-  - Manager SELECT: via shift subquery to get store_id
-  - No employee direct SELECT policy (employees use RPCs)
+Read `src/app/sql/` — glob for the migration that creates payroll_advances to confirm
+exact column names (especially the store_id FK column name).
 
-DO NOT: Modify any existing migration files. Write the entire migration as a new file.
-Use the exact same SECURITY DEFINER + search_path pattern for any new functions.
-Verify the migration is syntactically valid SQL before finalizing.
+PHASE 1 — WRITE MIGRATION (only after preflight confirms names):
+- Use idempotent patterns:
+  ALTER TABLE payroll_advances ENABLE ROW LEVEL SECURITY;  -- safe to re-run
+  DROP POLICY IF EXISTS <name> ON payroll_advances;        -- before every CREATE POLICY
+  CREATE POLICY <name> ON payroll_advances ...;
 
-Prompt for Step 8 — RLS Migration: Operational Tables
-TASK: Write a forward-only SQL migration adding RLS to operational tables.
+- Policies to add:
+  - Manager SELECT: store_id IN (SELECT store_id FROM store_managers WHERE user_id = auth.uid())
+  - Manager INSERT: same scope
+  - Manager UPDATE: same scope
+  - No employee SELECT policy (employees use service-role RPCs for this table)
 
-CONTEXT: Same as Step 7 above. File: `src/app/sql/61_operational_tables_rls.sql`
+DO NOT: Modify any existing migration files. Do not add employee policies unless
+you confirm employees directly query this table (they don't — check API routes first).
+Verify SQL syntax before finalizing.
+```
+
+---
+
+### Prompt for Step 7b — RLS Migration: safe_pickups
+```
+TASK: Write a production-safe, idempotent SQL migration enabling RLS on safe_pickups.
+
+CONTEXT: Same as Step 7a. File: `src/app/sql/61_rls_safe_pickups.sql`
+
+PHASE 0 — PREFLIGHT:
+  SELECT relname, relrowsecurity FROM pg_class WHERE relname = 'safe_pickups';
+  SELECT tablename, policyname, cmd FROM pg_policies WHERE tablename = 'safe_pickups';
+  SELECT column_name, data_type FROM information_schema.columns
+  WHERE table_schema = 'public' AND table_name = 'safe_pickups' ORDER BY ordinal_position;
+
+Also read: `src/app/api/admin/safe-ledger/pickups/route.ts` to confirm which columns
+are used (especially the "recorded by" column name).
+
+PHASE 1 — POLICIES:
+- Manager SELECT/INSERT: store_id in manager scope
+- Employee SELECT: recorded_by = JWT profile claim
+  (use same JWT claim pattern as safe_closeouts_employee_select_own in 47_safe_ledger_closeout.sql)
+
+Use DROP POLICY IF EXISTS before every CREATE POLICY. Use idempotent ALTER TABLE.
+```
+
+---
+
+### Prompt for Step 7c — RLS Migration: daily_sales_records
+```
+TASK: Write a production-safe, idempotent SQL migration enabling RLS on daily_sales_records.
+
+CONTEXT: Same as Step 7a. File: `src/app/sql/62_rls_daily_sales_records.sql`
+
+PHASE 0 — PREFLIGHT:
+  SELECT relname, relrowsecurity FROM pg_class WHERE relname = 'daily_sales_records';
+  SELECT tablename, policyname, cmd FROM pg_policies WHERE tablename = 'daily_sales_records';
+  SELECT column_name, data_type FROM information_schema.columns
+  WHERE table_schema = 'public' AND table_name = 'daily_sales_records' ORDER BY ordinal_position;
+
+PHASE 1 — POLICIES:
+- Manager SELECT: store_id in manager scope
+- No employee policy (employees submit via RPCs that use service role)
+
+Use DROP POLICY IF EXISTS before every CREATE POLICY.
+```
+
+---
+
+### Prompt for Step 7d — RLS Migration: shift_sales_counts
+```
+TASK: Write a production-safe, idempotent SQL migration enabling RLS on shift_sales_counts.
+
+CONTEXT: Same as Step 7a. File: `src/app/sql/63_rls_shift_sales_counts.sql`
+
+PHASE 0 — PREFLIGHT:
+  SELECT relname, relrowsecurity FROM pg_class WHERE relname = 'shift_sales_counts';
+  SELECT tablename, policyname, cmd FROM pg_policies WHERE tablename = 'shift_sales_counts';
+  SELECT column_name, data_type FROM information_schema.columns
+  WHERE table_schema = 'public' AND table_name = 'shift_sales_counts' ORDER BY ordinal_position;
+
+Confirm the FK column linking to shifts (likely shift_id). Check `src/app/sql/45_*.sql`
+or similar for the table definition.
+
+PHASE 1 — POLICIES:
+- Manager SELECT: via shift_id → shifts.store_id in manager scope
+  Example: store_id = (SELECT store_id FROM shifts WHERE id = shift_sales_counts.shift_id)
+  AND store_id IN (SELECT store_id FROM store_managers WHERE user_id = auth.uid())
+- No employee policy (service-role RPCs only)
+
+Use DROP POLICY IF EXISTS before every CREATE POLICY.
+```
+
+---
+
+### Prompt for Step 8a — RLS Migration: cleaning_task_completions
+```
+TASK: Write a production-safe, idempotent SQL migration enabling RLS on cleaning_task_completions.
+
+CONTEXT: Same production-safe approach. File: `src/app/sql/64_rls_cleaning_task_completions.sql`
 
 IMPORTANT: The cleaning RPCs (`fetch_cleaning_tasks_for_shift`, `complete_cleaning_task`,
-`skip_cleaning_task`) in `41_cleaning_tasks.sql` use SECURITY DEFINER with `set row_security = off`.
-These will NOT be affected by adding RLS — they bypass it by design with manual auth checks.
-Adding RLS to these tables only protects against non-RPC access paths.
+`skip_cleaning_task`) use SECURITY DEFINER with `set row_security = off`. They bypass RLS.
+Adding RLS here does NOT break those RPCs — it only adds defense for any non-RPC access.
 
-TABLES TO ADD RLS TO:
+PHASE 0 — PREFLIGHT:
+  SELECT relname, relrowsecurity FROM pg_class WHERE relname = 'cleaning_task_completions';
+  SELECT tablename, policyname FROM pg_policies WHERE tablename = 'cleaning_task_completions';
+  SELECT column_name, data_type FROM information_schema.columns
+  WHERE table_schema = 'public' AND table_name = 'cleaning_task_completions' ORDER BY ordinal_position;
 
-- `cleaning_task_completions` (read `src/app/sql/41_cleaning_tasks.sql` for schema)
-  - Enable RLS
-  - Employee SELECT/INSERT: via shift_id → shifts.profile_id = JWT profile claim
-  - Manager SELECT: via shift_id → shifts.store_id in manager scope
+Read `src/app/sql/41_cleaning_tasks.sql` to confirm schema.
 
-- `store_cleaning_schedules` (read its migration for schema)
-  - Enable RLS
-  - Manager ALL: store_id in manager scope
-  - Employee SELECT: store_id in JWT store_ids claim
+PHASE 1 — POLICIES:
+- Employee SELECT/INSERT: shift_id → shifts.profile_id = JWT profile claim
+- Manager SELECT: shift_id → shifts.store_id in manager scope
 
-- `shift_checklist_checks` (find its migration, read schema)
-  - Enable RLS
-  - Employee SELECT/INSERT/UPDATE: via shift_id → shifts.profile_id = JWT profile claim
-  - Manager SELECT: via shift_id → shifts.store_id in manager scope
+Use DROP POLICY IF EXISTS + idempotent ALTER TABLE.
+```
 
-- `shift_change_audit_logs` (read `src/app/sql/56_shift_change_audit_log.sql` for schema)
-  - Enable RLS
-  - Manager SELECT only: store_id in manager scope
-  - No employee policy (audit logs are manager-only)
+---
 
-DO NOT: Modify any existing migration files. Write the entire migration as a new file.
-Verify the migration is syntactically valid SQL before finalizing.
+### Prompt for Step 8b — RLS Migration: store_cleaning_schedules
+```
+TASK: Write a production-safe, idempotent SQL migration enabling RLS on store_cleaning_schedules.
 
+File: `src/app/sql/65_rls_store_cleaning_schedules.sql`
+
+PHASE 0 — PREFLIGHT:
+  SELECT relname, relrowsecurity FROM pg_class WHERE relname = 'store_cleaning_schedules';
+  SELECT tablename, policyname FROM pg_policies WHERE tablename = 'store_cleaning_schedules';
+  SELECT column_name, data_type FROM information_schema.columns
+  WHERE table_schema = 'public' AND table_name = 'store_cleaning_schedules' ORDER BY ordinal_position;
+
+PHASE 1 — POLICIES:
+- Manager ALL: store_id in manager scope
+- Employee SELECT: store_id in JWT store_ids claim (same pattern as schedule employee read in 21_schedule_rls.sql)
+
+Use DROP POLICY IF EXISTS + idempotent ALTER TABLE.
+```
+
+---
+
+### Prompt for Step 8c — RLS Migration: shift_checklist_checks
+```
+TASK: Write a production-safe, idempotent SQL migration enabling RLS on shift_checklist_checks.
+
+File: `src/app/sql/66_rls_shift_checklist_checks.sql`
+
+PHASE 0 — PREFLIGHT:
+  SELECT relname, relrowsecurity FROM pg_class WHERE relname = 'shift_checklist_checks';
+  SELECT tablename, policyname FROM pg_policies WHERE tablename = 'shift_checklist_checks';
+  SELECT column_name, data_type FROM information_schema.columns
+  WHERE table_schema = 'public' AND table_name = 'shift_checklist_checks' ORDER BY ordinal_position;
+
+PHASE 1 — POLICIES:
+- Employee SELECT/INSERT/UPDATE: shift_id → shifts.profile_id = JWT profile claim
+- Manager SELECT: shift_id → shifts.store_id in manager scope
+
+Use DROP POLICY IF EXISTS + idempotent ALTER TABLE.
+```
+
+---
+
+### Prompt for Step 8d — RLS Migration: shift_change_audit_logs
+```
+TASK: Write a production-safe, idempotent SQL migration enabling RLS on shift_change_audit_logs.
+
+File: `src/app/sql/67_rls_shift_change_audit_logs.sql`
+
+PHASE 0 — PREFLIGHT:
+  SELECT relname, relrowsecurity FROM pg_class WHERE relname = 'shift_change_audit_logs';
+  SELECT tablename, policyname FROM pg_policies WHERE tablename = 'shift_change_audit_logs';
+  SELECT column_name, data_type FROM information_schema.columns
+  WHERE table_schema = 'public' AND table_name = 'shift_change_audit_logs' ORDER BY ordinal_position;
+
+Read `src/app/sql/56_shift_change_audit_log.sql` to confirm schema (especially store_id column).
+
+PHASE 1 — POLICIES:
+- Manager SELECT only: store_id in manager scope
+- No employee policy (audit logs are manager-only)
+
+Use DROP POLICY IF EXISTS + idempotent ALTER TABLE.
 Additional Security Notes
 A — Employee JWT claims are not DB-verified
 authenticateShiftRequest() trusts the profile_id and store_ids claims from the ES256 JWT without cross-checking against the database. If a JWT is issued with incorrect claims (due to a bug in the signing path), the error will propagate silently. Recommendation (future hardening): Add a lightweight DB lookup on the first employee request per session to confirm the profile still exists and still belongs to the claimed stores. Cache the result per request to avoid N+1.
@@ -407,7 +539,7 @@ For each step:
 npx tsc --noEmit — no TypeScript errors
 npm run build — clean build
 Manual test: log in as Manager A (Store 1 only), attempt to access Store 2 data via affected endpoints — should get 403
-For SQL migrations: apply to staging Supabase first, verify policies with SELECT * FROM pg_policies WHERE tablename = '<table>'
+For SQL migrations (production-first): run preflight SELECTs first, deploy one migration at a time, then verify policies with SELECT * FROM pg_policies WHERE tablename = '<table>' plus immediate manager/employee smoke tests.
 For health endpoint: curl https://[your-domain]/api/health — should only return { ok: true }
 
 Build Order
@@ -418,7 +550,16 @@ Implementation Tracker
 - [x] Step 3 - Refactor schedules route auth helper usage
 - [x] Step 4 - Harden health endpoint response
 - [x] Step 5 - Fix safe-ledger input validation
-- [ ] Step 6 - Add payroll advances null store guard
-- [ ] Step 7 - Add financial tables RLS migration
-- [ ] Step 8 - Add operational tables RLS migration
-- [ ] Step 9 - Review/restrict profiles clock-in policy (optional)
+- [x] Step 6 - Add payroll advances null store guard
+- [x] Step 7 - Add financial tables RLS migration
+- [x] Step 8 - Add operational tables RLS migration
+- [x] Step 9 - Review/restrict profiles clock-in policy (optional)
+
+
+### Step 7/8 Prompt Guardrails (Apply To All Remaining RLS Prompts)
+- Use exact schema names confirmed in preflight. For `safe_pickups`, the employee ownership column is `recorded_by` (not `recorded_by_profile_id`).
+- For any INSERT/UPDATE policy, always define both `USING (...)` and `WITH CHECK (...)`.
+- For shift-linked table scope checks (`shift_sales_counts`, `cleaning_task_completions`, `shift_checklist_checks`), prefer `EXISTS (SELECT 1 FROM shifts ...)` ownership checks over scalar subqueries.
+- Keep employee policies minimal and only where direct employee DB access is confirmed; prefer manager-scope policies first.
+- Add rollback posture to every migration prompt: if policy blocks valid prod traffic, ship an immediate forward migration that drops/recreates only the affected policies.
+- Production-only verification sequence: preflight -> apply one migration -> verify `pg_policies` -> smoke test manager and employee paths.

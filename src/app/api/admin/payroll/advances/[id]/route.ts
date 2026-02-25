@@ -22,7 +22,17 @@ async function validateAccess(advanceId: string, storeIds: string[]) {
     .maybeSingle();
   if (error) return { ok: false as const, response: NextResponse.json({ error: error.message }, { status: 500 }) };
   if (!data) return { ok: false as const, response: NextResponse.json({ error: "Advance not found." }, { status: 404 }) };
-  if (!data.store_id || !storeIds.includes(data.store_id)) {
+  if (data.store_id === null || data.store_id === undefined) {
+    console.error("[payroll/advances] advance has null store_id", { advanceId: data.id });
+    return {
+      ok: false as const,
+      response: NextResponse.json(
+        { error: "Internal error: advance missing store association." },
+        { status: 500 }
+      ),
+    };
+  }
+  if (!storeIds.includes(data.store_id)) {
     return { ok: false as const, response: NextResponse.json({ error: "Forbidden." }, { status: 403 }) };
   }
   return { ok: true as const };
