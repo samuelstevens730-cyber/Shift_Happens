@@ -416,7 +416,7 @@ Implementation Tracker
 - [x] Step 1 - Fix open-shifts routes
 - [x] Step 2 - Fix variances review route
 - [x] Step 3 - Refactor schedules route auth helper usage
-- [ ] Step 4 - Harden health endpoint response
+- [x] Step 4 - Harden health endpoint response
 - [ ] Step 5 - Fix safe-ledger input validation
 - [ ] Step 6 - Add payroll advances null store guard
 - [ ] Step 7 - Add financial tables RLS migration
