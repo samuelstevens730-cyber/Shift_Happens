@@ -155,10 +155,13 @@ export async function POST(req: Request) {
     if (memErr) return NextResponse.json({ error: memErr.message }, { status: 500 });
     if (!mem) return NextResponse.json({ error: "Employee not assigned to this store." }, { status: 400 });
 
-    // 4) Round planned start time (payroll sanity)
+    // 4) Parse manual start time entered by employee.
     const planned = new Date(body.plannedStartAt);
     if (Number.isNaN(planned.getTime()))
       return NextResponse.json({ error: "Invalid plannedStartAt." }, { status: 400 });
+    const manualStartAtIso = planned.toISOString();
+
+    // Keep rounded helper values for schedule/window matching only.
     const plannedRounded = roundTo30Minutes(planned);
 
     // 4b) Determine schedule match + shift type from schedule if possible
@@ -326,8 +329,9 @@ export async function POST(req: Request) {
           // Override is now reserved for over-scheduled or >13h at clock-out.
           requires_override: false,
           override_note: null,
-          planned_start_at: plannedRounded.toISOString(),
-          started_at: new Date().toISOString(),
+          // For payroll/reconciliation, persist the manual start time entered by employee.
+          planned_start_at: manualStartAtIso,
+          started_at: manualStartAtIso,
         })
         .select("id")
         .maybeSingle();
