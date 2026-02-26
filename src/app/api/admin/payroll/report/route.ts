@@ -116,6 +116,7 @@ export async function GET(req: Request) {
     const to = url.searchParams.get("to");
     const asOf = url.searchParams.get("asOf");
     const storeId = url.searchParams.get("storeId") || "";
+    const profileId = url.searchParams.get("profileId") || "";
 
     if (!from || !to) {
       return NextResponse.json({ error: "from and to are required (YYYY-MM-DD)." }, { status: 400 });
@@ -125,6 +126,9 @@ export async function GET(req: Request) {
     }
 
     const safeAsOf = asOf && /^\d{4}-\d{2}-\d{2}$/.test(asOf) ? asOf : to;
+    if (safeAsOf < from || safeAsOf > to) {
+      return NextResponse.json({ error: "asOf must be within the selected date range." }, { status: 400 });
+    }
 
     const managerStoreIds = await getManagerStoreIds(user.id);
     if (managerStoreIds.length === 0) {
@@ -156,7 +160,7 @@ export async function GET(req: Request) {
     if (storesErr) return NextResponse.json({ error: storesErr.message }, { status: 500 });
     const storeNameById = new Map((stores ?? []).map(s => [s.id, s.name]));
 
-    const { data: workedRows, error: workedErr } = await supabaseServer
+    const workedQuery = supabaseServer
       .from("shifts")
       .select("profile_id, planned_start_at, ended_at, store:store_id(name), profile:profile_id(name)")
       .in("store_id", scopeStoreIds)
@@ -164,21 +168,23 @@ export async function GET(req: Request) {
       .neq("last_action", "removed")
       .gte("planned_start_at", fromUtcIso)
       .lt("planned_start_at", toUtcExclusiveIso)
-      .lt("ended_at", asOfUtcExclusiveIso)
-      .returns<WorkedShiftRow[]>();
+      .lt("ended_at", asOfUtcExclusiveIso);
+    if (profileId) workedQuery.eq("profile_id", profileId);
+    const { data: workedRows, error: workedErr } = await workedQuery.returns<WorkedShiftRow[]>();
     if (workedErr) return NextResponse.json({ error: workedErr.message }, { status: 500 });
 
     let projectedRows: ProjectedShiftRow[] = [];
     if (projectedStartDate && projectedStartDate <= to) {
-      const { data, error } = await supabaseServer
+      const projectedQuery = supabaseServer
         .from("schedule_shifts")
         .select("profile_id, shift_date, scheduled_start, scheduled_end, store_id, schedules!inner(status)")
         .in("store_id", scopeStoreIds)
         .eq("schedules.status", "published")
         .gte("shift_date", projectedStartDate)
         .lte("shift_date", to)
-        .not("profile_id", "is", null)
-        .returns<ProjectedShiftRow[]>();
+        .not("profile_id", "is", null);
+      if (profileId) projectedQuery.eq("profile_id", profileId);
+      const { data, error } = await projectedQuery.returns<ProjectedShiftRow[]>();
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       projectedRows = data ?? [];
     }
@@ -192,14 +198,15 @@ export async function GET(req: Request) {
       .lte("shift_date", to);
     if (openErr) return NextResponse.json({ error: openErr.message }, { status: 500 });
 
-    const { data: advanceRows, error: advanceErr } = await supabaseServer
+    const advancesQuery = supabaseServer
       .from("payroll_advances")
       .select("profile_id, advance_hours")
       .in("store_id", scopeStoreIds)
       .eq("status", "verified")
       .gte("advance_date", fromUtcIso)
-      .lt("advance_date", toUtcExclusiveIso)
-      .returns<AdvanceRow[]>();
+      .lt("advance_date", toUtcExclusiveIso);
+    if (profileId) advancesQuery.eq("profile_id", profileId);
+    const { data: advanceRows, error: advanceErr } = await advancesQuery.returns<AdvanceRow[]>();
     if (advanceErr) return NextResponse.json({ error: advanceErr.message }, { status: 500 });
 
     const employees = new Map<string, EmployeeCalc>();

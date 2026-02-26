@@ -198,6 +198,17 @@ export default function AdminIndex() {
             </p>
           </Link>
 
+          {/* Performance Report - period sales analysis, benchmarks, snapshots */}
+          <Link href="/admin/reports/performance-summary" className="tile">
+            <div className="flex items-center gap-2">
+              <span className="tile-dot" />
+              <div className="text-lg font-medium">Performance Report</div>
+            </div>
+            <p className="mt-2 text-sm muted">
+              Period sales analysis with benchmarks, trends, and snapshot storage.
+            </p>
+          </Link>
+
           {/* Manual Shift Closures - review employee-ended shifts */}
           <Link href="/admin/shifts?review=manual" className="tile">
             <div className="flex items-center gap-2">

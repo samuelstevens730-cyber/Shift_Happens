@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
 import { supabaseServer } from "@/lib/supabaseServer";
+import { computeScalingFactors, applyScalingFactor } from "@/lib/salesNormalization";
 import type {
   EmployeeScoreCategory,
   EmployeeScoreRow,
@@ -309,21 +310,22 @@ export async function GET(req: Request) {
       };
     });
 
-    const storeSalesTotals = new Map<string, number>();
+    // Build per-store StoreTotals and delegate to shared normalization module.
+    // Logic is identical to the previous inline implementation — extracted so the
+    // performance analyzer uses the exact same adjusted-sales numbers as the scoreboard.
+    const storeRawTotals = new Map<string, { total: number; count: number }>();
     for (const row of rawShiftSalesRows) {
       if (row.salesCents == null) continue;
-      storeSalesTotals.set(row.storeId, (storeSalesTotals.get(row.storeId) ?? 0) + row.salesCents);
+      const entry = storeRawTotals.get(row.storeId) ?? { total: 0, count: 0 };
+      entry.total += row.salesCents;
+      entry.count += 1;
+      storeRawTotals.set(row.storeId, entry);
     }
-    const storeSalesValues = Array.from(storeSalesTotals.values()).filter((v) => v > 0);
-    const networkAvgStoreSales =
-      storeSalesValues.length > 0
-        ? storeSalesValues.reduce((sum, v) => sum + v, 0) / storeSalesValues.length
-        : 0;
-    const storeFactor = new Map<string, number>();
-    for (const sid of activeStoreIds) {
-      const total = storeSalesTotals.get(sid) ?? 0;
-      storeFactor.set(sid, total > 0 && networkAvgStoreSales > 0 ? networkAvgStoreSales / total : 1);
-    }
+    const storeTotalsForNorm = activeStoreIds.map((sid) => {
+      const entry = storeRawTotals.get(sid) ?? { total: 0, count: 0 };
+      return { storeId: sid, totalSalesCents: entry.total, shiftCount: entry.count };
+    });
+    const storeFactor = computeScalingFactors(storeTotalsForNorm);
 
     const statsByEmployee = new Map<string, EmployeeStats>();
     function ensureStats(profileId: string): EmployeeStats {
@@ -353,7 +355,7 @@ export async function GET(req: Request) {
       stats.shiftsWorked += 1;
       if (row.salesCents != null) {
         stats.rawSalesValues.push(row.salesCents);
-        stats.adjustedSalesValues.push(Math.round(row.salesCents * (storeFactor.get(row.storeId) ?? 1)));
+        stats.adjustedSalesValues.push(applyScalingFactor(row.salesCents, row.storeId, storeFactor));
       }
     }
 
