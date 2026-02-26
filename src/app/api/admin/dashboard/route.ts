@@ -213,6 +213,8 @@ export async function GET(req: Request) {
     const [
       peopleRowsRes,
       peopleCountRes,
+      manualCloseRowsRes,
+      manualCloseCountRes,
       moneyRowsRes,
       moneyCountRes,
       schedulingRowsRes,
@@ -224,23 +226,42 @@ export async function GET(req: Request) {
       timeOffPendingCountRes,
       timesheetPendingCountRes,
     ] = await Promise.all([
+      // Override pending — all shifts (open + completed) with unresolved override flag
       supabaseServer
         .from("shifts")
-        .select("id,store_id,started_at")
+        .select("id,store_id,started_at,ended_at")
         .in("store_id", activeStoreIds)
         .eq("requires_override", true)
         .is("override_at", null)
-        .is("ended_at", null)
+        .neq("last_action", "removed")
         .order("started_at", { ascending: true })
         .limit(3)
-        .returns<Array<{ id: string; store_id: string; started_at: string | null }>>(),
+        .returns<Array<{ id: string; store_id: string; started_at: string | null; ended_at: string | null }>>(),
       supabaseServer
         .from("shifts")
         .select("id", { count: "exact", head: true })
         .in("store_id", activeStoreIds)
         .eq("requires_override", true)
         .is("override_at", null)
-        .is("ended_at", null),
+        .neq("last_action", "removed"),
+      // Manual close pending review
+      supabaseServer
+        .from("shifts")
+        .select("id,store_id,started_at,ended_at")
+        .in("store_id", activeStoreIds)
+        .eq("manual_closed", true)
+        .is("manual_closed_review_status", null)
+        .neq("last_action", "removed")
+        .order("started_at", { ascending: false })
+        .limit(3)
+        .returns<Array<{ id: string; store_id: string; started_at: string | null; ended_at: string | null }>>(),
+      supabaseServer
+        .from("shifts")
+        .select("id", { count: "exact", head: true })
+        .in("store_id", activeStoreIds)
+        .eq("manual_closed", true)
+        .is("manual_closed_review_status", null)
+        .neq("last_action", "removed"),
       supabaseServer
         .from("safe_closeouts")
         .select("id,store_id,business_date,status")
@@ -329,6 +350,8 @@ export async function GET(req: Request) {
     for (const r of [
       peopleRowsRes,
       peopleCountRes,
+      manualCloseRowsRes,
+      manualCloseCountRes,
       moneyRowsRes,
       moneyCountRes,
       schedulingRowsRes,
@@ -343,15 +366,33 @@ export async function GET(req: Request) {
       if (r.error) return NextResponse.json({ error: r.error.message }, { status: 500 });
     }
 
-    const peopleActions: DashboardActionItem[] = (peopleRowsRes.data ?? []).map((row) => ({
-      id: `people-${row.id}`,
-      category: "people",
-      severity: row.started_at && row.started_at < staleShiftCutoffIso ? "high" : "medium",
-      title: "Open shift requires override review",
-      description: row.started_at ? `Started ${row.started_at}` : "Started time missing",
+    const overrideActions: DashboardActionItem[] = (peopleRowsRes.data ?? []).map((row) => ({
+      id: `people-override-${row.id}`,
+      category: "people" as const,
+      severity: (row.started_at && row.started_at < staleShiftCutoffIso ? "high" : "medium") as "high" | "medium",
+      title: row.ended_at ? "Completed shift requires override approval" : "Open shift requires override approval",
+      description: row.started_at ? `Started ${row.started_at}` : "Start time missing",
       store_id: row.store_id,
       created_at: row.started_at,
     }));
+
+    const manualCloseActions: DashboardActionItem[] = (manualCloseRowsRes.data ?? []).map((row) => ({
+      id: `people-manualclose-${row.id}`,
+      category: "people" as const,
+      severity: "medium" as const,
+      title: "Manual shift close needs manager review",
+      description: row.started_at ? `Shift started ${row.started_at}` : "Shift needs review",
+      store_id: row.store_id,
+      created_at: row.started_at,
+    }));
+
+    const peopleActions: DashboardActionItem[] = [...overrideActions, ...manualCloseActions]
+      .sort((a, b) => {
+        // High severity first, then oldest first
+        if (a.severity !== b.severity) return a.severity === "high" ? -1 : 1;
+        return (a.created_at ?? "").localeCompare(b.created_at ?? "");
+      })
+      .slice(0, 5);
 
     const moneyActions: DashboardActionItem[] = (moneyRowsRes.data ?? []).map((row) => ({
       id: `money-${row.id}`,
@@ -427,7 +468,7 @@ export async function GET(req: Request) {
     };
 
     const actionCounts: DashboardResponse["actionCounts"] = {
-      people: peopleCountRes.count ?? 0,
+      people: (peopleCountRes.count ?? 0) + (manualCloseCountRes.count ?? 0),
       money: moneyCountRes.count ?? 0,
       scheduling: schedulingCountRes.count ?? 0,
       approvals:
@@ -459,7 +500,7 @@ export async function GET(req: Request) {
           .eq("store_id", sid)
           .eq("requires_override", true)
           .is("override_at", null)
-          .is("ended_at", null),
+          .neq("last_action", "removed"),
         supabaseServer
           .from("shifts")
           .select("id", { count: "exact", head: true })

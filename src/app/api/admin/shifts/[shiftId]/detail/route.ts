@@ -483,6 +483,12 @@ type ShiftDetailPatchBody = {
     zReportCents?: number | null;
     reviewNote?: string | null;
   };
+  /** Override action: approve a long-shift override or clear the flag entirely. */
+  override?: {
+    action: "approve" | "clear";
+    /** Required when action = "approve". Explanation for why the long shift is accepted. */
+    note?: string;
+  };
 };
 
 export async function PATCH(
@@ -507,7 +513,7 @@ export async function PATCH(
 
     const { data: shift, error: shiftErr } = await supabaseServer
       .from("shifts")
-      .select("id,store_id,last_action,schedule_shift_id,manual_closed")
+      .select("id,store_id,last_action,schedule_shift_id,manual_closed,requires_override,override_at")
       .eq("id", shiftId)
       .maybeSingle()
       .returns<{
@@ -516,6 +522,8 @@ export async function PATCH(
         last_action: string | null;
         schedule_shift_id: string | null;
         manual_closed: boolean | null;
+        requires_override: boolean;
+        override_at: string | null;
       }>();
     if (shiftErr) return NextResponse.json({ error: shiftErr.message }, { status: 500 });
     if (!shift) return NextResponse.json({ error: "Shift not found." }, { status: 404 });
@@ -534,7 +542,8 @@ export async function PATCH(
     const hasShift = Boolean(body.shift);
     const hasDrawer = Boolean(body.drawerCounts && body.drawerCounts.length > 0);
     const hasDailySales = Boolean(body.dailySalesRecord);
-    if (!hasShift && !hasDrawer && !hasDailySales) {
+    const hasOverride = Boolean(body.override);
+    if (!hasShift && !hasDrawer && !hasDailySales && !hasOverride) {
       return NextResponse.json({ error: "No fields to update." }, { status: 400 });
     }
 
@@ -630,6 +639,41 @@ export async function PATCH(
       }
     }
 
+    if (hasOverride && body.override) {
+      if (body.override.action === "approve") {
+        if (!shift.requires_override) {
+          return NextResponse.json({ error: "Override not required for this shift." }, { status: 400 });
+        }
+        if (shift.override_at) {
+          return NextResponse.json({ error: "Override already approved." }, { status: 400 });
+        }
+        const overrideNote = (body.override.note ?? "").trim();
+        if (!overrideNote) {
+          return NextResponse.json({ error: "Approval note is required for override." }, { status: 400 });
+        }
+        const { error: approveErr } = await supabaseServer
+          .from("shifts")
+          .update({
+            override_at: new Date().toISOString(),
+            override_by: user.id,
+            override_note: overrideNote,
+          })
+          .eq("id", shiftId);
+        if (approveErr) return NextResponse.json({ error: approveErr.message }, { status: 500 });
+      } else if (body.override.action === "clear") {
+        const { error: clearErr } = await supabaseServer
+          .from("shifts")
+          .update({
+            requires_override: false,
+            override_at: null,
+            override_by: null,
+            override_note: null,
+          })
+          .eq("id", shiftId);
+        if (clearErr) return NextResponse.json({ error: clearErr.message }, { status: 500 });
+      }
+    }
+
     const { error: auditErr } = await supabaseServer
       .from("shift_change_audit_logs")
       .insert({
@@ -642,6 +686,8 @@ export async function PATCH(
           hasShift,
           hasDrawer,
           hasDailySales,
+          hasOverride,
+          overrideAction: body.override?.action ?? null,
           drawerRowCount: body.drawerCounts?.length ?? 0,
         },
       });

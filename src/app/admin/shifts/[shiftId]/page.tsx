@@ -155,6 +155,8 @@ export default function AdminShiftDetailPage() {
   const [editReason, setEditReason] = useState("");
   const [deleteReason, setDeleteReason] = useState("");
   const [hardDeleteReason, setHardDeleteReason] = useState("");
+  const [overrideNote, setOverrideNote] = useState("");
+  const [overrideSaving, setOverrideSaving] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
 
   const shiftId = params.shiftId;
@@ -468,6 +470,62 @@ export default function AdminShiftDetailPage() {
     }
   }
 
+  async function handleOverride(action: "approve" | "clear") {
+    if (!data || overrideSaving) return;
+    const note = overrideNote.trim();
+    if (action === "approve" && !note) {
+      setError("An approval note is required to approve an override.");
+      return;
+    }
+    if (
+      action === "clear" &&
+      !window.confirm(
+        "Clear the override flag for this shift? This marks the long shift as no longer requiring manager approval."
+      )
+    ) {
+      return;
+    }
+    try {
+      setOverrideSaving(true);
+      setError(null);
+      setSuccess(null);
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token ?? "";
+      if (!token) {
+        router.replace(`/login?next=/admin/shifts/${shiftId}`);
+        return;
+      }
+      const autoReason =
+        action === "approve"
+          ? `Override approved: ${note}`
+          : "Override flag cleared by manager.";
+      const res = await fetch(`/api/admin/shifts/${shiftId}/detail`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          reason: autoReason,
+          override: { action, ...(note ? { note } : {}) },
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to update override.");
+      await refreshDetail();
+      setOverrideNote("");
+      setSuccess(
+        action === "approve" ? "Override approved." : "Override flag cleared."
+      );
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to update override.");
+    } finally {
+      setOverrideSaving(false);
+    }
+  }
+
   if (loading) return <div className="app-shell">Loading shift detail...</div>;
 
   if (error || !data) {
@@ -514,7 +572,11 @@ export default function AdminShiftDetailPage() {
             <Badge variant={data.shift.endedAt ? "outline" : "destructive"}>{shiftState}</Badge>
             <Badge variant="outline">{data.shift.shiftType.toUpperCase()}</Badge>
             {data.shift.manualClosed ? <Badge variant="secondary">Manual Closed</Badge> : null}
-            {data.shift.requiresOverride ? <Badge variant="destructive">Override Required</Badge> : null}
+            {data.shift.requiresOverride && !data.shift.overrideAt ? (
+              <Badge variant="destructive">Override Required</Badge>
+            ) : data.shift.requiresOverride && data.shift.overrideAt ? (
+              <Badge variant="outline" className="border-green-600 text-green-400">Override Approved</Badge>
+            ) : null}
             {data.shift.scheduleShiftId ? <Badge variant="outline">Scheduled</Badge> : <Badge variant="secondary">Unscheduled</Badge>}
           </div>
         </div>
@@ -591,8 +653,70 @@ export default function AdminShiftDetailPage() {
                 </div>
                 <Separator />
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  <div>Override At: <b>{fmtDateTime(data.shift.overrideAt)}</b></div>
-                  <div>Override Note: <b>{data.shift.overrideNote ?? "--"}</b></div>
+                  {data.shift.requiresOverride ? (
+                    <div className="sm:col-span-2">
+                      {data.shift.overrideAt ? (
+                        /* ── Approved state ── */
+                        <div className="rounded border border-green-700/50 bg-green-950/30 p-3 space-y-1.5">
+                          <div className="flex items-center gap-2 text-green-400 font-medium text-sm">
+                            ✓ Override Approved
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            {fmtDateTime(data.shift.overrideAt)}
+                          </div>
+                          {data.shift.overrideNote ? (
+                            <div className="text-sm text-slate-300">
+                              Note: {data.shift.overrideNote}
+                            </div>
+                          ) : null}
+                          <button
+                            className="mt-1 rounded border border-slate-600 px-3 py-1 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-60"
+                            onClick={() => void handleOverride("clear")}
+                            disabled={overrideSaving}
+                          >
+                            {overrideSaving ? "Clearing..." : "Clear Override Flag"}
+                          </button>
+                        </div>
+                      ) : (
+                        /* ── Needs approval state ── */
+                        <div className="rounded border border-amber-700/50 bg-amber-950/30 p-3 space-y-2">
+                          <div className="text-amber-400 font-medium text-sm">
+                            ⚠ Override Required — Long or Extended Shift
+                          </div>
+                          <label className="block text-xs text-slate-300">
+                            Approval Note (required):
+                            <textarea
+                              className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                              rows={2}
+                              value={overrideNote}
+                              onChange={(e) => setOverrideNote(e.target.value)}
+                              placeholder="Explain why this long shift is approved…"
+                            />
+                          </label>
+                          <div className="flex gap-2">
+                            <button
+                              className="flex-1 rounded bg-green-700 px-3 py-1.5 text-xs font-medium text-white hover:bg-green-600 disabled:opacity-60"
+                              onClick={() => void handleOverride("approve")}
+                              disabled={overrideSaving}
+                            >
+                              {overrideSaving ? "Approving..." : "Approve Override"}
+                            </button>
+                            <button
+                              className="rounded border border-slate-600 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-60"
+                              onClick={() => void handleOverride("clear")}
+                              disabled={overrideSaving}
+                            >
+                              {overrideSaving ? "..." : "Clear Flag"}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="sm:col-span-2 text-xs text-slate-500">
+                      No override required for this shift.
+                    </div>
+                  )}
                   <label>
                     Manual Review:
                     <select

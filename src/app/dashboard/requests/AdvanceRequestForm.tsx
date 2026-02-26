@@ -40,7 +40,7 @@ export default function AdvanceRequestForm({
   }) => Promise<{ ok: true } | { ok: false; error: unknown }>;
 }) {
   const today = useMemo(() => toISODate(new Date()), []);
-  const [storeId, setStoreId] = useState<string>("auto");
+  const [storeId, setStoreId] = useState<string>("");
   const [advanceDate, setAdvanceDate] = useState(today);
   const [advanceHours, setAdvanceHours] = useState("");
   const [cashAmountDollars, setCashAmountDollars] = useState("");
@@ -60,7 +60,7 @@ export default function AdvanceRequestForm({
         <div>
           <label className="text-xs muted">Store</label>
           <select className="select" value={storeId} onChange={e => setStoreId(e.target.value)}>
-            <option value="auto">Auto (default)</option>
+            <option value="" disabled>Select a store</option>
             {stores.map(s => (
               <option key={s.id} value={s.id}>{s.name}</option>
             ))}
@@ -109,6 +109,10 @@ export default function AdvanceRequestForm({
         onClick={async () => {
           setError(null);
           setOk(null);
+          if (!storeId) {
+            setError("Please select a store.");
+            return;
+          }
           const hours = Number(advanceHours);
           if (!Number.isFinite(hours) || hours <= 0) {
             setError("Please enter a valid advance hour value.");
@@ -117,7 +121,7 @@ export default function AdvanceRequestForm({
 
           setSaving(true);
           const result = await onSubmit({
-            storeId: storeId === "auto" ? null : storeId,
+            storeId,
             advanceDate: `${advanceDate}T12:00:00-06:00`,
             advanceHours: hours,
             cashAmountDollars: cashAmountDollars.trim() === "" ? null : Number(cashAmountDollars),

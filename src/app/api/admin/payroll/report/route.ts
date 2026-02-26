@@ -281,11 +281,16 @@ export async function GET(req: Request) {
       `Total: ${openTotals.total_hours}`,
     ];
 
+    const grossHours = totals.worked_hours + totals.projected_hours;
+
     return NextResponse.json({
       employees: employeeRows,
       totals,
       openTotals,
-      reconciliationDiff: totals.submitted_hours - openTotals.total_hours,
+      grossHours,
+      // Compare Gross (worked + projected) vs Open — advances are a pay deduction,
+      // not missing hours, so they must NOT affect this reconciliation comparison.
+      reconciliationDiff: grossHours - openTotals.total_hours,
       whatsappText: whatsappLines.join("\n"),
     });
   } catch (e: unknown) {
