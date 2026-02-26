@@ -56,6 +56,12 @@ export interface FormatReportOptions {
    * Default: false.
    */
   verbose?: boolean;
+  /**
+   * Optional manager-set goal benchmark (integer cents per shift).
+   * Displayed alongside the computed UUID-based benchmark as an achievable target.
+   * When provided, each employee's gap vs goal is shown in the report.
+   */
+  goalBenchmarkCents?: number | null;
 }
 
 /**
@@ -87,6 +93,14 @@ export function formatEmployeeSummary(
         : "";
     lines.push(
       `Benchmark: ${d(summary.benchmarkAdjAvgCents)} | Gap: ${gapSign}${d(summary.gapVsBenchmarkCents)}/shift${monthlyNote}`
+    );
+  }
+
+  if (options.goalBenchmarkCents != null) {
+    const goalGap = summary.avgAdjustedPerShiftCents - options.goalBenchmarkCents;
+    const goalGapSign = goalGap >= 0 ? "+" : "";
+    lines.push(
+      `Goal: ${d(options.goalBenchmarkCents)}/shift | Gap vs Goal: ${goalGapSign}${d(goalGap)}/shift`
     );
   }
 
@@ -177,6 +191,9 @@ export function formatPerformanceReport(
   lines.push(`Period: ${period.from} – ${period.to}`);
   if (benchmarkCents != null) {
     lines.push(`Benchmark (adjusted avg/shift): ${d(benchmarkCents)}`);
+  }
+  if (options.goalBenchmarkCents != null) {
+    lines.push(`Goal Benchmark (achievable target): ${d(options.goalBenchmarkCents)}/shift`);
   }
   lines.push(`Employees: ${summaries.length}`);
   lines.push("");

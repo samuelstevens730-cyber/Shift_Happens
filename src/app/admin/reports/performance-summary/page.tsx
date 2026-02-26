@@ -80,11 +80,13 @@ function EmployeeCard({
   summary,
   delta,
   benchmark,
+  goalBenchmarkCents = null,
   expandAll = false,
 }: {
   summary: EmployeePeriodSummary;
   delta: PeriodDelta | undefined;
   benchmark: number | null;
+  goalBenchmarkCents?: number | null;
   expandAll?: boolean;
 }) {
   const [showShifts, setShowShifts] = useState(false);
@@ -99,6 +101,14 @@ function EmployeeCard({
   const gapSign = (summary.gapVsBenchmarkCents ?? 0) >= 0 ? "+" : "";
   const gapColor =
     (summary.gapVsBenchmarkCents ?? 0) >= 0 ? "text-emerald-400" : "text-red-400";
+
+  // Goal benchmark gap (client-computed from the manually entered target)
+  const goalGapCents =
+    goalBenchmarkCents != null
+      ? summary.avgAdjustedPerShiftCents - goalBenchmarkCents
+      : null;
+  const goalGapSign = (goalGapCents ?? 0) >= 0 ? "+" : "";
+  const goalGapColor = (goalGapCents ?? 0) >= 0 ? "text-emerald-400" : "text-red-400";
 
   const trend = delta ? trendBadge(delta.trending) : null;
 
@@ -129,7 +139,7 @@ function EmployeeCard({
       </div>
 
       {/* ── Key metrics ── */}
-      <div className="px-5 py-4 grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className={`px-5 py-4 grid gap-4 grid-cols-2 ${goalBenchmarkCents != null ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
         <div>
           <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Adj Avg / Shift</p>
           <p className="text-xl font-semibold text-zinc-100">{d(summary.avgAdjustedPerShiftCents)}</p>
@@ -151,7 +161,19 @@ function EmployeeCard({
           ) : (
             <p className="text-xl font-semibold text-zinc-500">—</p>
           )}
+          {benchmark != null && (
+            <p className="text-xs text-zinc-500 mt-0.5">{d(benchmark)} target</p>
+          )}
         </div>
+        {goalBenchmarkCents != null && (
+          <div>
+            <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">vs Goal</p>
+            <p className={`text-xl font-semibold ${goalGapColor}`}>
+              {goalGapSign}{d(goalGapCents!)}
+            </p>
+            <p className="text-xs text-zinc-500 mt-0.5">{d(goalBenchmarkCents)} target</p>
+          </div>
+        )}
       </div>
 
       {/* ── Flag row ── */}
@@ -328,6 +350,7 @@ export default function PerformanceSummaryPage() {
   const [includeDelta, setIncludeDelta] = useState(false);
   const [saveSnapshot, setSaveSnapshot] = useState(false);
   const [benchmarkIds, setBenchmarkIds] = useState("8e6fc70a-55df-467c-9e37-0f1f74c6f2fd, b576b7ac-95d3-43e2-9a86-3027abfdef5d");
+  const [goalBenchmark, setGoalBenchmark] = useState(""); // dollar amount per shift, e.g. "350"
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Employees/stores for dropdowns
@@ -448,6 +471,12 @@ export default function PerformanceSummaryPage() {
       if (employeeId) qs.set("employeeId", employeeId);
       if (periodLabel.trim()) qs.set("periodLabel", periodLabel.trim());
       if (benchmarkIds.trim()) qs.set("benchmarkEmployeeIds", benchmarkIds.trim());
+      // Pass goal benchmark so the text report includes the "vs Goal" line
+      const _goalCents =
+        goalBenchmark.trim() !== "" && !isNaN(parseFloat(goalBenchmark)) && parseFloat(goalBenchmark) > 0
+          ? Math.round(parseFloat(goalBenchmark) * 100)
+          : null;
+      if (_goalCents != null) qs.set("goalBenchmarkCents", String(_goalCents));
 
       const res = await fetch(`/api/admin/reports/performance-summary?${qs.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -460,7 +489,7 @@ export default function PerformanceSummaryPage() {
     } catch {
       setCopyStatus(null);
     }
-  }, [token, from, to, storeId, reportType, includeDelta, employeeId, periodLabel, benchmarkIds]);
+  }, [token, from, to, storeId, reportType, includeDelta, employeeId, periodLabel, benchmarkIds, goalBenchmark]);
 
   // ── Print helpers ─────────────────────────────────────────────────────────────
   const printPrimary = useCallback(() => {
@@ -475,6 +504,12 @@ export default function PerformanceSummaryPage() {
   }, []);
 
   const deltaMap = new Map((report?.deltas ?? []).map((d) => [d.employeeId, d]));
+
+  // Derive goalBenchmarkCents from the dollar input (null if blank/invalid)
+  const goalBenchmarkCents =
+    goalBenchmark.trim() !== "" && !isNaN(parseFloat(goalBenchmark)) && parseFloat(goalBenchmark) > 0
+      ? Math.round(parseFloat(goalBenchmark) * 100)
+      : null;
 
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -553,7 +588,7 @@ export default function PerformanceSummaryPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 mb-4">
               {/* Report type */}
               <div>
                 <label className="block text-xs text-zinc-400 mb-1">Report Type</label>
@@ -579,6 +614,27 @@ export default function PerformanceSummaryPage() {
                   placeholder={`e.g. "February Biweekly 1"`}
                   className="w-full rounded-lg border border-zinc-600 bg-zinc-700/60 px-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
                 />
+              </div>
+
+              {/* Goal Benchmark */}
+              <div>
+                <label className="block text-xs text-zinc-400 mb-1">
+                  Goal Benchmark ($/shift)
+                  <span className="ml-1 text-zinc-500 font-normal">— achievable target</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400 text-sm pointer-events-none">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={goalBenchmark}
+                    onChange={(e) => setGoalBenchmark(e.target.value)}
+                    placeholder="e.g. 350"
+                    className="w-full rounded-lg border border-zinc-600 bg-zinc-700/60 pl-7 pr-3 py-2 text-sm text-zinc-100 placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+                <p className="text-xs text-zinc-500 mt-1">Leave blank to hide vs-goal column.</p>
               </div>
 
               {/* Checkboxes */}
@@ -666,6 +722,9 @@ export default function PerformanceSummaryPage() {
                       {report.benchmark != null && (
                         <> · Benchmark: {d(report.benchmark)}/shift</>
                       )}
+                      {goalBenchmarkCents != null && (
+                        <span className="text-amber-400/80"> · Goal: {d(goalBenchmarkCents)}/shift</span>
+                      )}
                       {report.snapshotSaved && (
                         <span className="ml-2 text-emerald-400">· Snapshot saved ✓</span>
                       )}
@@ -738,6 +797,7 @@ export default function PerformanceSummaryPage() {
                     summary={emp}
                     delta={deltaMap.get(emp.employeeId)}
                     benchmark={report.benchmark}
+                    goalBenchmarkCents={goalBenchmarkCents}
                     expandAll={expandAll}
                   />
                 ))}

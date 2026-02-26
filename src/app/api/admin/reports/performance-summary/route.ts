@@ -114,6 +114,13 @@ export async function GET(req: Request) {
       ? benchmarkRaw.split(",").map((s) => s.trim()).filter(Boolean)
       : [];
 
+    // goalBenchmarkCents: optional manager-entered achievable target (integer cents per shift)
+    const goalBenchmarkCentsParam = p.get("goalBenchmarkCents");
+    const goalBenchmarkCents =
+      goalBenchmarkCentsParam != null && goalBenchmarkCentsParam !== ""
+        ? Math.round(parseFloat(goalBenchmarkCentsParam))
+        : null;
+
     // ── Data fetch ─────────────────────────────────────────────────────────────
     // Build shift query (optionally filtered to a single employee)
     let shiftsQuery = supabaseServer
@@ -299,6 +306,7 @@ export async function GET(req: Request) {
       const text = formatPerformanceReport(outputSummaries, deltaMap, benchmarkCents, {
         verbose: detail === "full",
         includeShiftDetail: detail === "full",
+        goalBenchmarkCents: goalBenchmarkCents ?? undefined,
       });
       return new Response(text, {
         headers: {
