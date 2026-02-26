@@ -63,7 +63,7 @@ type ReconciliationResponse = {
       shift_type: "open" | "close" | "double" | "other";
       scheduled_start: string;
       scheduled_end: string;
-      actual_logged_in_at: string | null;
+      actual_logged_in_at: string;
       actual_logged_out_at: string;
       scheduled_length_hours: number;
       actual_length_hours: number;

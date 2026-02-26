@@ -159,8 +159,6 @@ export async function POST(req: Request) {
     const planned = new Date(body.plannedStartAt);
     if (Number.isNaN(planned.getTime()))
       return NextResponse.json({ error: "Invalid plannedStartAt." }, { status: 400 });
-    const manualStartAtIso = planned.toISOString();
-
     // Keep rounded helper values for schedule/window matching only.
     const plannedRounded = roundTo30Minutes(planned);
 
@@ -329,9 +327,10 @@ export async function POST(req: Request) {
           // Override is now reserved for over-scheduled or >13h at clock-out.
           requires_override: false,
           override_note: null,
-          // For payroll/reconciliation, persist the manual start time entered by employee.
-          planned_start_at: manualStartAtIso,
-          started_at: manualStartAtIso,
+          // Manual clock-in time for payroll/labor calculations.
+          planned_start_at: planned.toISOString(),
+          // Submission timestamp (audit/event trail).
+          started_at: new Date().toISOString(),
         })
         .select("id")
         .maybeSingle();

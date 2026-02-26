@@ -53,7 +53,7 @@ type ShiftAuditRow = {
   shift_type: "open" | "close" | "double" | "other";
   scheduled_start: string;
   scheduled_end: string;
-  actual_logged_in_at: string | null;
+  actual_logged_in_at: string;
   actual_logged_out_at: string;
   scheduled_length_hours: number;
   actual_length_hours: number;
@@ -350,7 +350,7 @@ export async function GET(req: Request) {
       .filter((x): x is { shift: ShiftRow; scheduled: ScheduledRow; diffHours: number } => Boolean(x))
       .filter(x => x.diffHours >= shiftDriftThresholdHours && !(x.shift.override_note || "").trim().length);
 
-    const shiftAuditAllRows: ShiftAuditRow[] = filteredShiftsWorkedThrough
+    const shiftAuditAllRows = filteredShiftsWorkedThrough
       .filter((r): r is ShiftRow & { ended_at: string } => Boolean(r.ended_at))
       .filter(r => Boolean(r.schedule_shift_id))
       .map((shift) => {
@@ -358,10 +358,10 @@ export async function GET(req: Request) {
         if (!scheduled) return null;
 
         const scheduledMinutes = calcScheduledMinutes(scheduled.scheduled_start, scheduled.scheduled_end);
-        const actualMinutes = shift.started_at ? calcActualMinutes(shift.started_at, shift.ended_at) : 0;
+        const actualMinutes = calcActualMinutes(shift.planned_start_at, shift.ended_at);
         const scheduledStartMinutes = parseTimeToMinutes(scheduled.scheduled_start);
         const scheduledEndMinutes = parseTimeToMinutes(scheduled.scheduled_end);
-        const actualStartMinutes = shift.started_at ? cstMinutesOfDay(shift.started_at) : null;
+        const actualStartMinutes = cstMinutesOfDay(shift.planned_start_at);
         const actualEndMinutes = cstMinutesOfDay(shift.ended_at);
 
         const startDriftMinutes =
@@ -386,7 +386,8 @@ export async function GET(req: Request) {
           shift_type: shift.shift_type,
           scheduled_start: scheduled.scheduled_start,
           scheduled_end: scheduled.scheduled_end,
-          actual_logged_in_at: shift.started_at,
+          // "Actual logged" for payroll/labor should follow employee-entered manual times.
+          actual_logged_in_at: shift.planned_start_at,
           actual_logged_out_at: shift.ended_at,
           scheduled_length_hours: Number((scheduledMinutes / 60).toFixed(2)),
           actual_length_hours: Number((actualMinutes / 60).toFixed(2)),
