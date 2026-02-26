@@ -52,6 +52,28 @@ type ReconciliationResponse = {
   };
   warnings: string[];
   whatsappText: string;
+  shiftAudit: {
+    rows: Array<{
+      shift_id: string;
+      shift_date: string;
+      store_id: string;
+      store_name: string | null;
+      profile_id: string;
+      employee_name: string | null;
+      shift_type: "open" | "close" | "double" | "other";
+      scheduled_start: string;
+      scheduled_end: string;
+      actual_logged_in_at: string | null;
+      actual_logged_out_at: string;
+      scheduled_length_hours: number;
+      actual_length_hours: number;
+      start_drift_minutes: number;
+      end_drift_minutes: number;
+      length_drift_hours: number;
+      is_mismatch: boolean;
+    }>;
+    employees: Array<{ id: string; name: string }>;
+  };
 };
 
 function toISODate(d: Date) {
@@ -98,6 +120,8 @@ export default function PayrollReconciliationPage() {
   const [to, setTo] = useState(toISODate(today));
   const [asOf, setAsOf] = useState(toISODate(today));
   const [selectedStore, setSelectedStore] = useState("all");
+  const [selectedProfile, setSelectedProfile] = useState("all");
+  const [mismatchOnly, setMismatchOnly] = useState(true);
   const [stores, setStores] = useState<Store[]>([]);
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState(false);
@@ -122,6 +146,8 @@ export default function PayrollReconciliationPage() {
 
       const qs = new URLSearchParams({ from, to, asOf });
       if (selectedStore !== "all") qs.set("storeId", selectedStore);
+      if (selectedProfile !== "all") qs.set("profileId", selectedProfile);
+      if (mismatchOnly) qs.set("mismatchOnly", "1");
 
       const res = await fetch(`/api/admin/payroll/reconciliation?${qs.toString()}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -221,7 +247,7 @@ export default function PayrollReconciliationPage() {
           <Link href="/admin/payroll" className="btn-secondary px-3 py-2">Back to Payroll</Link>
         </div>
 
-        <div className="card card-pad grid grid-cols-1 md:grid-cols-6 gap-3 items-end">
+        <div className="card card-pad grid grid-cols-1 md:grid-cols-7 gap-3 items-end">
           <div>
             <label className="text-sm muted">From</label>
             <input type="date" className="input" value={from} onChange={e => setFrom(e.target.value)} />
@@ -241,6 +267,23 @@ export default function PayrollReconciliationPage() {
               {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
+          <div>
+            <label className="text-sm muted">Employee</label>
+            <select className="select" value={selectedProfile} onChange={e => setSelectedProfile(e.target.value)}>
+              <option value="all">All employees</option>
+              {(report?.shiftAudit.employees ?? []).map(e => (
+                <option key={e.id} value={e.id}>{e.name}</option>
+              ))}
+            </select>
+          </div>
+          <label className="text-sm flex items-center gap-2 pb-1">
+            <input
+              type="checkbox"
+              checked={mismatchOnly}
+              onChange={e => setMismatchOnly(e.target.checked)}
+            />
+            Mismatches only
+          </label>
           <button className="btn-primary px-4 py-2 disabled:opacity-50" disabled={loading} onClick={run}>
             {loading ? "Running..." : "Run Reconciliation"}
           </button>
@@ -357,6 +400,62 @@ export default function PayrollReconciliationPage() {
                   {report.warnings.join(" ")}
                 </div>
               )}
+            </div>
+
+            <div className="card p-4">
+              <div className="font-medium mb-3">Scheduled vs Actual Shift Log</div>
+              <div className="overflow-auto">
+                <table className="w-full text-sm min-w-[1250px]">
+                  <thead className="bg-black/40">
+                    <tr>
+                      <th className="text-left px-3 py-2">Date</th>
+                      <th className="text-left px-3 py-2">Store</th>
+                      <th className="text-left px-3 py-2">Employee</th>
+                      <th className="text-left px-3 py-2">Shift Type</th>
+                      <th className="text-left px-3 py-2">Scheduled In/Out</th>
+                      <th className="text-left px-3 py-2">Actual Logged In/Out</th>
+                      <th className="text-right px-3 py-2">Scheduled Hours</th>
+                      <th className="text-right px-3 py-2">Actual Hours</th>
+                      <th className="text-right px-3 py-2">Length Drift</th>
+                      <th className="text-left px-3 py-2">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {report.shiftAudit.rows.map((row) => (
+                      <tr key={row.shift_id} className={`border-t border-white/10 ${row.is_mismatch ? "bg-amber-500/5" : ""}`}>
+                        <td className="px-3 py-2">{row.shift_date}</td>
+                        <td className="px-3 py-2">{row.store_name ?? "--"}</td>
+                        <td className="px-3 py-2">{row.employee_name ?? "Unknown"}</td>
+                        <td className="px-3 py-2 uppercase">{row.shift_type}</td>
+                        <td className="px-3 py-2">{row.scheduled_start} - {row.scheduled_end}</td>
+                        <td className="px-3 py-2">
+                          {(row.actual_logged_in_at
+                            ? new Date(row.actual_logged_in_at).toLocaleString("en-US", { timeZone: "America/Chicago" })
+                            : "--")
+                          }{" "}
+                          -{" "}
+                          {new Date(row.actual_logged_out_at).toLocaleString("en-US", { timeZone: "America/Chicago" })}
+                        </td>
+                        <td className="px-3 py-2 text-right">{formatNumber(row.scheduled_length_hours)}</td>
+                        <td className="px-3 py-2 text-right">{formatNumber(row.actual_length_hours)}</td>
+                        <td className="px-3 py-2 text-right">{formatNumber(row.length_drift_hours)}</td>
+                        <td className="px-3 py-2">
+                          <Link href={`/admin/shifts/${row.shift_id}`} className="btn-secondary px-2 py-1 text-xs">
+                            Open Shift
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                    {report.shiftAudit.rows.length === 0 && (
+                      <tr>
+                        <td className="px-3 py-6 text-center text-slate-400" colSpan={10}>
+                          No rows for current filters.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             <div className="card p-4 space-y-2">

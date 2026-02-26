@@ -43,6 +43,26 @@ type StoreSettingsRow = {
   payroll_shift_drift_warn_hours: number | null;
 };
 
+type ShiftAuditRow = {
+  shift_id: string;
+  shift_date: string;
+  store_id: string;
+  store_name: string | null;
+  profile_id: string;
+  employee_name: string | null;
+  shift_type: "open" | "close" | "double" | "other";
+  scheduled_start: string;
+  scheduled_end: string;
+  actual_logged_in_at: string | null;
+  actual_logged_out_at: string;
+  scheduled_length_hours: number;
+  actual_length_hours: number;
+  start_drift_minutes: number;
+  end_drift_minutes: number;
+  length_drift_hours: number;
+  is_mismatch: boolean;
+};
+
 function calcScheduledMinutes(start: string, end: string) {
   const [sh, sm] = start.split(":").map(Number);
   const [eh, em] = end.split(":").map(Number);
@@ -132,6 +152,27 @@ function getCstDateKey(value: string) {
   return `${y}-${m}-${d}`;
 }
 
+function cstMinutesOfDay(value: string): number | null {
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(dt);
+  const hh = Number(parts.find(p => p.type === "hour")?.value ?? NaN);
+  const mm = Number(parts.find(p => p.type === "minute")?.value ?? NaN);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+  return (hh * 60) + mm;
+}
+
+function parseTimeToMinutes(value: string): number | null {
+  const [hh, mm] = value.split(":").map(Number);
+  if (!Number.isFinite(hh) || !Number.isFinite(mm)) return null;
+  return (hh * 60) + mm;
+}
+
 export async function GET(req: Request) {
   try {
     const token = getBearerToken(req);
@@ -145,6 +186,8 @@ export async function GET(req: Request) {
     const to = url.searchParams.get("to");
     const asOf = url.searchParams.get("asOf");
     const storeId = url.searchParams.get("storeId") || "";
+    const profileId = url.searchParams.get("profileId") || "";
+    const mismatchOnly = url.searchParams.get("mismatchOnly") === "1";
     if (!from || !to) return NextResponse.json({ error: "from and to are required (YYYY-MM-DD)." }, { status: 400 });
     if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
       return NextResponse.json({ error: "from/to must be YYYY-MM-DD." }, { status: 400 });
@@ -237,6 +280,9 @@ export async function GET(req: Request) {
       const shiftDate = getCstDateKey(r.planned_start_at);
       return shiftDate <= safeAsOf;
     });
+    const filteredShiftsWorkedThrough = profileId
+      ? shiftsWorkedThrough.filter(r => r.profile_id === profileId)
+      : shiftsWorkedThrough;
 
     const scheduledWorkedThrough = scheduledRows.filter(r => inWorkedThrough(r.shift_date, safeAsOf));
     const matchedScheduleIds = new Set(
@@ -285,13 +331,13 @@ export async function GET(req: Request) {
       return !(hasCompatibleEmployeeShift || hasCompatibleStoreCoverage);
     });
 
-    const unapprovedShifts = shiftsWorkedThrough.filter(r =>
+    const unapprovedShifts = filteredShiftsWorkedThrough.filter(r =>
       (Boolean(r.manual_closed) && !r.manual_closed_reviewed_at) ||
       (Boolean(r.requires_override) && Boolean(r.ended_at) && !r.override_at)
     );
-    const openShifts = shiftsWorkedThrough.filter(r => !r.ended_at);
+    const openShifts = filteredShiftsWorkedThrough.filter(r => !r.ended_at);
 
-    const unexplainedVariances = shiftsWorkedThrough
+    const unexplainedVariances = filteredShiftsWorkedThrough
       .filter(r => Boolean(r.schedule_shift_id) && Boolean(r.ended_at))
       .map(r => {
         const scheduled = r.schedule_shift_id ? scheduledById.get(r.schedule_shift_id) : null;
@@ -303,6 +349,63 @@ export async function GET(req: Request) {
       })
       .filter((x): x is { shift: ShiftRow; scheduled: ScheduledRow; diffHours: number } => Boolean(x))
       .filter(x => x.diffHours >= shiftDriftThresholdHours && !(x.shift.override_note || "").trim().length);
+
+    const shiftAuditAllRows: ShiftAuditRow[] = filteredShiftsWorkedThrough
+      .filter((r): r is ShiftRow & { ended_at: string } => Boolean(r.ended_at))
+      .filter(r => Boolean(r.schedule_shift_id))
+      .map((shift) => {
+        const scheduled = shift.schedule_shift_id ? scheduledById.get(shift.schedule_shift_id) : null;
+        if (!scheduled) return null;
+
+        const scheduledMinutes = calcScheduledMinutes(scheduled.scheduled_start, scheduled.scheduled_end);
+        const actualMinutes = shift.started_at ? calcActualMinutes(shift.started_at, shift.ended_at) : 0;
+        const scheduledStartMinutes = parseTimeToMinutes(scheduled.scheduled_start);
+        const scheduledEndMinutes = parseTimeToMinutes(scheduled.scheduled_end);
+        const actualStartMinutes = shift.started_at ? cstMinutesOfDay(shift.started_at) : null;
+        const actualEndMinutes = cstMinutesOfDay(shift.ended_at);
+
+        const startDriftMinutes =
+          scheduledStartMinutes != null && actualStartMinutes != null
+            ? (actualStartMinutes - scheduledStartMinutes)
+            : 0;
+        const endDriftMinutes =
+          scheduledEndMinutes != null && actualEndMinutes != null
+            ? (actualEndMinutes - scheduledEndMinutes)
+            : 0;
+        const lengthDriftHours = (actualMinutes - scheduledMinutes) / 60;
+        const isMismatch =
+          startDriftMinutes !== 0 || endDriftMinutes !== 0 || Math.abs(lengthDriftHours) > 0.001;
+
+        return {
+          shift_id: shift.id,
+          shift_date: scheduled.shift_date,
+          store_id: shift.store_id,
+          store_name: shift.store?.name ?? null,
+          profile_id: shift.profile_id,
+          employee_name: shift.profile?.name ?? null,
+          shift_type: shift.shift_type,
+          scheduled_start: scheduled.scheduled_start,
+          scheduled_end: scheduled.scheduled_end,
+          actual_logged_in_at: shift.started_at,
+          actual_logged_out_at: shift.ended_at,
+          scheduled_length_hours: Number((scheduledMinutes / 60).toFixed(2)),
+          actual_length_hours: Number((actualMinutes / 60).toFixed(2)),
+          start_drift_minutes: startDriftMinutes,
+          end_drift_minutes: endDriftMinutes,
+          length_drift_hours: Number(lengthDriftHours.toFixed(2)),
+          is_mismatch: isMismatch,
+        };
+      })
+      .filter((row): row is ShiftAuditRow => Boolean(row));
+
+    const shiftAuditRows = mismatchOnly
+      ? shiftAuditAllRows.filter(r => r.is_mismatch)
+      : shiftAuditAllRows;
+    const shiftAuditEmployees = Array.from(
+      new Map(
+        shiftAuditAllRows.map((row) => [row.profile_id, { id: row.profile_id, name: row.employee_name ?? "Unknown" }])
+      ).values()
+    ).sort((a, b) => a.name.localeCompare(b.name));
 
     type EmployeeCalc = {
       user_id: string;
@@ -526,6 +629,10 @@ export async function GET(req: Request) {
       },
       warnings,
       whatsappText: whatsappLines.join("\n"),
+      shiftAudit: {
+        rows: shiftAuditRows,
+        employees: shiftAuditEmployees,
+      },
     });
   } catch (e: unknown) {
     return NextResponse.json(
