@@ -551,10 +551,11 @@ export async function POST(req: Request) {
 
     // Clock-window enforcement is temporarily disabled.
 
-    const startedAt = new Date(shift.started_at);
-    const durationHours = Number.isNaN(startedAt.getTime())
+    // Override review should be based on scheduled/planned start -> actual clock-out submission time.
+    const plannedStartAt = new Date(shift.planned_start_at);
+    const durationHours = Number.isNaN(plannedStartAt.getTime())
       ? null
-      : (endRounded.getTime() - startedAt.getTime()) / (1000 * 60 * 60);
+      : (endAt.getTime() - plannedStartAt.getTime()) / (1000 * 60 * 60);
     const overScheduledDuration = hasScheduledShift
       && durationHours != null
       && scheduledDurationHours != null
