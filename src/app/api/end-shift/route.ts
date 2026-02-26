@@ -30,13 +30,13 @@
  * - For open/close/double shifts, validates all required checklist items are checked
  * - For non-"other" shifts, requires ending drawer count
  * - If drawer count is outside expected threshold, requires confirmation
- * - Rounds end time to nearest 30 minutes for payroll consistency
+ * - Stores actual end submission time for payroll/reconciliation calculations
  * - Flags shifts over 13 hours as requiring manager override
  * - Uses upsert for drawer count to handle re-submissions gracefully
  */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
-import { isOutOfThreshold, roundTo30Minutes, ShiftType } from "@/lib/kioskRules";
+import { isOutOfThreshold, ShiftType } from "@/lib/kioskRules";
 import { authenticateShiftRequest } from "@/lib/shiftAuth";
 
 type Body = {
@@ -526,7 +526,6 @@ export async function POST(req: Request) {
     // 3) Round end time, set ended_at
     const endAt = new Date(body.endAt);
     if (Number.isNaN(endAt.getTime())) return NextResponse.json({ error: "Invalid endAt." }, { status: 400 });
-    const endRounded = roundTo30Minutes(endAt);
 
     let hasScheduledShift = false;
     let scheduledDurationHours: number | null = null;
@@ -564,7 +563,7 @@ export async function POST(req: Request) {
     const requiresOverride = Boolean(shift.requires_override) || durationRequiresOverride || overScheduledDuration;
 
     const updatePayload: Record<string, string | boolean | null> = {
-      ended_at: endRounded.toISOString(),
+      ended_at: endAt.toISOString(),
       requires_override: requiresOverride,
     };
 
@@ -580,7 +579,7 @@ export async function POST(req: Request) {
 
     if (body.manualClose) {
       updatePayload.manual_closed = true;
-      updatePayload.manual_closed_at = endRounded.toISOString();
+      updatePayload.manual_closed_at = endAt.toISOString();
       updatePayload.manual_closed_by_profile = shift.profile_id;
       updatePayload.manual_closed_review_status = null;
       updatePayload.manual_closed_reviewed_at = null;
