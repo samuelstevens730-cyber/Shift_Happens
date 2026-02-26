@@ -69,6 +69,8 @@ type SalesDailyRecordRow = {
   open_x_report_cents?: number | null;
 };
 
+const SCHEDULED_OVERRIDE_GRACE_MINUTES = 15;
+
 function parseClockWindowError(message: string) {
   const token = "CLOCK_WINDOW_VIOLATION:";
   if (!message.includes(token)) return null;
@@ -556,7 +558,7 @@ export async function POST(req: Request) {
     const overScheduledDuration = hasScheduledShift
       && durationHours != null
       && scheduledDurationHours != null
-      && durationHours > scheduledDurationHours;
+      && durationHours > (scheduledDurationHours + (SCHEDULED_OVERRIDE_GRACE_MINUTES / 60));
     const durationRequiresOverride = durationHours != null && durationHours > 13;
     const requiresOverride = Boolean(shift.requires_override) || durationRequiresOverride || overScheduledDuration;
 
