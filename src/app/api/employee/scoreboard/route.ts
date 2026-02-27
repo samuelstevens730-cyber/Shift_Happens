@@ -108,6 +108,55 @@ type EmployeeStats = {
   cleaningSkipped: number;
 };
 
+type ScheduledShiftRow = {
+  id: string;
+  schedule_id: string;
+  store_id: string;
+  profile_id: string;
+  shift_date: string;
+  scheduled_start: string;
+  shift_type: "open" | "close" | "double" | "other";
+  shift_mode: string | null;
+};
+
+type ScheduledAttendanceUnit = {
+  id: string;
+  profileId: string;
+  storeId: string;
+  shiftDate: string;
+  scheduledStart: string;
+  scheduleShiftIds: string[];
+  isDouble: boolean;
+};
+
+function buildAttendanceUnits(rows: ScheduledShiftRow[]): ScheduledAttendanceUnit[] {
+  const units = new Map<string, ScheduledAttendanceUnit>();
+  for (const row of rows) {
+    const isDouble = row.shift_mode === "double" || row.shift_type === "double";
+    const key = isDouble
+      ? `${row.schedule_id}|${row.store_id}|${row.profile_id}|${row.shift_date}|double`
+      : row.id;
+    const existing = units.get(key);
+    if (!existing) {
+      units.set(key, {
+        id: key,
+        profileId: row.profile_id,
+        storeId: row.store_id,
+        shiftDate: row.shift_date,
+        scheduledStart: row.scheduled_start,
+        scheduleShiftIds: [row.id],
+        isDouble,
+      });
+      continue;
+    }
+    existing.scheduleShiftIds.push(row.id);
+    if (row.scheduled_start < existing.scheduledStart) {
+      existing.scheduledStart = row.scheduled_start;
+    }
+  }
+  return Array.from(units.values());
+}
+
 type ProfileRow = {
   id: string;
   name: string | null;
@@ -240,20 +289,11 @@ export async function GET(req: Request) {
           .returns<Array<{ id: string; status: string }>>(),
         supabaseServer
           .from("schedule_shifts")
-          .select("id,schedule_id,store_id,profile_id,shift_date,scheduled_start")
+          .select("id,schedule_id,store_id,profile_id,shift_date,scheduled_start,shift_type,shift_mode")
           .in("store_id", activeStoreIds)
           .gte("shift_date", from)
           .lte("shift_date", to)
-          .returns<
-            Array<{
-              id: string;
-              schedule_id: string;
-              store_id: string;
-              profile_id: string;
-              shift_date: string;
-              scheduled_start: string;
-            }>
-          >(),
+          .returns<Array<ScheduledShiftRow>>(),
         supabaseServer
           .from("profiles")
           .select("id,name,avatar_style,avatar_seed,avatar_options,avatar_upload_path")
@@ -344,6 +384,7 @@ export async function GET(req: Request) {
         storeId: shift.store_id,
         shiftType: shift.shift_type,
         startedAt: shift.started_at,
+        businessDate,
         scheduleShiftId: shift.schedule_shift_id,
         salesCents,
       };
@@ -436,9 +477,8 @@ export async function GET(req: Request) {
     const publishedScheduleIds = new Set(
       (schedulesRes.data ?? []).filter((s) => s.status === "published").map((s) => s.id)
     );
-    const publishedScheduled = (scheduledShiftsRes.data ?? []).filter((s) =>
-      publishedScheduleIds.has(s.schedule_id)
-    );
+    const publishedScheduled = (scheduledShiftsRes.data ?? []).filter((s) => publishedScheduleIds.has(s.schedule_id));
+    const attendanceUnits = buildAttendanceUnits(publishedScheduled);
     const workedByScheduleShiftId = new Map<
       string,
       { profileId: string; startedAt: string; storeId: string }
@@ -451,14 +491,37 @@ export async function GET(req: Request) {
         storeId: shift.storeId,
       });
     }
-    for (const scheduleShift of publishedScheduled) {
-      const stats = ensureStats(scheduleShift.profile_id);
+    for (const attendanceUnit of attendanceUnits) {
+      const stats = ensureStats(attendanceUnit.profileId);
       stats.attendanceScheduled += 1;
-      const worked = workedByScheduleShiftId.get(scheduleShift.id);
+      let worked:
+        | {
+            profileId: string;
+            startedAt: string;
+            storeId: string;
+          }
+        | undefined = attendanceUnit.scheduleShiftIds
+          .map((id) => workedByScheduleShiftId.get(id))
+          .find((row) => Boolean(row));
+      if (!worked && attendanceUnit.isDouble) {
+        const fallback = rawShiftSalesRows.find(
+          (row) =>
+            row.profileId === attendanceUnit.profileId &&
+            row.storeId === attendanceUnit.storeId &&
+            row.businessDate === attendanceUnit.shiftDate
+        );
+        if (fallback) {
+          worked = {
+            profileId: fallback.profileId,
+            startedAt: fallback.startedAt,
+            storeId: fallback.storeId,
+          };
+        }
+      }
       if (worked) {
         stats.attendanceWorked += 1;
         const actualMin = cstMinutesOfDay(worked.startedAt);
-        const scheduledMin = parseTimeToMinutes(scheduleShift.scheduled_start);
+        const scheduledMin = parseTimeToMinutes(attendanceUnit.scheduledStart);
         if (actualMin != null && scheduledMin != null) {
           // Apply 5-minute grace period before counting as late.
           stats.lateMinutes.push(Math.max(0, actualMin - scheduledMin - 5));

@@ -66,6 +66,55 @@ function punctualityShiftScore(effectiveLateMinutes: number): number {
   return clamp(1 - ratio * ratio, 0, 1);
 }
 
+type ScheduledShiftRow = {
+  id: string;
+  schedule_id: string;
+  store_id: string;
+  profile_id: string;
+  shift_date: string;
+  scheduled_start: string;
+  shift_type: "open" | "close" | "double" | "other";
+  shift_mode: string | null;
+};
+
+type ScheduledAttendanceUnit = {
+  id: string;
+  profileId: string;
+  storeId: string;
+  shiftDate: string;
+  scheduledStart: string;
+  scheduleShiftIds: string[];
+  isDouble: boolean;
+};
+
+function buildAttendanceUnits(rows: ScheduledShiftRow[]): ScheduledAttendanceUnit[] {
+  const units = new Map<string, ScheduledAttendanceUnit>();
+  for (const row of rows) {
+    const isDouble = row.shift_mode === "double" || row.shift_type === "double";
+    const key = isDouble
+      ? `${row.schedule_id}|${row.store_id}|${row.profile_id}|${row.shift_date}|double`
+      : row.id;
+    const existing = units.get(key);
+    if (!existing) {
+      units.set(key, {
+        id: key,
+        profileId: row.profile_id,
+        storeId: row.store_id,
+        shiftDate: row.shift_date,
+        scheduledStart: row.scheduled_start,
+        scheduleShiftIds: [row.id],
+        isDouble,
+      });
+      continue;
+    }
+    existing.scheduleShiftIds.push(row.id);
+    if (row.scheduled_start < existing.scheduledStart) {
+      existing.scheduledStart = row.scheduled_start;
+    }
+  }
+  return Array.from(units.values());
+}
+
 export async function GET(req: Request) {
   try {
     const authResult = await authenticateShiftRequest(req);
@@ -185,21 +234,12 @@ export async function GET(req: Request) {
           .returns<Array<{ id: string; status: string }>>(),
         supabaseServer
           .from("schedule_shifts")
-          .select("id,schedule_id,store_id,profile_id,shift_date,scheduled_start")
+          .select("id,schedule_id,store_id,profile_id,shift_date,scheduled_start,shift_type,shift_mode")
           .in("store_id", activeStoreIds)
           .eq("profile_id", profileId)
           .gte("shift_date", from)
           .lte("shift_date", to)
-          .returns<
-            Array<{
-              id: string;
-              schedule_id: string;
-              store_id: string;
-              profile_id: string;
-              shift_date: string;
-              scheduled_start: string;
-            }>
-          >(),
+          .returns<Array<ScheduledShiftRow>>(),
         supabaseServer
           .from("profiles")
           .select("id,name")
@@ -380,9 +420,8 @@ export async function GET(req: Request) {
     const publishedScheduleIds = new Set(
       (schedulesRes.data ?? []).filter((s) => s.status === "published").map((s) => s.id)
     );
-    const publishedScheduled = (scheduledShiftsRes.data ?? []).filter((s) =>
-      publishedScheduleIds.has(s.schedule_id)
-    );
+    const publishedScheduled = (scheduledShiftsRes.data ?? []).filter((s) => publishedScheduleIds.has(s.schedule_id));
+    const attendanceUnits = buildAttendanceUnits(publishedScheduled);
 
     // Map schedule_shift_id → worked shift
     const workedByScheduleShiftId = new Map<string, WorkingRow>();
@@ -393,9 +432,18 @@ export async function GET(req: Request) {
     // Collect absent rows (scheduled but not worked)
     const absentRows: ShiftScoreRow[] = [];
 
-    for (const scheduleShift of publishedScheduled) {
-      const scheduledMin = parseTimeToMinutes(scheduleShift.scheduled_start);
-      const worked = workedByScheduleShiftId.get(scheduleShift.id);
+    for (const attendanceUnit of attendanceUnits) {
+      const scheduledMin = parseTimeToMinutes(attendanceUnit.scheduledStart);
+      let worked: WorkingRow | undefined = attendanceUnit.scheduleShiftIds
+        .map((id) => workedByScheduleShiftId.get(id))
+        .find((row) => Boolean(row));
+      if (!worked && attendanceUnit.isDouble) {
+        worked = Array.from(workedRows.values()).find(
+          (row) =>
+            row.storeId === attendanceUnit.storeId &&
+            row.date === attendanceUnit.shiftDate
+        );
+      }
       if (worked) {
         // Update the worked row with schedule context
         worked.scheduledStartMin = scheduledMin;
@@ -404,11 +452,11 @@ export async function GET(req: Request) {
         }
       } else {
         // Missed shift — create absent row
-        const storeName = storeNameById.get(scheduleShift.store_id) ?? "Unknown Store";
+        const storeName = storeNameById.get(attendanceUnit.storeId) ?? "Unknown Store";
         absentRows.push({
           shiftId: null,
-          scheduleShiftId: scheduleShift.id,
-          date: scheduleShift.shift_date,
+          scheduleShiftId: attendanceUnit.scheduleShiftIds[0] ?? null,
+          date: attendanceUnit.shiftDate,
           storeName,
           shiftType: null,
           attended: false,
