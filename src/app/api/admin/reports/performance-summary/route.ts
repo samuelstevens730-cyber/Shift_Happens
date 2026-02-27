@@ -149,7 +149,7 @@ export async function GET(req: Request) {
       supabaseServer
         .from("daily_sales_records")
         .select(
-          "id,store_id,business_date,open_shift_id,close_shift_id,open_x_report_cents,close_sales_cents,z_report_cents,rollover_from_previous_cents,closer_rollover_cents,is_rollover_night"
+          "id,store_id,business_date,open_shift_id,close_shift_id,open_x_report_cents,close_sales_cents,z_report_cents,rollover_from_previous_cents,closer_rollover_cents,is_rollover_night,open_transaction_count,close_transaction_count,mid_x_report_cents"
         )
         .in("store_id", activeStoreIds)
         .gte("business_date", from)

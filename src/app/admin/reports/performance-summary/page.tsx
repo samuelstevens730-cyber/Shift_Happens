@@ -81,12 +81,14 @@ function EmployeeCard({
   delta,
   benchmark,
   goalBenchmarkCents = null,
+  showTransactions = false,
   expandAll = false,
 }: {
   summary: EmployeePeriodSummary;
   delta: PeriodDelta | undefined;
   benchmark: number | null;
   goalBenchmarkCents?: number | null;
+  showTransactions?: boolean;
   expandAll?: boolean;
 }) {
   const [showShifts, setShowShifts] = useState(false);
@@ -109,6 +111,12 @@ function EmployeeCard({
       : null;
   const goalGapSign = (goalGapCents ?? 0) >= 0 ? "+" : "";
   const goalGapColor = (goalGapCents ?? 0) >= 0 ? "text-emerald-400" : "text-red-400";
+
+  // Dynamic column count for the key-metrics grid
+  const metricColCount = 4 + (goalBenchmarkCents != null ? 1 : 0) + (showTransactions ? 1 : 0);
+  const metricsColClass = (
+    { 4: "sm:grid-cols-4", 5: "sm:grid-cols-5", 6: "sm:grid-cols-6" } as Record<number, string>
+  )[metricColCount] ?? "sm:grid-cols-4";
 
   const trend = delta ? trendBadge(delta.trending) : null;
 
@@ -139,7 +147,7 @@ function EmployeeCard({
       </div>
 
       {/* ── Key metrics ── */}
-      <div className={`px-5 py-4 grid gap-4 grid-cols-2 ${goalBenchmarkCents != null ? "sm:grid-cols-5" : "sm:grid-cols-4"}`}>
+      <div className={`px-5 py-4 grid gap-4 grid-cols-2 ${metricsColClass}`}>
         <div>
           <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Adj Avg / Shift</p>
           <p className="text-xl font-semibold text-zinc-100">{d(summary.avgAdjustedPerShiftCents)}</p>
@@ -172,6 +180,29 @@ function EmployeeCard({
               {goalGapSign}{d(goalGapCents!)}
             </p>
             <p className="text-xs text-zinc-500 mt-0.5">{d(goalBenchmarkCents)} target</p>
+          </div>
+        )}
+        {showTransactions && (
+          <div>
+            <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Txn / Shift</p>
+            {summary.transactionTrackedShifts > 0 && summary.avgTransactionsPerShift != null ? (
+              <>
+                <p className="text-xl font-semibold text-zinc-100">
+                  {summary.avgTransactionsPerShift.toFixed(1)}
+                </p>
+                <p className="text-xs text-zinc-500 mt-0.5">
+                  {summary.avgSalesPerTransactionCents != null
+                    ? `${d(summary.avgSalesPerTransactionCents)}/txn · `
+                    : ""}
+                  {summary.transactionTrackedShifts}/{summary.totalShifts} shifts
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-xl font-semibold text-zinc-500">—</p>
+                <p className="text-xs text-zinc-500 mt-0.5">no data yet</p>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -305,25 +336,44 @@ function EmployeeCard({
                 <tbody className="divide-y divide-zinc-700/30">
                   {summary.shifts
                     .filter((s) => s.isCountable)
-                    .map((s) => (
-                      <tr key={s.shiftId} className="text-zinc-300 hover:bg-zinc-700/20">
-                        <td className="py-1 pr-3 whitespace-nowrap">{s.date}</td>
-                        <td className="py-1 pr-3">{s.dayOfWeek.slice(0, 3)}</td>
-                        <td className="py-1 pr-3 capitalize">{s.shiftType}</td>
-                        <td className="text-right py-1 pr-2">
-                          {s.adjustedSalesCents != null ? d(s.adjustedSalesCents) : "—"}
-                        </td>
-                        <td className="text-right py-1 pr-2 text-zinc-500">
-                          {s.rawSalesCents != null ? d(s.rawSalesCents) : "—"}
-                        </td>
-                        <td className="text-right py-1 pr-2 text-zinc-500">
-                          {s.shiftHours > 0 ? s.shiftHours.toFixed(1) : "—"}
-                        </td>
-                        <td className={`text-right py-1 font-medium ${flagColor(s.performanceFlag)}`}>
-                          {s.performanceFlag ?? "—"}
-                        </td>
-                      </tr>
-                    ))}
+                    .flatMap((s) => {
+                      const mainRow = (
+                        <tr key={s.shiftId} className="text-zinc-300 hover:bg-zinc-700/20">
+                          <td className="py-1 pr-3 whitespace-nowrap">{s.date}</td>
+                          <td className="py-1 pr-3">{s.dayOfWeek.slice(0, 3)}</td>
+                          <td className="py-1 pr-3 capitalize">{s.shiftType}</td>
+                          <td className="text-right py-1 pr-2">
+                            {s.adjustedSalesCents != null ? d(s.adjustedSalesCents) : "—"}
+                          </td>
+                          <td className="text-right py-1 pr-2 text-zinc-500">
+                            {s.rawSalesCents != null ? d(s.rawSalesCents) : "—"}
+                          </td>
+                          <td className="text-right py-1 pr-2 text-zinc-500">
+                            {s.shiftHours > 0 ? s.shiftHours.toFixed(1) : "—"}
+                          </td>
+                          <td className={`text-right py-1 font-medium ${flagColor(s.performanceFlag)}`}>
+                            {s.performanceFlag ?? "—"}
+                          </td>
+                        </tr>
+                      );
+                      // For double shifts with AM/PM data, add a sub-row
+                      const hasAmPm =
+                        s.shiftType === "double" &&
+                        (s.amRawSalesCents != null || s.pmRawSalesCents != null);
+                      if (!hasAmPm) return [mainRow];
+                      const amStr = s.amRawSalesCents != null ? d(s.amRawSalesCents) : "—";
+                      const pmStr = s.pmRawSalesCents != null ? d(s.pmRawSalesCents) : "—";
+                      const amTxn = s.amTransactionCount != null ? ` · ${s.amTransactionCount} txn` : "";
+                      const pmTxn = s.pmTransactionCount != null ? ` · ${s.pmTransactionCount} txn` : "";
+                      const splitRow = (
+                        <tr key={`${s.shiftId}-split`} className="text-zinc-500 text-[11px]">
+                          <td colSpan={7} className="pb-1 pl-4 italic">
+                            ↳ AM: {amStr}{amTxn} &nbsp;|&nbsp; PM: {pmStr}{pmTxn}
+                          </td>
+                        </tr>
+                      );
+                      return [mainRow, splitRow];
+                    })}
                 </tbody>
               </table>
             </div>
@@ -510,6 +560,11 @@ export default function PerformanceSummaryPage() {
     goalBenchmark.trim() !== "" && !isNaN(parseFloat(goalBenchmark)) && parseFloat(goalBenchmark) > 0
       ? Math.round(parseFloat(goalBenchmark) * 100)
       : null;
+
+  // Show the Txn/Shift column only when at least one employee in the current report
+  // has tracked transaction data — hides the column entirely for historical-only periods.
+  const anyHasTransactions =
+    report?.employees.some((emp) => emp.transactionTrackedShifts > 0) ?? false;
 
   // ─── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -798,6 +853,7 @@ export default function PerformanceSummaryPage() {
                     delta={deltaMap.get(emp.employeeId)}
                     benchmark={report.benchmark}
                     goalBenchmarkCents={goalBenchmarkCents}
+                    showTransactions={anyHasTransactions}
                     expandAll={expandAll}
                   />
                 ))}

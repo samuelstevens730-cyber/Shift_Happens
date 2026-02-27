@@ -85,6 +85,16 @@ export function formatEmployeeSummary(
     `Adj Avg: ${d(summary.avgAdjustedPerShiftCents)} | Raw Avg: ${d(summary.avgRawPerShiftCents)} | Adj/Hr: ${d(summary.avgAdjustedPerHourCents)}`
   );
 
+  // Transaction metrics — only shown when this employee has tracked shifts
+  if (summary.transactionTrackedShifts > 0 && summary.avgTransactionsPerShift != null) {
+    const perTxn = summary.avgSalesPerTransactionCents != null
+      ? d(summary.avgSalesPerTransactionCents)
+      : "—";
+    lines.push(
+      `Transactions: ${summary.avgTransactionsPerShift.toFixed(1)}/shift avg | ${perTxn}/txn | ${summary.transactionTrackedShifts} of ${summary.totalShifts} shifts tracked`
+    );
+  }
+
   if (summary.benchmarkAdjAvgCents != null && summary.gapVsBenchmarkCents != null) {
     const gapSign = summary.gapVsBenchmarkCents >= 0 ? "+" : "";
     const monthlyNote =
@@ -224,6 +234,16 @@ export function formatPerformanceReport(
           lines.push(
             `  ${s.date.padEnd(12)} ${s.dayOfWeek.slice(0, 3).padEnd(5)} ${s.shiftType.padEnd(8)} ${adjStr.padStart(7)} ${rawStr.padStart(7)} ${hrsStr.padStart(5)} ${flagStr.padStart(7)}`
           );
+          // For double shifts with AM/PM split data, add a detail sub-line
+          if (s.shiftType === "double" && (s.amRawSalesCents != null || s.pmRawSalesCents != null)) {
+            const amStr = s.amRawSalesCents != null ? d(s.amRawSalesCents) : "—";
+            const pmStr = s.pmRawSalesCents != null ? d(s.pmRawSalesCents) : "—";
+            const amTxn = s.amTransactionCount != null ? `${s.amTransactionCount} txn` : "";
+            const pmTxn = s.pmTransactionCount != null ? `${s.pmTransactionCount} txn` : "";
+            const amPart = [amStr, amTxn].filter(Boolean).join(" / ");
+            const pmPart = [pmStr, pmTxn].filter(Boolean).join(" / ");
+            lines.push(`              ↳ AM: ${amPart}  PM: ${pmPart}`);
+          }
         }
       }
     }

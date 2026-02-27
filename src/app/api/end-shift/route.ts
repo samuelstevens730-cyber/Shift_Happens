@@ -53,6 +53,8 @@ type Body = {
   notifiedManager?: boolean;
   note?: string | null;
   manualClose?: boolean;
+  /** Transactions rung in the PM half (close/double). 0 = not captured. */
+  closeTransactionCount?: number | null;
 };
 
 type TemplateRow = { id: string; store_id: string | null; shift_type: string };
@@ -455,6 +457,14 @@ export async function POST(req: Request) {
 
         const closeSalesCents = zReportCents - priorXReportCents;
 
+        // Zero-contamination guard: treat 0 as "not captured" (same as null).
+        const closeTxnCount =
+          typeof body.closeTransactionCount === "number" &&
+          Number.isInteger(body.closeTransactionCount) &&
+          body.closeTransactionCount > 0
+            ? body.closeTransactionCount
+            : null;
+
         const { data: dailyUpsert, error: dailyErr } = await supabaseServer
           .from("daily_sales_records")
           .upsert(
@@ -464,6 +474,7 @@ export async function POST(req: Request) {
               close_shift_id: shift.id,
               close_sales_cents: closeSalesCents,
               z_report_cents: zReportCents,
+              ...(closeTxnCount != null ? { close_transaction_count: closeTxnCount } : {}),
             },
             { onConflict: "store_id,business_date" }
           )

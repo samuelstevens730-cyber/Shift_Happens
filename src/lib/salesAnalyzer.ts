@@ -36,6 +36,13 @@ export interface SalesRecordRow {
   rollover_from_previous_cents: number | null;
   closer_rollover_cents: number | null;
   is_rollover_night: boolean | null;
+  // Transaction count fields — NULL for historical rows (no DEFAULT in DB).
+  // 0 is treated as NULL by the app layer; never include in averages.
+  open_transaction_count:  number | null;
+  close_transaction_count: number | null;
+  // Mid-day X report total (changeover). NULL = not captured for this shift.
+  // Enables AM/PM sales split for double shifts.
+  mid_x_report_cents: number | null;
 }
 
 export interface StoreRow { id: string; name: string; }
@@ -59,6 +66,15 @@ export interface ShiftSummary {
   adjustedPerHour: number | null;
   performanceFlag: "HIGH" | "LOW" | "NORMAL" | null;  // null if not countable
   isCountable: boolean;
+  // null = no transaction data for this shift (historical or not yet entered).
+  // 0 is normalized to null at computation time — never divide by 0.
+  transactionCount: number | null;
+  // AM/PM split — only populated for double shifts with mid_x_report_cents.
+  // null means the mid-day X was not captured for this shift.
+  amRawSalesCents:    number | null;
+  pmRawSalesCents:    number | null;
+  amTransactionCount: number | null;  // open_transaction_count (AM half)
+  pmTransactionCount: number | null;  // close_transaction_count (PM half)
 }
 
 export interface ShiftTypeBreakdown {
@@ -110,6 +126,11 @@ export interface EmployeePeriodSummary {
 
   // streak: positive = consecutive HIGHs, negative = consecutive LOWs
   currentStreak: number;
+
+  // transaction count aggregates (only populated when transactionTrackedShifts > 0)
+  transactionTrackedShifts:    number;        // shifts where transactionCount > 0
+  avgTransactionsPerShift:     number | null; // null when no tracked shifts
+  avgSalesPerTransactionCents: number | null; // null when no tracked shifts
 
   // breakdowns
   byShiftType: ShiftTypeBreakdown[];
@@ -290,6 +311,12 @@ export function analyzeEmployeeSales(
     rawSalesCents: number | null;
     adjustedSalesCents: number | null; // filled after normalization
     isCountable: boolean;
+    transactionCount: number | null;   // null = no data; 0 normalized to null
+    // AM/PM split (double shifts only, requires mid_x_report_cents)
+    amRawSalesCents:    number | null;
+    pmRawSalesCents:    number | null;
+    amTransactionCount: number | null;
+    pmTransactionCount: number | null;
   }
 
   const intermediate: IntermediateShift[] = shifts.map((shift) => {
@@ -301,6 +328,60 @@ export function analyzeEmployeeSales(
       null;
     const rawSalesCents = computeShiftSalesCents(shift.shift_type, salesRecord);
     const hours = shiftHoursFromIso(shift.started_at, shift.ended_at);
+
+    // Read the appropriate transaction count column based on shift type.
+    // Double shifts: the same employee handles both open and close, so we sum
+    // both counts when available (consistent with the sales formula that spans
+    // the full day). If only one is present the other is treated as 0.
+    const rawTxCount: number | null = (() => {
+      if (!salesRecord) return null;
+      if (shift.shift_type === "open") return salesRecord.open_transaction_count;
+      if (shift.shift_type === "close") return salesRecord.close_transaction_count;
+      if (shift.shift_type === "double") {
+        const o = salesRecord.open_transaction_count ?? 0;
+        const c = salesRecord.close_transaction_count ?? 0;
+        const total = o + c;
+        return total > 0 ? total : null;
+      }
+      return null;
+    })();
+    // CRITICAL: 0 is treated as "no data" — identical to NULL for historical rows.
+    // This prevents zero-default records from contaminating per-transaction averages.
+    const transactionCount = rawTxCount != null && rawTxCount > 0 ? rawTxCount : null;
+
+    // ── AM/PM split (double shifts with mid_x_report_cents only) ────────────
+    let amRawSalesCents:    number | null = null;
+    let pmRawSalesCents:    number | null = null;
+    let amTransactionCount: number | null = null;
+    let pmTransactionCount: number | null = null;
+
+    if (shift.shift_type === "double" && salesRecord) {
+      const midX   = salesRecord.mid_x_report_cents ?? null;
+      const openX  = salesRecord.open_x_report_cents ?? null;
+      const zRep   = salesRecord.z_report_cents ?? null;
+      const rollov = salesRecord.closer_rollover_cents ?? 0;
+      const isRoll = Boolean(salesRecord.is_rollover_night);
+
+      if (midX != null) {
+        // AM = register delta from open-X to mid-X.
+        // openX (open_x_report_cents) is the starting drawer value recorded by
+        // the opener. Without it we cannot establish the baseline, so
+        // amRawSalesCents remains null intentionally — there is no meaningful
+        // fallback when the starting X is missing. pmRawSalesCents is
+        // independent of openX and can be computed even when AM is null.
+        amRawSalesCents = openX != null ? midX - openX : null;
+        // PM = register delta from mid-X to close (+ rollover carry if applicable)
+        pmRawSalesCents = zRep != null ? zRep - midX + (isRoll ? rollov : 0) : null;
+      }
+
+      // AM transactions = what was entered at changeover (open column)
+      const rawAm = salesRecord.open_transaction_count;
+      amTransactionCount = rawAm != null && rawAm > 0 ? rawAm : null;
+
+      // PM transactions = what was entered at end of day (close column)
+      const rawPm = salesRecord.close_transaction_count;
+      pmTransactionCount = rawPm != null && rawPm > 0 ? rawPm : null;
+    }
 
     return {
       shiftId: shift.id,
@@ -317,6 +398,11 @@ export function analyzeEmployeeSales(
       adjustedSalesCents: null, // filled below
       // Countable = has sales data + shift is closed (ended_at not null)
       isCountable: rawSalesCents != null && shift.ended_at != null,
+      transactionCount,
+      amRawSalesCents,
+      pmRawSalesCents,
+      amTransactionCount,
+      pmTransactionCount,
     };
   });
 
@@ -412,6 +498,11 @@ export function analyzeEmployeeSales(
         adjustedPerHour: s.shiftHours > 0 && s.adjustedSalesCents != null ? s.adjustedSalesCents / s.shiftHours : null,
         performanceFlag: flag,
         isCountable: s.isCountable,
+        transactionCount: s.transactionCount,
+        amRawSalesCents: s.amRawSalesCents,
+        pmRawSalesCents: s.pmRawSalesCents,
+        amTransactionCount: s.amTransactionCount,
+        pmTransactionCount: s.pmTransactionCount,
       };
     });
 
@@ -472,6 +563,30 @@ export function analyzeEmployeeSales(
       avgAdjustedCents: e.count > 0 ? Math.round(e.totalAdj / e.count) : 0,
     }));
 
+    // ── Transaction count aggregates ─────────────────────────────────────────
+    // Only use shifts where transactionCount > 0. Both 0 and null = no data.
+    // Dollar metrics (isCountable, avgAdjustedPerShiftCents, etc.) are unaffected.
+    const txShifts = shiftSummaries.filter(
+      (s) => s.transactionCount != null && s.transactionCount > 0
+    );
+    const transactionTrackedShifts = txShifts.length;
+    const totalTransactions = txShifts.reduce((sum, s) => sum + s.transactionCount!, 0);
+
+    const avgTransactionsPerShift: number | null =
+      transactionTrackedShifts > 0
+        ? Math.round((totalTransactions / transactionTrackedShifts) * 10) / 10
+        : null;
+
+    // Use only the tracked-shift adjusted totals so numerator/denominator match
+    const totalAdjTracked = txShifts.reduce(
+      (sum, s) => sum + (s.adjustedSalesCents ?? 0),
+      0
+    );
+    const avgSalesPerTransactionCents: number | null =
+      transactionTrackedShifts > 0 && totalTransactions > 0
+        ? Math.round(totalAdjTracked / totalTransactions)
+        : null;
+
     // ── Projected monthly shifts ──────────────────────────────────────────────
     const projectedMonthly =
       options.projectedMonthlyShifts ?? (countable.length > 0 ? (countable.length / periodDays) * 30 : 0);
@@ -496,6 +611,9 @@ export function analyzeEmployeeSales(
       highFlagPct: countable.length > 0 ? Math.round((highCount / countable.length) * 100) : 0,
       lowFlagPct: countable.length > 0 ? Math.round((lowCount / countable.length) * 100) : 0,
       currentStreak: streak,
+      transactionTrackedShifts,
+      avgTransactionsPerShift,
+      avgSalesPerTransactionCents,
       byShiftType,
       byDayOfWeek,
       byStore,

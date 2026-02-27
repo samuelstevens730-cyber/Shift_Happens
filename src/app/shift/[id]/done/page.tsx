@@ -444,6 +444,8 @@ function ChangeoverPanel({
   onDone: () => void;
 }) {
   const [drawer, setDrawer] = useState("200");
+  const [xReport, setXReport] = useState("");
+  const [txnCount, setTxnCount] = useState("");
   const [confirm, setConfirm] = useState(false);
   const [notify, setNotify] = useState(false);
   const [note, setNote] = useState("");
@@ -455,14 +457,38 @@ function ChangeoverPanel({
   }
 
   const cents = Math.round(Number(drawer) * 100);
+  const xReportCents = xReport !== "" && Number.isFinite(Number(xReport)) && Number(xReport) >= 0
+    ? Math.round(Number(xReport) * 100)
+    : null;
+  const parsedTxnCount = txnCount !== "" && /^\d+$/.test(txnCount.trim()) && Number(txnCount) > 0
+    ? Number(txnCount)
+    : null;
   const msg = Number.isFinite(cents) ? thresholdMessage(cents, expectedCents) : null;
 
   return (
     <div className="border rounded p-3 space-y-2">
       <div className="text-sm font-medium">Mid-shift Changeover</div>
 
+      <label className="text-sm">X Report Total ($) <span className="text-gray-500">(net register total at changeover)</span></label>
+      <input
+        className="w-full border rounded p-2"
+        inputMode="decimal"
+        placeholder="0.00"
+        value={xReport}
+        onChange={e => setXReport(e.target.value)}
+      />
+
       <label className="text-sm">Drawer count ($)</label>
       <input className="w-full border rounded p-2" inputMode="decimal" value={drawer} onChange={e => setDrawer(e.target.value)} />
+
+      <label className="text-sm">Transaction count <span className="text-gray-500">(# of sales rung — AM half)</span></label>
+      <input
+        className="w-full border rounded p-2"
+        inputMode="numeric"
+        placeholder="e.g. 42"
+        value={txnCount}
+        onChange={e => setTxnCount(e.target.value)}
+      />
 
       {msg && <div className="text-sm border rounded p-2 text-amber-700 border-amber-300">{msg}</div>}
 
@@ -473,7 +499,7 @@ function ChangeoverPanel({
 
       <label className="flex items-center gap-2 text-sm">
         <input type="checkbox" checked={notify} onChange={e => setNotify(e.target.checked)} />
-        I notified manager (optional v1)
+        I notified manager (optional)
       </label>
 
       <label className="text-sm">Note (optional)</label>
@@ -500,6 +526,8 @@ function ChangeoverPanel({
                 confirmed: confirm,
                 notifiedManager: notify,
                 note: note || null,
+                midXReportCents: xReportCents,
+                openTransactionCount: parsedTxnCount,
               }),
             });
             const json = await res.json();

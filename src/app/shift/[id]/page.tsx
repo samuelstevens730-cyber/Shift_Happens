@@ -231,6 +231,7 @@ export default function ShiftPage() {
   const [salesContextErr, setSalesContextErr] = useState<string | null>(null);
   const [closeCheckpointPriorX, setCloseCheckpointPriorX] = useState("");
   const [closeCheckpointZ, setCloseCheckpointZ] = useState("");
+  const [closeCheckpointTxnCount, setCloseCheckpointTxnCount] = useState("");
   const [closeCheckpointConfirm, setCloseCheckpointConfirm] = useState(false);
   const [closeCheckpointNeedsConfirm, setCloseCheckpointNeedsConfirm] = useState(false);
   const [closeCheckpointVarianceCents, setCloseCheckpointVarianceCents] = useState<number | null>(null);
@@ -737,6 +738,13 @@ export default function ShiftPage() {
       setCloseCheckpointErr("Enter valid non-negative sales amounts.");
       return;
     }
+    // Zero-contamination guard: blank / 0 → null (not captured)
+    const ccTxnCount =
+      closeCheckpointTxnCount !== "" &&
+      /^\d+$/.test(closeCheckpointTxnCount.trim()) &&
+      Number(closeCheckpointTxnCount) > 0
+        ? Number(closeCheckpointTxnCount)
+        : null;
 
     setCloseCheckpointSaving(true);
     try {
@@ -751,6 +759,7 @@ export default function ShiftPage() {
           salesPriorXCents: priorXCents,
           salesZReportCents: zCents,
           salesConfirmed: closeCheckpointNeedsConfirm ? closeCheckpointConfirm : false,
+          closeTransactionCount: ccTxnCount,
         }),
       });
       const json = await res.json();
@@ -1024,6 +1033,14 @@ export default function ShiftPage() {
                   value={closeCheckpointZ}
                   onChange={e => setCloseCheckpointZ(e.target.value)}
                   placeholder="0.00"
+                />
+                <label className="text-sm">Transaction count <span className="text-slate-400">(# of sales rung — optional)</span></label>
+                <input
+                  className="w-full border border-cyan-400/30 bg-slate-900/50 text-slate-100 rounded p-2"
+                  inputMode="numeric"
+                  value={closeCheckpointTxnCount}
+                  onChange={e => setCloseCheckpointTxnCount(e.target.value)}
+                  placeholder="e.g. 42"
                 />
               </div>
 
@@ -1566,6 +1583,8 @@ function ChangeoverPanel({
   onDone: () => void;
 }) {
   const [drawer, setDrawer] = useState("200");
+  const [xReport, setXReport] = useState("");
+  const [txnCount, setTxnCount] = useState("");
   const [confirm, setConfirm] = useState(false);
   const [notify, setNotify] = useState(false);
   const [note, setNote] = useState("");
@@ -1573,6 +1592,12 @@ function ChangeoverPanel({
   const [saving, setSaving] = useState(false);
 
   const cents = Math.round(Number(drawer) * 100);
+  const xReportCents = xReport !== "" && Number.isFinite(Number(xReport)) && Number(xReport) >= 0
+    ? Math.round(Number(xReport) * 100)
+    : null;
+  const parsedTxnCount = txnCount !== "" && /^\d+$/.test(txnCount.trim()) && Number(txnCount) > 0
+    ? Number(txnCount)
+    : null;
   const msg = Number.isFinite(cents) ? thresholdMessage(cents, expectedCents) : null;
   const outOfThreshold = shouldShowVarianceControls(cents, expectedCents);
 
@@ -1592,12 +1617,30 @@ function ChangeoverPanel({
     <div className="border rounded p-3 space-y-2">
       <div className="text-sm font-medium">Mid-shift Changeover</div>
 
+      <label className="text-sm">X Report Total ($) <span className="text-gray-500">(net register total at changeover)</span></label>
+      <input
+        className="w-full border rounded p-2"
+        inputMode="decimal"
+        placeholder="0.00"
+        value={xReport}
+        onChange={e => setXReport(e.target.value)}
+      />
+
       <label className="text-sm">Drawer count ($)</label>
       <input
         className="w-full border rounded p-2"
         inputMode="decimal"
         value={drawer}
         onChange={e => setDrawer(e.target.value)}
+      />
+
+      <label className="text-sm">Transaction count <span className="text-gray-500">(# of sales rung — AM half)</span></label>
+      <input
+        className="w-full border rounded p-2"
+        inputMode="numeric"
+        placeholder="e.g. 42"
+        value={txnCount}
+        onChange={e => setTxnCount(e.target.value)}
       />
 
       {msg && (
@@ -1645,6 +1688,8 @@ function ChangeoverPanel({
                 confirmed: outOfThreshold ? confirm : false,
                 notifiedManager: outOfThreshold ? notify : false,
                 note: note || null,
+                midXReportCents: xReportCents,
+                openTransactionCount: parsedTxnCount,
               }),
             });
             const json = await res.json();
@@ -1736,6 +1781,7 @@ function ClockOutModal({
   const [rolloverSaving, setRolloverSaving] = useState(false);
   const [rolloverErr, setRolloverErr] = useState<string | null>(null);
   const [rolloverMismatchNeedsConfirm, setRolloverMismatchNeedsConfirm] = useState(false);
+  const [closeTransactionCount, setCloseTransactionCount] = useState("");
 
   const storeKey = toStoreKey(storeName);
 
@@ -2018,6 +2064,14 @@ function ClockOutModal({
                   onChange={e => setSalesZReport(e.target.value)}
                   placeholder="0.00"
                 />
+                <label className="text-sm">Transaction count <span className="text-gray-500">(# of sales rung — optional)</span></label>
+                <input
+                  className="w-full border rounded p-2"
+                  inputMode="numeric"
+                  value={closeTransactionCount}
+                  onChange={e => setCloseTransactionCount(e.target.value)}
+                  placeholder="e.g. 42"
+                />
               </>
             )}
             {(shiftType === "close" || shiftType === "double") && !isRolloverNight && useSafeCloseoutSalesForClose && (
@@ -2132,6 +2186,10 @@ function ClockOutModal({
                     confirmed: outOfThreshold ? confirm : false,
                     notifiedManager: (outOfThreshold || changeNot200) ? notify : false,
                     note: note || null,
+                    closeTransactionCount: (() => {
+                      const v = closeTransactionCount.trim();
+                      return v !== "" && /^\d+$/.test(v) && Number(v) > 0 ? Number(v) : null;
+                    })(),
                   }),
                 });
 
