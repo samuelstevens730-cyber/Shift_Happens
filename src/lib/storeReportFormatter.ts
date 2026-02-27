@@ -66,10 +66,11 @@ export function formatStoreReport(
       lines.push("  Payment Split: N/A \u2014 no safe closeout data for this period");
     }
     if (s.depositVarianceCents != null) {
-      const sign = s.depositVarianceCents >= 0 ? "+" : "";
+      const sign =
+        s.depositVarianceCents > 0 ? "+" :
+        s.depositVarianceCents < 0 ? "-" : "";
       lines.push(
-        `  Deposit Variance (Shrink): ${sign}${d(Math.abs(s.depositVarianceCents))} ` +
-        `(${sign}${s.depositVarianceCents} cents)`
+        `  Deposit Variance (Shrink): ${sign}${d(Math.abs(s.depositVarianceCents))}`
       );
     } else {
       lines.push("  Deposit Variance: N/A \u2014 no safe closeout data for this period");

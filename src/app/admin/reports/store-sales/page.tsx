@@ -132,11 +132,8 @@ function BlockB({ s }: { s: StorePeriodSummary }) {
                     : "text-zinc-300"
                 }`}
               >
-                {s.depositVarianceCents >= 0 ? "+" : ""}
+                {s.depositVarianceCents < 0 ? "-" : s.depositVarianceCents > 0 ? "+" : ""}
                 {d(Math.abs(s.depositVarianceCents))}
-                <span className="text-xs text-zinc-500 ml-1">
-                  ({s.depositVarianceCents >= 0 ? "+" : ""}{s.depositVarianceCents} ¢)
-                </span>
               </div>
             </div>
           ) : (

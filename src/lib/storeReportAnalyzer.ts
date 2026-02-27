@@ -110,11 +110,29 @@ function shiftHours(startedAt: string, endedAt: string | null): number {
   return Math.max(0, ms / (1000 * 60 * 60));
 }
 
-/** Gross sales for a business date row: Z − openX + rollover */
+/**
+ * Gross sales for a business date row.
+ *
+ * z_report_cents is the full-day register total (AM + PM combined) because the
+ * Z report is always run at the end of the last shift for that business date.
+ * open_x_report_cents holds AM-only sales (the X report at changeover) and is
+ * NOT set for double-shift days — the old "Z − openX" formula therefore:
+ *   a) excluded all double-shift days (null guard on openX)
+ *   b) returned PM-only sales for days that did have an openX
+ *
+ * Correct logic:
+ *   Primary:  z_report_cents − rollover_from_previous_cents  (full-day gross)
+ *   Fallback: open_x_report_cents  (rollover nights where no Z was run)
+ */
 function grossSalesForDay(row: StoreReportSalesRow): number | null {
-  if (row.z_report_cents == null || row.open_x_report_cents == null) return null;
-  const rollover = row.rollover_from_previous_cents ?? 0;
-  return row.z_report_cents - row.open_x_report_cents + rollover;
+  if (row.z_report_cents != null) {
+    const rolloverAdj = row.rollover_from_previous_cents ?? 0;
+    return row.z_report_cents - rolloverAdj;
+  }
+  if (row.open_x_report_cents != null) {
+    return row.open_x_report_cents;
+  }
+  return null;
 }
 
 /** Total transactions for a day (null if neither column has data) */
