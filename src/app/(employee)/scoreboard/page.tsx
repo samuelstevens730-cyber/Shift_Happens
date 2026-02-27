@@ -243,6 +243,12 @@ export default function EmployeeScoreboardPage() {
                       Score: <b>{row.score.toFixed(1)}</b>
                     </div>
                     <div className={`text-sm font-semibold ${gradeTone(row.grade)}`}>Grade: {row.grade}</div>
+                    <Link
+                      href={`/dashboard/scoreboard/shifts?profileId=${row.profileId}&from=${from}&to=${to}&storeId=${storeId}`}
+                      className="mt-2 text-xs text-sky-400 hover:text-sky-300 block"
+                    >
+                      Shifts ↗
+                    </Link>
                   </div>
                 ))}
               </div>
@@ -303,6 +309,14 @@ export default function EmployeeScoreboardPage() {
                         ))}
                       </tbody>
                     </table>
+                  </div>
+                  <div className="mt-3 flex justify-end">
+                    <Link
+                      href={`/scoreboard/shifts?from=${from}&to=${to}&storeId=${storeId}`}
+                      className="btn-secondary px-3 py-1.5 text-sm"
+                    >
+                      View Shift Breakdown →
+                    </Link>
                   </div>
                 </div>
               )}
