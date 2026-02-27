@@ -29,6 +29,7 @@ export interface StoreReportSalesRow {
   store_id: string;
   business_date: string;           // YYYY-MM-DD
   open_x_report_cents: number | null;
+  close_sales_cents: number | null; // PM-only net (z - priorX); most reliable per-shift figure
   z_report_cents: number | null;
   rollover_from_previous_cents: number | null;
   open_transaction_count: number | null;
@@ -111,27 +112,31 @@ function shiftHours(startedAt: string, endedAt: string | null): number {
 }
 
 /**
- * Gross sales for a business date row.
+ * Gross sales for a business date row — fallback for days without a safe closeout.
  *
- * z_report_cents is the full-day register total (AM + PM combined) because the
- * Z report is always run at the end of the last shift for that business date.
- * open_x_report_cents holds AM-only sales (the X report at changeover) and is
- * NOT set for double-shift days — the old "Z − openX" formula therefore:
- *   a) excluded all double-shift days (null guard on openX)
- *   b) returned PM-only sales for days that did have an openX
+ * Mirrors computeShiftSalesCents from salesAnalyzer.ts:
+ *   AM net  = open_x_report_cents − rollover_from_previous_cents
+ *   PM net  = close_sales_cents  (stored by end-shift route as z − priorX)
+ *   Full day = AM + PM
  *
- * Correct logic:
- *   Primary:  z_report_cents − rollover_from_previous_cents  (full-day gross)
- *   Fallback: open_x_report_cents  (rollover nights where no Z was run)
+ * This avoids the LV2 rollover double-count: Z − rollover incorrectly strips
+ * the post-10 PM carry-over sales from the day they were actually made.
+ *
+ * Note: analyzeStoreData uses safe_closeouts.cash + card as the primary source
+ * (same as the admin dashboard). This function is only called for days that have
+ * no matching safe closeout record.
  */
 function grossSalesForDay(row: StoreReportSalesRow): number | null {
-  if (row.z_report_cents != null) {
-    const rolloverAdj = row.rollover_from_previous_cents ?? 0;
-    return row.z_report_cents - rolloverAdj;
-  }
-  if (row.open_x_report_cents != null) {
-    return row.open_x_report_cents;
-  }
+  const rollover = row.rollover_from_previous_cents ?? 0;
+  const pmSales  = row.close_sales_cents;
+  const amSales  = row.open_x_report_cents != null
+    ? row.open_x_report_cents - rollover
+    : null;
+  if (amSales != null && pmSales != null) return amSales + pmSales;
+  if (pmSales != null) return pmSales;
+  if (amSales != null) return amSales;
+  // Last resort: raw Z minus rollover (single-shift days with no openX/closeSales)
+  if (row.z_report_cents != null) return row.z_report_cents - rollover;
   return null;
 }
 
@@ -176,18 +181,39 @@ export function analyzeStoreData(
 
     // ── Block A ───────────────────────────────────────────────────────────────
 
-    // Gross sales: sum across all days with complete data
+    // Build a per-date gross sales map from safe closeouts — the same source the
+    // admin dashboard uses (cash_sales_cents + card_sales_cents). This sidesteps
+    // all rollover accounting complexity in daily_sales_records.
+    const closeoutSalesByDate = new Map<string, number>();
+    for (const c of storeCloseouts) {
+      closeoutSalesByDate.set(
+        c.business_date,
+        (closeoutSalesByDate.get(c.business_date) ?? 0) + c.cash_sales_cents + c.card_sales_cents,
+      );
+    }
+
+    // Gross sales — primary: safe_closeouts total (matches dashboard + spreadsheet).
+    // Fallback for days that have no safe closeout: daily_sales_records formula.
     let grossSalesCents: number | null = null;
     let totalTransactions: number | null = null;
 
+    // Sum all closeout-backed days first.
+    for (const daySales of closeoutSalesByDate.values()) {
+      grossSalesCents = (grossSalesCents ?? 0) + daySales;
+    }
+
+    // Iterate daily_sales_records: always collect transactions;
+    // add sales only for days not already covered by a closeout.
     for (const row of storeSales) {
-      const daySales = grossSalesForDay(row);
-      if (daySales != null) {
-        grossSalesCents = (grossSalesCents ?? 0) + daySales;
-      }
       const dayTxn = transactionsForDay(row);
       if (dayTxn != null) {
         totalTransactions = (totalTransactions ?? 0) + dayTxn;
+      }
+      if (!closeoutSalesByDate.has(row.business_date)) {
+        const daySales = grossSalesForDay(row);
+        if (daySales != null) {
+          grossSalesCents = (grossSalesCents ?? 0) + daySales;
+        }
       }
     }
 
@@ -291,7 +317,7 @@ export function analyzeStoreData(
     const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
     for (const row of storeSales) {
-      const sales = grossSalesForDay(row);
+      const sales = closeoutSalesByDate.get(row.business_date) ?? grossSalesForDay(row);
       if (sales == null) continue;
       // Day of week from business_date (YYYY-MM-DD)
       const [y, m, d] = row.business_date.split("-").map(Number);
@@ -311,7 +337,7 @@ export function analyzeStoreData(
       if (!s.ended_at) continue;
       const dateKey = s.planned_start_at.slice(0, 10);
       const salesRow = storeSales.find((r) => r.business_date === dateKey);
-      const sales = salesRow ? grossSalesForDay(salesRow) : null;
+      const sales = closeoutSalesByDate.get(dateKey) ?? (salesRow ? grossSalesForDay(salesRow) : null);
       if (sales == null) continue;
       const txn = salesRow ? transactionsForDay(salesRow) : null;
 
