@@ -1781,6 +1781,7 @@ function ClockOutModal({
   const [rolloverSaving, setRolloverSaving] = useState(false);
   const [rolloverErr, setRolloverErr] = useState<string | null>(null);
   const [rolloverMismatchNeedsConfirm, setRolloverMismatchNeedsConfirm] = useState(false);
+  const [openTransactionCount, setOpenTransactionCount] = useState("");
   const [closeTransactionCount, setCloseTransactionCount] = useState("");
 
   const storeKey = toStoreKey(storeName);
@@ -2043,6 +2044,14 @@ function ClockOutModal({
                   onChange={e => setSalesXReport(e.target.value)}
                   placeholder="0.00"
                 />
+                <label className="text-sm">Transaction count <span className="text-gray-500">(# of sales rung — optional)</span></label>
+                <input
+                  className="w-full border rounded p-2"
+                  inputMode="numeric"
+                  value={openTransactionCount}
+                  onChange={e => setOpenTransactionCount(e.target.value)}
+                  placeholder="e.g. 42"
+                />
               </>
             )}
 
@@ -2186,6 +2195,10 @@ function ClockOutModal({
                     confirmed: outOfThreshold ? confirm : false,
                     notifiedManager: (outOfThreshold || changeNot200) ? notify : false,
                     note: note || null,
+                    openTransactionCount: (() => {
+                      const v = openTransactionCount.trim();
+                      return v !== "" && /^\d+$/.test(v) && Number(v) > 0 ? Number(v) : null;
+                    })(),
                     closeTransactionCount: (() => {
                       const v = closeTransactionCount.trim();
                       return v !== "" && /^\d+$/.test(v) && Number(v) > 0 ? Number(v) : null;

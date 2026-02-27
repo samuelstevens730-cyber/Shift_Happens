@@ -53,6 +53,8 @@ type Body = {
   notifiedManager?: boolean;
   note?: string | null;
   manualClose?: boolean;
+  /** Transactions rung in the AM/open half (open shift). 0 = not captured. */
+  openTransactionCount?: number | null;
   /** Transactions rung in the PM half (close/double). 0 = not captured. */
   closeTransactionCount?: number | null;
 };
@@ -363,6 +365,15 @@ export async function POST(req: Request) {
         }
 
         const xReportCents = Math.round(body.salesXReportCents ?? 0);
+
+        // Zero-contamination guard: treat 0 as "not captured" (same as null).
+        const openTxnCount =
+          typeof body.openTransactionCount === "number" &&
+          Number.isInteger(body.openTransactionCount) &&
+          body.openTransactionCount > 0
+            ? body.openTransactionCount
+            : null;
+
         const { data: dailyUpsert, error: dailyErr } = await supabaseServer
           .from("daily_sales_records")
           .upsert(
@@ -371,6 +382,7 @@ export async function POST(req: Request) {
               business_date: businessDate,
               open_shift_id: shift.id,
               open_x_report_cents: xReportCents,
+              ...(openTxnCount != null ? { open_transaction_count: openTxnCount } : {}),
             },
             { onConflict: "store_id,business_date" }
           )
