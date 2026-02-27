@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import type { ShiftBreakdownResponse, ShiftScoreRow } from "@/types/shiftScoreRow";
@@ -125,7 +125,7 @@ function SortHeader({
   );
 }
 
-export default function ShiftBreakdownPage() {
+function ShiftBreakdownPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -444,5 +444,13 @@ export default function ShiftBreakdownPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ShiftBreakdownPageWrapper() {
+  return (
+    <Suspense>
+      <ShiftBreakdownPage />
+    </Suspense>
   );
 }
