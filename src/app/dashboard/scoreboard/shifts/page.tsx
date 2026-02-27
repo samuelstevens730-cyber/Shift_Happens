@@ -110,6 +110,7 @@ function AdminShiftBreakdownPage() {
   const searchParams = useSearchParams();
 
   const profileId = searchParams.get("profileId") ?? "";
+  const source = searchParams.get("source") === "admin" ? "admin" : "employee";
   const defaultFrom = cstDateKey(addDays(new Date(), -29));
   const defaultTo = cstDateKey(new Date());
 
@@ -153,7 +154,11 @@ function AdminShiftBreakdownPage() {
         } = await supabase.auth.getSession();
         const token = session?.access_token ?? "";
         if (!token) {
-          router.replace("/login?next=/dashboard/scoreboard/shifts");
+          router.replace(
+            source === "admin"
+              ? `/login?next=${encodeURIComponent(`/dashboard/scoreboard/shifts?source=admin&profileId=${profileId}&from=${from}&to=${to}&storeId=${storeId}`)}`
+              : "/login?next=/dashboard/scoreboard/shifts"
+          );
           return;
         }
         const qs = new URLSearchParams({ profileId, from, to, storeId });
@@ -174,7 +179,7 @@ function AdminShiftBreakdownPage() {
     return () => {
       alive = false;
     };
-  }, [profileId, from, to, storeId, router]);
+  }, [profileId, from, to, storeId, source, router]);
 
   const sortedRows = data ? sortRows(data.rows, sortKey, sortDir) : [];
   const workedCount = data?.rows.filter((r) => r.attended).length ?? 0;
@@ -195,8 +200,15 @@ function AdminShiftBreakdownPage() {
               <span className="ml-2 text-lg font-normal text-zinc-400">— {data.employeeName}</span>
             )}
           </h1>
-          <Link href="/scoreboard" className="btn-secondary px-3 py-1.5 text-sm">
-            ← Back to Scoreboard
+          <Link
+            href={
+              source === "admin"
+                ? `/admin/employee-scoreboard?from=${from}&to=${to}&storeId=${storeId}`
+                : `/scoreboard?from=${from}&to=${to}&storeId=${storeId}`
+            }
+            className="btn-secondary px-3 py-1.5 text-sm"
+          >
+            {source === "admin" ? "Back to Admin Scoreboard" : "Back to Scoreboard"}
           </Link>
         </div>
 

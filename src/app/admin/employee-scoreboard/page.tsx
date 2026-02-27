@@ -195,7 +195,12 @@ export default function AdminEmployeeScoreboardPage() {
                   <tr key={row.profileId} className="border-b border-white/5 align-top">
                     <td className="py-2 pr-3">{index + 1}</td>
                     <td className="py-2 pr-3">
-                      <div className="font-medium">{row.employeeName ?? "Unknown"}</div>
+                      <Link
+                        href={`/dashboard/scoreboard/shifts?source=admin&profileId=${row.profileId}&from=${from}&to=${to}&storeId=${storeId}`}
+                        className="font-medium underline-offset-2 hover:underline"
+                      >
+                        {row.employeeName ?? "Unknown"}
+                      </Link>
                       {!row.ranked && (
                         <div className="text-xs text-amber-300">
                           Provisional (needs {data?.minShiftsForRanking ?? 8}+ shifts)
