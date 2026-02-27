@@ -34,6 +34,8 @@ type Store = {
   payroll_variance_warn_hours: number;
   payroll_shift_drift_warn_hours: number;
   sales_rollover_enabled: boolean;
+  latitude: number | null;
+  longitude: number | null;
 };
 type ChecklistItem = {
   id?: string;
@@ -77,6 +79,21 @@ export default function AdminSettingsPage() {
   const [activeShift, setActiveShift] = useState<"open" | "close">("open");
   const [savingStore, setSavingStore] = useState(false);
   const [savingChecklist, setSavingChecklist] = useState(false);
+  const [locationDraft, setLocationDraft] = useState<Record<string, { lat: string; lon: string }>>({});
+  const [savingLocation, setSavingLocation] = useState<Record<string, boolean>>({});
+
+  // ── Historical weather backfill ──────────────────────────────────────────
+  const [backfillDays, setBackfillDays] = useState<string>("30");
+  const [runningBackfill, setRunningBackfill] = useState(false);
+  const [backfillProgress, setBackfillProgress] = useState<{
+    processed: number;
+    updated: number;
+    failed: number;
+    callsUsed: number;
+    total: number;
+    done: boolean;
+    capped: boolean;
+  } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -123,6 +140,16 @@ export default function AdminSettingsPage() {
     setStores(nextStores);
     const selectedStoreId = json.storeId ?? "";
     setStoreId(selectedStoreId);
+
+    // Initialise location draft from freshly-loaded store coordinates
+    const locDraft: Record<string, { lat: string; lon: string }> = {};
+    for (const s of nextStores) {
+      locDraft[s.id] = {
+        lat: s.latitude != null ? String(s.latitude) : "",
+        lon: s.longitude != null ? String(s.longitude) : "",
+      };
+    }
+    setLocationDraft(locDraft);
 
     const expected = nextStores.find(s => s.id === selectedStoreId)?.expected_drawer_cents ?? 0;
     const selectedStore = nextStores.find(s => s.id === selectedStoreId);
@@ -283,6 +310,131 @@ export default function AdminSettingsPage() {
     }
   }
 
+  async function saveLocation(sId: string) {
+    setSavingLocation(prev => ({ ...prev, [sId]: true }));
+    setError(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || "";
+      if (!token) {
+        router.replace("/login?next=/admin/settings");
+        return;
+      }
+
+      const draft = locationDraft[sId];
+      const lat = Number(draft?.lat);
+      const lon = Number(draft?.lon);
+
+      if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
+        setError("Latitude must be a number between -90 and 90.");
+        return;
+      }
+      if (!Number.isFinite(lon) || lon < -180 || lon > 180) {
+        setError("Longitude must be a number between -180 and 180.");
+        return;
+      }
+
+      const res = await fetch(`/api/admin/stores/${sId}/location`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ latitude: lat, longitude: lon }),
+      });
+      const json = (await res.json()) as SimpleResponse;
+      if (!res.ok || "error" in json) {
+        setError("error" in json ? json.error : "Failed to update location.");
+        return;
+      }
+
+      await loadSettings(storeId);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to update location.");
+    } finally {
+      setSavingLocation(prev => ({ ...prev, [sId]: false }));
+    }
+  }
+
+  async function runBackfill() {
+    const days = Math.min(90, Math.max(1, parseInt(backfillDays, 10) || 30));
+    setRunningBackfill(true);
+    setBackfillProgress(null);
+    setError(null);
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token || "";
+    if (!token) {
+      router.replace("/login?next=/admin/settings");
+      setRunningBackfill(false);
+      return;
+    }
+
+    let offset = 0;
+    let totalProcessed = 0;
+    let totalUpdated = 0;
+    let totalFailed = 0;
+    let totalCallsUsed = 0;
+    let done = false;
+    let capped = false;
+
+    try {
+      while (!done && !capped) {
+        const res = await fetch("/api/admin/backfill-weather", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ daysBack: days, offset, callsUsedSoFar: totalCallsUsed }),
+        });
+
+        const batch = (await res.json()) as {
+          processed: number;
+          updated: number;
+          failed: number;
+          callsUsed: number;
+          total: number;
+          done: boolean;
+          nextOffset: number;
+          capped: boolean;
+          error?: string;
+        };
+
+        if (!res.ok || batch.error) {
+          setError(batch.error ?? "Backfill failed.");
+          break;
+        }
+
+        totalProcessed += batch.processed;
+        totalUpdated   += batch.updated;
+        totalFailed    += batch.failed;
+        totalCallsUsed += batch.callsUsed;
+        done   = batch.done;
+        capped = batch.capped;
+        offset = batch.nextOffset;
+
+        setBackfillProgress({
+          processed:  totalProcessed,
+          updated:    totalUpdated,
+          failed:     totalFailed,
+          callsUsed:  totalCallsUsed,
+          total:      batch.total,
+          done,
+          capped,
+        });
+
+        // Safety: if the route returns 0 processed and not done, something is
+        // wrong — break to avoid an infinite loop.
+        if (batch.processed === 0 && !batch.done && !batch.capped) break;
+      }
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Backfill failed.");
+    } finally {
+      setRunningBackfill(false);
+    }
+  }
+
   if (loading) return <div className="app-shell">Loading...</div>;
   if (!isAuthed) return null;
 
@@ -361,6 +513,144 @@ export default function AdminSettingsPage() {
           >
             {savingStore ? "Saving..." : "Save Store Settings"}
           </button>
+        </div>
+
+        {/* Historical Weather Backfill ─────────────────────────────────────── */}
+        <div className="card card-pad space-y-4">
+          <div>
+            <div className="text-lg font-medium">Historical Weather Backfill</div>
+            <p className="mt-1 text-sm muted">
+              One-time backfill of weather data for past shifts. Makes one OWM call per store per day
+              (noon UTC), then stamps every shift on that day with the same condition and temperature.
+              Requires OWM One Call API 3.0 subscription. Capped at 800 API calls per run.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-2">
+              <label className="text-sm muted">Days back (1–90)</label>
+              <input
+                className="input w-32"
+                type="number"
+                min={1}
+                max={90}
+                value={backfillDays}
+                onChange={e => setBackfillDays(e.target.value)}
+                disabled={runningBackfill}
+              />
+            </div>
+            <button
+              className="btn-primary px-4 py-2 disabled:opacity-50"
+              onClick={() => void runBackfill()}
+              disabled={runningBackfill}
+            >
+              {runningBackfill ? "Running..." : "Run Backfill"}
+            </button>
+          </div>
+
+          {/* Live progress */}
+          {(runningBackfill || backfillProgress) && (
+            <div className="rounded border border-[var(--cardBorder)] p-3 space-y-2 text-sm">
+              {backfillProgress && (
+                <>
+                  {/* Progress bar */}
+                  {backfillProgress.total > 0 && (
+                    <div className="w-full rounded-full bg-[var(--cardBorder)] h-2">
+                      <div
+                        className="h-2 rounded-full bg-[var(--accent)]"
+                        style={{
+                          width: `${Math.min(100, Math.round((backfillProgress.processed / backfillProgress.total) * 100))}%`,
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-4 text-xs muted font-mono">
+                    <span>
+                      {backfillProgress.processed} / {backfillProgress.total} day-groups
+                    </span>
+                    <span>{backfillProgress.updated} shifts updated</span>
+                    {backfillProgress.failed > 0 && (
+                      <span className="text-amber-500">{backfillProgress.failed} skipped</span>
+                    )}
+                    <span>{backfillProgress.callsUsed} OWM calls used</span>
+                  </div>
+
+                  {backfillProgress.done && !backfillProgress.capped && (
+                    <div className="banner banner-success text-sm">
+                      Backfill complete — {backfillProgress.updated} shifts updated across{" "}
+                      {backfillProgress.total} day-groups using {backfillProgress.callsUsed} OWM calls.
+                    </div>
+                  )}
+                  {backfillProgress.capped && (
+                    <div className="banner banner-warn text-sm">
+                      Stopped at 800-call daily cap. Re-run tomorrow to continue from where it left off.
+                    </div>
+                  )}
+                </>
+              )}
+              {runningBackfill && !backfillProgress && (
+                <span className="text-xs muted">Scanning shifts...</span>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Store Locations — GPS coordinates for weather capture at clock-in/out */}
+        <div className="card card-pad space-y-4">
+          <div>
+            <div className="text-lg font-medium">Store Locations</div>
+            <p className="mt-1 text-sm muted">
+              GPS coordinates used for weather data at clock-in and clock-out.
+            </p>
+          </div>
+          {stores.map(s => (
+            <div key={s.id} className="space-y-3 rounded border border-[var(--cardBorder)] p-3">
+              <div className="text-sm font-medium">{s.name}</div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <label className="text-sm muted">Latitude</label>
+                  <input
+                    className="input"
+                    inputMode="decimal"
+                    placeholder="e.g. 32.529184"
+                    value={locationDraft[s.id]?.lat ?? ""}
+                    onChange={e =>
+                      setLocationDraft(prev => ({
+                        ...prev,
+                        [s.id]: { ...prev[s.id], lat: e.target.value },
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm muted">Longitude</label>
+                  <input
+                    className="input"
+                    inputMode="decimal"
+                    placeholder="e.g. -94.787952"
+                    value={locationDraft[s.id]?.lon ?? ""}
+                    onChange={e =>
+                      setLocationDraft(prev => ({
+                        ...prev,
+                        [s.id]: { ...prev[s.id], lon: e.target.value },
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+              <button
+                className="btn-primary px-4 py-2 disabled:opacity-50"
+                onClick={() => void saveLocation(s.id)}
+                disabled={savingLocation[s.id] ?? false}
+              >
+                {savingLocation[s.id] ? "Saving..." : "Save Location"}
+              </button>
+            </div>
+          ))}
+          {stores.length === 0 && (
+            <p className="text-sm muted">No stores in scope.</p>
+          )}
         </div>
 
         <div className="card card-pad space-y-4">

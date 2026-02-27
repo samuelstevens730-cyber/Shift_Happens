@@ -356,23 +356,48 @@ function EmployeeCard({
                           </td>
                         </tr>
                       );
-                      // For double shifts with AM/PM data, add a sub-row
+                      // Sub-rows: AM/PM split and/or weather (stacked if both apply)
+                      const subRows: React.ReactNode[] = [];
+
                       const hasAmPm =
                         s.shiftType === "double" &&
                         (s.amRawSalesCents != null || s.pmRawSalesCents != null);
-                      if (!hasAmPm) return [mainRow];
-                      const amStr = s.amRawSalesCents != null ? d(s.amRawSalesCents) : "—";
-                      const pmStr = s.pmRawSalesCents != null ? d(s.pmRawSalesCents) : "—";
-                      const amTxn = s.amTransactionCount != null ? ` · ${s.amTransactionCount} txn` : "";
-                      const pmTxn = s.pmTransactionCount != null ? ` · ${s.pmTransactionCount} txn` : "";
-                      const splitRow = (
-                        <tr key={`${s.shiftId}-split`} className="text-zinc-500 text-[11px]">
-                          <td colSpan={7} className="pb-1 pl-4 italic">
-                            ↳ AM: {amStr}{amTxn} &nbsp;|&nbsp; PM: {pmStr}{pmTxn}
-                          </td>
-                        </tr>
-                      );
-                      return [mainRow, splitRow];
+                      if (hasAmPm) {
+                        const amStr = s.amRawSalesCents != null ? d(s.amRawSalesCents) : "—";
+                        const pmStr = s.pmRawSalesCents != null ? d(s.pmRawSalesCents) : "—";
+                        const amTxn = s.amTransactionCount != null ? ` · ${s.amTransactionCount} txn` : "";
+                        const pmTxn = s.pmTransactionCount != null ? ` · ${s.pmTransactionCount} txn` : "";
+                        subRows.push(
+                          <tr key={`${s.shiftId}-split`} className="text-zinc-500 text-[11px]">
+                            <td colSpan={7} className="pb-0.5 pl-4 italic">
+                              ↳ AM: {amStr}{amTxn} &nbsp;|&nbsp; PM: {pmStr}{pmTxn}
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      if (s.startWeatherCondition != null) {
+                        const startLabel = s.startWeatherDesc ?? s.startWeatherCondition;
+                        const startW = s.startTempF != null
+                          ? `${startLabel} (${s.startTempF}°F)`
+                          : startLabel;
+                        const endLabel = s.endWeatherDesc ?? s.endWeatherCondition;
+                        const endW = endLabel != null
+                          ? s.endTempF != null
+                            ? `${endLabel} (${s.endTempF}°F)`
+                            : endLabel
+                          : null;
+                        subRows.push(
+                          <tr key={`${s.shiftId}-weather`} className="text-zinc-500 text-[11px]">
+                            <td colSpan={7} className="pb-1 pl-4 italic">
+                              ☁ {startW}{endW ? ` → ${endW}` : ""}
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      if (subRows.length === 0) return [mainRow];
+                      return [mainRow, ...subRows];
                     })}
                 </tbody>
               </table>

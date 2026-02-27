@@ -1,0 +1,140 @@
+# Shift Happens WFM - Tighten Up / Finish Checklist
+
+## 0) Ship-blockers (before calling features "complete")
+- [ ] **Add transaction count tracking to clock-out**
+  - [ ] DB: store `transaction_count` on the canonical shift/closeout record
+  - [ ] UI: required integer input on clock-out (sales only; no voids/no-sales/reports)
+  - [ ] Validation: block `sales_total > 0 && transaction_count == 0`
+  - [ ] Reports: compute **basket size** safely (no divide-by-zero; prefer `null` when tx=0)
+  - [ ] Backward compat: old records do not break reports (treat missing/0 as `null`)
+
+## 0.1) In-flight feature: Weather tracking (clock in/out + reporting)
+- [ ] **Weather data model**
+  - [ ] Decide canonical storage level: shift-level snapshot vs day/store-level snapshot
+  - [ ] Define required fields (temp, precipitation, condition, source timestamp, source provider)
+  - [ ] Keep nullable for historical rows and API failure tolerance
+- [ ] **Collection flow**
+  - [ ] Capture weather at clock-in and/or clock-out with deterministic rules
+  - [ ] Add retry and timeout behavior for weather API calls
+  - [ ] Define fallback behavior when weather API is unavailable (do not block critical shift actions)
+- [ ] **Reporting integration**
+  - [ ] Include weather dimensions in store-level performance report
+  - [ ] Ensure weather joins are null-safe and do not drop rows
+  - [ ] Add filters/grouping for weather impact analysis
+
+## 0.2) In-flight feature: Store-level sales/performance report
+- [ ] **Report contract**
+  - [ ] Finalize dimensions: store, date range, shift type, weekday/weekend, weather
+  - [ ] Finalize metrics: raw sales, adjusted sales, transaction count, basket size, labor efficiency
+- [ ] **Security and scope**
+  - [ ] Manager visibility must remain store-scoped
+  - [ ] No cross-store leakage in API responses
+- [ ] **Operational behavior**
+  - [ ] Add pagination/time-window limits to avoid heavy responses
+  - [ ] Define export format and max range guardrails
+  - [ ] Add acceptance criteria and smoke-test scenarios
+
+## 1) Supabase hardening + performance warning burn-down
+
+### 1.1 RLS correctness / exposure
+- [ ] Enable **RLS** on all exposed tables flagged (e.g., `store_rollover_config`)
+- [ ] Add/verify policies are store-scoped + role-correct (employee vs manager)
+- [ ] Quick access audit: confirm no "public table via PostgREST" exposures
+
+### 1.2 RLS performance tuning
+- [ ] Fix policies that re-evaluate `auth.*()` / `current_setting()` per row
+  - [ ] Rewrite to compute auth/context once per statement (subselect caching pattern)
+- [ ] Consolidate multiple permissive policies per table/role/action
+  - [ ] Merge into a single policy where possible (OR logic), or split by actual DB roles
+
+### 1.3 Index hygiene
+- [ ] Add covering indexes for foreign keys missing indexes
+  - [ ] Example: `time_off_requests.reviewed_by`
+- [ ] Audit unused indexes
+  - [ ] Keep if it supports real/rare queries or upcoming features
+  - [ ] Drop if redundant/dead to reduce write overhead
+
+### 1.4 Function security hardening
+- [ ] Fix "role mutable search_path" warnings on functions
+  - [ ] Examples: `enforce_required_drawer_counts`, `enforce_clock_windows`
+  - [ ] Set explicit `search_path` in each function definition
+  - [ ] Double-check `SECURITY DEFINER` functions
+
+## 1.5) Migration safety (production-first)
+- [ ] Preflight before each migration apply:
+  - [ ] `pg_class` (`relrowsecurity`)
+  - [ ] `pg_policies` (existing policy state)
+  - [ ] `information_schema.columns` (exact column names/types)
+- [ ] Apply one migration at a time
+- [ ] Verify `pg_policies` state after each migration
+- [ ] Smoke-test manager + employee flows immediately after each apply
+- [ ] If regression appears, ship a forward-fix migration (never disable RLS globally)
+
+## 1.6) Auth pattern compliance on new endpoints
+- [ ] Admin routes:
+  - [ ] Must use `getBearerToken(req)` + `supabaseServer.auth.getUser(token)`
+  - [ ] Must use `getManagerStoreIds(user.id)`
+  - [ ] Must scope every `supabaseServer` query by manager store IDs
+- [ ] Employee routes:
+  - [ ] Must use `authenticateShiftRequest(req)`
+  - [ ] Must validate store/profile scope before reads/writes
+
+## 2) ClockWindowClient cleanup (surgical, not a refactor abyss)
+**Goal:** make the 1500-line file maintainable without behavior changes.
+- [ ] Add top-of-file "map" comment (sections, flow order, invariants)
+- [ ] Extract 2-5 pure-ish helper modules (no logic changes)
+  - [ ] clock-in validation
+  - [ ] clock-out validation
+  - [ ] closeout submission / payload builder
+  - [ ] sales metrics derivation (tx count + basket size inputs)
+  - [ ] shift context derivation
+- [ ] Keep UI orchestration in ClockWindowClient; move computation/validation out
+- [ ] Add minimal smoke tests for extracted helpers (even basic node tests)
+
+## 3) Reporting stability (scale-aware)
+- [ ] Ensure report queries:
+  - [ ] use pagination / time windows where appropriate
+  - [ ] avoid `SELECT *` on hot paths
+  - [ ] handle `transaction_count` safely in basket-size calc
+  - [ ] handle weather fields safely when null/missing
+- [ ] Note candidates for future rollups/materialized views (only build if pain is real)
+
+## 4) Documentation that future-you will actually use
+- [ ] `README.md`: run from zero, required env vars, deploy notes
+- [ ] `ARCHITECTURE.md` (short but real)
+  - [ ] auth/roles model
+  - [ ] RLS model + "money flow" invariants
+  - [ ] key tables and what they represent
+- [ ] `LOCAL_DEV.md`: plan for local Supabase setup (even if not done yet)
+- [ ] "Operational invariants" list: what must never happen (double closeout, cross-store access, etc.)
+
+## 5) Local Supabase setup (when you are ready, not mid-customer)
+- [ ] Set up local Supabase instance for testing
+- [ ] Run migrations locally
+- [ ] Add seed/minimal fixtures to test core flows
+- [ ] Use for regression testing before risky DB/RLS changes
+
+## 6) Final release hardening pass
+- [ ] Run critical flows end-to-end
+  - [ ] clock-in/out
+  - [ ] closeout (including rollover edge)
+  - [ ] variances review
+  - [ ] schedules + permissions
+  - [ ] time off request lifecycle
+  - [ ] transaction + weather capture paths
+- [ ] Scan logs/errors for regressions
+- [ ] Confirm Supabase warnings are cleared or intentionally accepted
+- [ ] First-24h watch list after deploy:
+  - [ ] clock-out failure rate
+  - [ ] weather API timeout/error rate
+  - [ ] report latency/error rate
+  - [ ] unexpected null spikes in basket size/transaction metrics
+
+## Suggested execution order (fastest path)
+1. Transaction count -> basket size
+2. Weather capture path (non-blocking fallback)
+3. Store-level report ship (scoped + paginated)
+4. Supabase warning batch fixes
+5. ClockWindowClient surgical extraction
+6. Docs
+7. Local Supabase (later)

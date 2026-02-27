@@ -46,8 +46,16 @@ type StoreRow = {
   payroll_variance_warn_hours: number;
   payroll_shift_drift_warn_hours: number;
   sales_rollover_enabled: boolean;
+  latitude: number | null;
+  longitude: number | null;
 };
-type StoreBaseRow = { id: string; name: string; expected_drawer_cents: number };
+type StoreBaseRow = {
+  id: string;
+  name: string;
+  expected_drawer_cents: number;
+  latitude: number | null;
+  longitude: number | null;
+};
 type StoreSettingsRow = {
   store_id: string;
   payroll_variance_warn_hours: number | null;
@@ -172,7 +180,7 @@ export async function GET(req: Request) {
 
     const { data: storesBase, error: storesErr } = await supabaseServer
       .from("stores")
-      .select("id, name, expected_drawer_cents")
+      .select("id, name, expected_drawer_cents, latitude, longitude")
       .in("id", managerStoreIds)
       .order("name", { ascending: true })
       .returns<StoreBaseRow[]>();
@@ -193,6 +201,8 @@ export async function GET(req: Request) {
         payroll_variance_warn_hours: Number(row?.payroll_variance_warn_hours ?? 2),
         payroll_shift_drift_warn_hours: Number(row?.payroll_shift_drift_warn_hours ?? 2),
         sales_rollover_enabled: row?.sales_rollover_enabled ?? true,
+        latitude: s.latitude ?? null,
+        longitude: s.longitude ?? null,
       };
     });
 

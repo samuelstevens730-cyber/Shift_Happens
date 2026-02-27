@@ -22,6 +22,13 @@ export interface RawShiftRow {
   started_at: string;
   ended_at: string | null;
   last_action: string | null;
+  // Weather snapshot captured at clock-in/out. NULL for historical shifts.
+  start_weather_condition: string | null;
+  start_weather_desc:      string | null;
+  start_temp_f: number | null;
+  end_weather_condition: string | null;
+  end_weather_desc:      string | null;
+  end_temp_f: number | null;
 }
 
 export interface SalesRecordRow {
@@ -75,6 +82,13 @@ export interface ShiftSummary {
   pmRawSalesCents:    number | null;
   amTransactionCount: number | null;  // open_transaction_count (AM half)
   pmTransactionCount: number | null;  // close_transaction_count (PM half)
+  // Weather at clock-in and clock-out. NULL for historical shifts.
+  startWeatherCondition: string | null;
+  startWeatherDesc:      string | null;
+  startTempF: number | null;
+  endWeatherCondition: string | null;
+  endWeatherDesc:      string | null;
+  endTempF: number | null;
 }
 
 export interface ShiftTypeBreakdown {
@@ -317,6 +331,13 @@ export function analyzeEmployeeSales(
     pmRawSalesCents:    number | null;
     amTransactionCount: number | null;
     pmTransactionCount: number | null;
+    // Weather snapshot from OWM at clock-in/out. NULL for historical shifts.
+    startWeatherCondition: string | null;
+    startWeatherDesc:      string | null;
+    startTempF:            number | null;
+    endWeatherCondition:   string | null;
+    endWeatherDesc:        string | null;
+    endTempF:              number | null;
   }
 
   const intermediate: IntermediateShift[] = shifts.map((shift) => {
@@ -403,6 +424,12 @@ export function analyzeEmployeeSales(
       pmRawSalesCents,
       amTransactionCount,
       pmTransactionCount,
+      startWeatherCondition: shift.start_weather_condition,
+      startWeatherDesc:      shift.start_weather_desc,
+      startTempF:            shift.start_temp_f,
+      endWeatherCondition:   shift.end_weather_condition,
+      endWeatherDesc:        shift.end_weather_desc,
+      endTempF:              shift.end_temp_f,
     };
   });
 
@@ -503,6 +530,12 @@ export function analyzeEmployeeSales(
         pmRawSalesCents: s.pmRawSalesCents,
         amTransactionCount: s.amTransactionCount,
         pmTransactionCount: s.pmTransactionCount,
+        startWeatherCondition: s.startWeatherCondition,
+        startWeatherDesc:      s.startWeatherDesc,
+        startTempF:            s.startTempF,
+        endWeatherCondition:   s.endWeatherCondition,
+        endWeatherDesc:        s.endWeatherDesc,
+        endTempF:              s.endTempF,
       };
     });
 

@@ -38,6 +38,7 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { isOutOfThreshold, ShiftType } from "@/lib/kioskRules";
 import { authenticateShiftRequest } from "@/lib/shiftAuth";
+import { fetchCurrentWeather } from "@/lib/weatherClient";
 
 type Body = {
   qrToken?: string;
@@ -156,7 +157,7 @@ export async function POST(req: Request) {
 
     const { data: shift, error: shiftErr } = await supabaseServer
       .from("shifts")
-      .select("id, store_id, profile_id, shift_type, planned_start_at, ended_at, started_at, schedule_shift_id, shift_source, requires_override")
+      .select("id, store_id, profile_id, shift_type, planned_start_at, ended_at, started_at, schedule_shift_id, shift_source, requires_override, start_weather_condition, start_weather_desc, start_temp_f")
       .eq("id", body.shiftId)
       .maybeSingle();
 
@@ -172,12 +173,12 @@ export async function POST(req: Request) {
       );
     }
 
-    let store: { id: string; name: string; expected_drawer_cents: number } | null = null;
+    let store: { id: string; name: string; expected_drawer_cents: number; latitude: number | null; longitude: number | null } | null = null;
 
     if (body.qrToken) {
       const { data: storeByToken } = await supabaseServer
         .from("stores")
-        .select("id, name, expected_drawer_cents")
+        .select("id, name, expected_drawer_cents, latitude, longitude")
         .eq("qr_token", body.qrToken)
         .maybeSingle();
       if (!storeByToken) return NextResponse.json({ error: "Invalid QR token." }, { status: 401 });
@@ -186,7 +187,7 @@ export async function POST(req: Request) {
     } else {
       const { data: storeById } = await supabaseServer
         .from("stores")
-        .select("id, name, expected_drawer_cents")
+        .select("id, name, expected_drawer_cents, latitude, longitude")
         .eq("id", shift.store_id)
         .maybeSingle();
       if (!storeById) return NextResponse.json({ error: "Store not found." }, { status: 404 });
@@ -624,6 +625,40 @@ export async function POST(req: Request) {
         );
       }
       return NextResponse.json({ error: endShiftErr.message }, { status: 500 });
+    }
+
+    // 4) Capture end weather — non-fatal; never delays or blocks clock-out response.
+    //    Fail-safe: if the OWM call fails but we have start weather, copy it to end columns
+    //    so the shift still has usable weather context.
+    if (store.latitude != null && store.longitude != null) {
+      fetchCurrentWeather(store.latitude, store.longitude)
+        .then(async (snap) => {
+          if (snap) {
+            await supabaseServer
+              .from("shifts")
+              .update({
+                end_weather_condition: snap.condition,
+                end_weather_desc:      snap.description,
+                end_temp_f:            snap.tempF,
+              })
+              .eq("id", body.shiftId);
+          } else if (shift.start_weather_condition != null) {
+            // Fail-safe: copy start weather to end columns
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const startDesc = (shift as any).start_weather_desc as string | null ?? null;
+            await supabaseServer
+              .from("shifts")
+              .update({
+                end_weather_condition: shift.start_weather_condition,
+                end_weather_desc:      startDesc,
+                end_temp_f:            shift.start_temp_f ?? null,
+              })
+              .eq("id", body.shiftId);
+          }
+        })
+        .catch((err) => {
+          console.warn("[end-shift] Weather capture failed (non-fatal):", err);
+        });
     }
 
     return NextResponse.json({

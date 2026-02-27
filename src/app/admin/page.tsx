@@ -209,6 +209,17 @@ export default function AdminIndex() {
             </p>
           </Link>
 
+          {/* Store Report - cross-store period sales, RPLH, cash flow, and weather context */}
+          <Link href="/admin/reports/store-sales" className="tile">
+            <div className="flex items-center gap-2">
+              <span className="tile-dot" />
+              <div className="text-lg font-medium">Store Report</div>
+            </div>
+            <p className="mt-2 text-sm muted">
+              Period sales, RPLH, cash flow, and weather context by store.
+            </p>
+          </Link>
+
           {/* Manual Shift Closures - review employee-ended shifts */}
           <Link href="/admin/shifts?review=manual" className="tile">
             <div className="flex items-center gap-2">

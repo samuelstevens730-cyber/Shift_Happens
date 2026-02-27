@@ -244,6 +244,21 @@ export function formatPerformanceReport(
             const pmPart = [pmStr, pmTxn].filter(Boolean).join(" / ");
             lines.push(`              ↳ AM: ${amPart}  PM: ${pmPart}`);
           }
+          // Weather sub-line (only when start weather was captured)
+          if (s.startWeatherCondition != null) {
+            const startLabel = s.startWeatherDesc ?? s.startWeatherCondition;
+            const startW = s.startTempF != null
+              ? `${startLabel} (${s.startTempF}°F)`
+              : startLabel;
+            const endLabel = s.endWeatherDesc ?? s.endWeatherCondition;
+            const endW = endLabel != null
+              ? s.endTempF != null
+                ? `${endLabel} (${s.endTempF}°F)`
+                : endLabel
+              : null;
+            const weatherLine = endW ? `${startW} → ${endW}` : startW;
+            lines.push(`              ↳ Weather: ${weatherLine}`);
+          }
         }
       }
     }

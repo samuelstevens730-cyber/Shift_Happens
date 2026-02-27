@@ -125,7 +125,7 @@ export async function GET(req: Request) {
     // Build shift query (optionally filtered to a single employee)
     let shiftsQuery = supabaseServer
       .from("shifts")
-      .select("id,store_id,profile_id,shift_type,planned_start_at,started_at,ended_at,last_action")
+      .select("id,store_id,profile_id,shift_type,planned_start_at,started_at,ended_at,last_action,start_weather_condition,start_weather_desc,start_temp_f,end_weather_condition,end_weather_desc,end_temp_f")
       .in("store_id", activeStoreIds)
       .gte("started_at", `${from}T00:00:00.000Z`)
       .lte("started_at", `${to}T23:59:59.999Z`)
@@ -178,7 +178,7 @@ export async function GET(req: Request) {
     if (needBenchmarkFetch) {
       const benchmarkShiftsRes = await supabaseServer
         .from("shifts")
-        .select("id,store_id,profile_id,shift_type,planned_start_at,started_at,ended_at,last_action")
+        .select("id,store_id,profile_id,shift_type,planned_start_at,started_at,ended_at,last_action,start_weather_condition,start_weather_desc,start_temp_f,end_weather_condition,end_weather_desc,end_temp_f")
         .in("store_id", activeStoreIds)
         .in("profile_id", benchmarkEmployeeIds)
         .gte("started_at", `${from}T00:00:00.000Z`)

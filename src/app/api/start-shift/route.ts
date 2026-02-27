@@ -41,6 +41,7 @@ import { supabaseServer } from "@/lib/supabaseServer";
 import { isOutOfThreshold, roundTo30Minutes, ShiftType } from "@/lib/kioskRules";
 import { getCstDowMinutes } from "@/lib/clockWindows";
 import { authenticateShiftRequest, validateProfileAccess } from "@/lib/shiftAuth";
+import { fetchCurrentWeather } from "@/lib/weatherClient";
 
 type Body = {
   qrToken?: string;
@@ -124,7 +125,7 @@ export async function POST(req: Request) {
     // 1) Resolve store by QR token or storeId
     const storeQuery = supabaseServer
       .from("stores")
-      .select("id, name, expected_drawer_cents");
+      .select("id, name, expected_drawer_cents, latitude, longitude");
 
     const { data: store, error: storeErr } = body.qrToken
       ? await storeQuery.eq("qr_token", body.qrToken).maybeSingle()
@@ -377,6 +378,25 @@ export async function POST(req: Request) {
         await supabaseServer.from("shifts").delete().eq("id", shift.id);
         return NextResponse.json({ error: sdcErr.message }, { status: 500 });
       }
+    }
+
+    // 9) Capture start weather — non-fatal; never delays or blocks clock-in response.
+    if (store.latitude != null && store.longitude != null) {
+      fetchCurrentWeather(store.latitude, store.longitude)
+        .then(async (snap) => {
+          if (!snap) return;
+          await supabaseServer
+            .from("shifts")
+            .update({
+              start_weather_condition: snap.condition,
+              start_weather_desc:      snap.description,
+              start_temp_f:            snap.tempF,
+            })
+            .eq("id", shift!.id);
+        })
+        .catch((err) => {
+          console.warn("[start-shift] Weather capture failed (non-fatal):", err);
+        });
     }
 
     return NextResponse.json({ shiftId: shift.id, reused: false, shiftType: resolvedShiftType });

@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find \"C:\\\\Users\\\\samue\\\\Desktop\\\\Shift_Happens\\\\Shift_Happens_08-12-2025/src/app/sql\" -name \"*.sql\" -type f -exec basename {} ;)",
+      "Bash(grep -l \"stores\" src/app/sql/*.sql)",
+      "Bash(grep -n \"schedule_shift_id\\\\|shift_source\" src/app/sql/01_schema.sql src/app/sql/*.sql)",
+      "Bash(grep -n \"SUPABASE\\\\|_KEY\\\\|_URL\" src/lib/*.ts .env.local)",
+      "Bash(grep -A 20 \"CREATE TABLE.*stores\" src/app/sql/*.sql)"
+    ]
+  }
+}
