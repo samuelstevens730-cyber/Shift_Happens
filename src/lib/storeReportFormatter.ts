@@ -9,6 +9,15 @@ function formatMetric(metric: PerformerMetric | null, valueFormatter: (value: nu
   return `${metric.employeeName} - ${valueFormatter(metric.value)} (${metric.shifts} shifts)`;
 }
 
+function formatDelta(delta: number | null, money = false): string {
+  if (delta == null) return "N/A vs prev";
+  const sign = delta > 0 ? "+" : delta < 0 ? "-" : "";
+  const value = Math.abs(delta);
+  return money
+    ? `${sign}${dollarsFromCents(value)} vs prev`
+    : `${sign}${value.toFixed(1)} vs prev`;
+}
+
 function formatDayOfWeekTable(summary: StorePeriodSummary): string[] {
   const lines: string[] = [];
   lines.push("Day-of-Week Averages:");
@@ -66,20 +75,27 @@ export function formatStoreReport(
     lines.push(
       `  Gross Sales (Raw / Adj): ` +
         `${summary.grossSalesCents != null ? dollarsFromCents(summary.grossSalesCents) : "N/A"} / ` +
-        `${summary.adjustedGrossSalesCents != null ? dollarsFromCents(summary.adjustedGrossSalesCents) : "N/A"}`
+        `${summary.adjustedGrossSalesCents != null ? dollarsFromCents(summary.adjustedGrossSalesCents) : "N/A"} ` +
+        `(${formatDelta(summary.previousDeltas.grossSalesCents, true)} raw, ${formatDelta(
+          summary.previousDeltas.adjustedGrossSalesCents,
+          true
+        )} adj)`
     );
     lines.push(
       `  Transactions: ${summary.totalTransactions ?? "N/A"} | ` +
         `Avg Basket (Raw / Adj): ` +
         `${summary.avgBasketSizeCents != null ? dollarsFromCents(summary.avgBasketSizeCents) : "N/A"} / ` +
-        `${summary.adjustedAvgBasketSizeCents != null ? dollarsFromCents(summary.adjustedAvgBasketSizeCents) : "N/A"}`
+        `${summary.adjustedAvgBasketSizeCents != null ? dollarsFromCents(summary.adjustedAvgBasketSizeCents) : "N/A"} ` +
+        `(${formatDelta(summary.previousDeltas.avgBasketSizeCents, true)})`
     );
     lines.push(
       `  Labor Hours: ${summary.totalLaborHours.toFixed(1)}h | ` +
         `RPLH (Raw / Adj): ` +
         `${summary.rplhCents != null ? dollarsFromCents(summary.rplhCents) : "N/A"} / ` +
-        `${summary.adjustedRplhCents != null ? dollarsFromCents(summary.adjustedRplhCents) : "N/A"}`
+        `${summary.adjustedRplhCents != null ? dollarsFromCents(summary.adjustedRplhCents) : "N/A"} ` +
+        `(${formatDelta(summary.previousDeltas.rplhCents, true)})`
     );
+    lines.push(`  Transactions Delta: ${formatDelta(summary.previousDeltas.totalTransactions)}`);
     lines.push(`  Normalization Factor: ${summary.storeScalingFactor.toFixed(1)}x`);
     lines.push("");
 

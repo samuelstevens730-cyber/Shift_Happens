@@ -161,6 +161,14 @@ export interface TopPerformers {
   };
 }
 
+export interface StorePreviousDeltas {
+  grossSalesCents: number | null;
+  adjustedGrossSalesCents: number | null;
+  totalTransactions: number | null;
+  avgBasketSizeCents: number | null;
+  rplhCents: number | null;
+}
+
 export interface VolatilitySummary {
   stdDevDailySalesCents: number | null;
   coefficientOfVariationPct: number | null;
@@ -237,6 +245,7 @@ export interface StorePeriodSummary {
   cashRisk: CashRiskSummary;
   dataIntegrity: DataIntegritySummary;
   topPerformers: TopPerformers;
+  previousDeltas: StorePreviousDeltas;
 }
 
 function cstDateKey(iso: string): string {
@@ -413,7 +422,7 @@ interface ShiftTypeRollup {
   totalLaborHours: number;
 }
 
-export function analyzeStoreData(
+function analyzeStoreDataForWindow(
   shifts: StoreReportShiftRow[],
   salesRecords: StoreReportSalesRow[],
   safeCloseouts: StoreReportSafeCloseoutRow[],
@@ -1203,6 +1212,94 @@ export function analyzeStoreData(
       cashRisk,
       dataIntegrity,
       topPerformers,
+      previousDeltas: {
+        grossSalesCents: null,
+        adjustedGrossSalesCents: null,
+        totalTransactions: null,
+        avgBasketSizeCents: null,
+        rplhCents: null,
+      },
+    };
+  });
+}
+
+function inDateRange(date: string, from: string, to: string): boolean {
+  return date >= from && date <= to;
+}
+
+function cstShiftDate(shift: StoreReportShiftRow): string {
+  return cstDateKey(shift.planned_start_at);
+}
+
+function delta(current: number | null, previous: number | null): number | null {
+  if (current == null || previous == null) return null;
+  return current - previous;
+}
+
+export function analyzeStoreData(
+  shifts: StoreReportShiftRow[],
+  salesRecords: StoreReportSalesRow[],
+  safeCloseouts: StoreReportSafeCloseoutRow[],
+  stores: StoreReportStoreRow[],
+  profiles: StoreReportProfileRow[],
+  periodFrom: string,
+  periodTo: string,
+  previousFrom?: string
+): StorePeriodSummary[] {
+  const currentShifts = shifts.filter((shift) => inDateRange(cstShiftDate(shift), periodFrom, periodTo));
+  const currentSales = salesRecords.filter((row) => inDateRange(row.business_date, periodFrom, periodTo));
+  const currentCloseouts = safeCloseouts.filter((row) => inDateRange(row.business_date, periodFrom, periodTo));
+
+  const currentSummaries = analyzeStoreDataForWindow(
+    currentShifts,
+    currentSales,
+    currentCloseouts,
+    stores,
+    profiles,
+    periodFrom,
+    periodTo
+  );
+
+  if (!previousFrom) return currentSummaries;
+
+  const prevToExclusive = periodFrom;
+  const previousShifts = shifts.filter((shift) => {
+    const date = cstShiftDate(shift);
+    return date >= previousFrom && date < prevToExclusive;
+  });
+  const previousSales = salesRecords.filter(
+    (row) => row.business_date >= previousFrom && row.business_date < prevToExclusive
+  );
+  const previousCloseouts = safeCloseouts.filter(
+    (row) => row.business_date >= previousFrom && row.business_date < prevToExclusive
+  );
+
+  const previousSummaries = analyzeStoreDataForWindow(
+    previousShifts,
+    previousSales,
+    previousCloseouts,
+    stores,
+    profiles,
+    previousFrom,
+    periodFrom
+  );
+
+  const previousByStoreId = new Map(previousSummaries.map((summary) => [summary.storeId, summary]));
+
+  return currentSummaries.map((summary) => {
+    const prev = previousByStoreId.get(summary.storeId);
+    return {
+      ...summary,
+      previousDeltas: {
+        grossSalesCents: delta(summary.grossSalesCents, prev?.grossSalesCents ?? null),
+        adjustedGrossSalesCents: delta(
+          summary.adjustedGrossSalesCents,
+          prev?.adjustedGrossSalesCents ?? null
+        ),
+        totalTransactions: delta(summary.totalTransactions, prev?.totalTransactions ?? null),
+        avgBasketSizeCents: delta(summary.avgBasketSizeCents, prev?.avgBasketSizeCents ?? null),
+        rplhCents: delta(summary.rplhCents, prev?.rplhCents ?? null),
+      },
     };
   });
 }

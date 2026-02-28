@@ -58,6 +58,24 @@ function formatMetric(
   return `${metric.employeeName} - ${formatter(metric.value)} (${metric.shifts} shifts)`;
 }
 
+function DeltaText({
+  delta,
+  money = false,
+}: {
+  delta: number | null;
+  money?: boolean;
+}) {
+  if (delta == null) {
+    return <span className="ml-2 text-xs text-zinc-500">(N/A vs prev)</span>;
+  }
+  const sign = delta > 0 ? "+" : delta < 0 ? "-" : "";
+  const absolute = Math.abs(delta);
+  const formatted = money ? formatCurrencyFromCents(absolute) : absolute.toFixed(1);
+  const color =
+    delta > 0 ? "text-emerald-400" : delta < 0 ? "text-red-400" : "text-zinc-400";
+  return <span className={`ml-2 text-xs ${color}`}>({sign}{formatted} vs prev)</span>;
+}
+
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
@@ -78,17 +96,22 @@ function BlockA({ summary }: { summary: StorePeriodSummary }) {
           <p className="text-zinc-500">Gross Sales (Raw)</p>
           <p className="text-lg font-semibold">
             {summary.grossSalesCents != null ? formatCurrencyFromCents(summary.grossSalesCents) : "N/A"}
+            <DeltaText delta={summary.previousDeltas.grossSalesCents} money />
           </p>
         </div>
         <div>
           <p className="text-zinc-500">Gross Sales (Adjusted)</p>
           <p className="text-lg font-semibold">
             {summary.adjustedGrossSalesCents != null ? formatCurrencyFromCents(summary.adjustedGrossSalesCents) : "N/A"}
+            <DeltaText delta={summary.previousDeltas.adjustedGrossSalesCents} money />
           </p>
         </div>
         <div>
           <p className="text-zinc-500">Transactions</p>
-          <p className="font-medium">{summary.totalTransactions ?? "N/A"}</p>
+          <p className="font-medium">
+            {summary.totalTransactions ?? "N/A"}
+            <DeltaText delta={summary.previousDeltas.totalTransactions} />
+          </p>
         </div>
         <div>
           <p className="text-zinc-500">Avg Basket (Raw / Adj)</p>
@@ -98,6 +121,7 @@ function BlockA({ summary }: { summary: StorePeriodSummary }) {
             {summary.adjustedAvgBasketSizeCents != null
               ? formatCurrencyFromCents(summary.adjustedAvgBasketSizeCents)
               : "N/A"}
+            <DeltaText delta={summary.previousDeltas.avgBasketSizeCents} money />
           </p>
         </div>
         <div>
@@ -110,6 +134,7 @@ function BlockA({ summary }: { summary: StorePeriodSummary }) {
             {summary.rplhCents != null ? formatCurrencyFromCents(summary.rplhCents) : "N/A"}
             {" / "}
             {summary.adjustedRplhCents != null ? formatCurrencyFromCents(summary.adjustedRplhCents) : "N/A"}
+            <DeltaText delta={summary.previousDeltas.rplhCents} money />
           </p>
         </div>
         <div className="col-span-2 text-xs text-zinc-500">

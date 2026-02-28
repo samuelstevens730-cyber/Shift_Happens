@@ -182,6 +182,13 @@ function renderMetric(metric: PerformerMetric | null, renderValue: (value: numbe
   return `${metric.employeeName} - ${renderValue(metric.value)} (${metric.shifts} shifts)`;
 }
 
+function deltaLabel(delta: number | null, money = false): string {
+  if (delta == null) return "N/A vs prev";
+  const sign = delta > 0 ? "+" : delta < 0 ? "-" : "";
+  const abs = Math.abs(delta);
+  return money ? `${sign}${dollarsFromCents(abs)} vs prev` : `${sign}${abs.toFixed(1)} vs prev`;
+}
+
 function BlockA({ summary }: { summary: StorePeriodSummary }) {
   return (
     <View style={styles.block}>
@@ -193,6 +200,10 @@ function BlockA({ summary }: { summary: StorePeriodSummary }) {
           {summary.adjustedGrossSalesCents != null ? dollarsFromCents(summary.adjustedGrossSalesCents) : "N/A"}
         </Text>
       </View>
+      <Text style={styles.subValue}>
+        Delta raw/adj: {deltaLabel(summary.previousDeltas.grossSalesCents, true)} /{" "}
+        {deltaLabel(summary.previousDeltas.adjustedGrossSalesCents, true)}
+      </Text>
       <View style={styles.row}>
         <Text style={styles.label}>Transactions</Text>
         <Text style={styles.value}>
@@ -204,6 +215,7 @@ function BlockA({ summary }: { summary: StorePeriodSummary }) {
             : ""}
         </Text>
       </View>
+      <Text style={styles.subValue}>Transactions delta: {deltaLabel(summary.previousDeltas.totalTransactions)}</Text>
       <View style={styles.row}>
         <Text style={styles.label}>Labor Hours</Text>
         <Text style={styles.value}>{hours(summary.totalLaborHours)}</Text>
@@ -215,6 +227,8 @@ function BlockA({ summary }: { summary: StorePeriodSummary }) {
           {summary.adjustedRplhCents != null ? dollarsFromCents(summary.adjustedRplhCents) : "N/A"}
         </Text>
       </View>
+      <Text style={styles.subValue}>RPLH delta: {deltaLabel(summary.previousDeltas.rplhCents, true)}</Text>
+      <Text style={styles.subValue}>Basket delta: {deltaLabel(summary.previousDeltas.avgBasketSizeCents, true)}</Text>
       <Text style={styles.subValue}>Normalization factor: {summary.storeScalingFactor.toFixed(1)}x</Text>
     </View>
   );
