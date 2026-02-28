@@ -265,6 +265,33 @@ export async function GET(req: Request) {
     // ── Run analyzer ───────────────────────────────────────────────────────────
     const allSalesRecords = salesRes.data ?? [];
 
+    // Historical fallback: some legacy double shifts were saved as OPEN only.
+    // If a sales record is linked to the open shift and has PM totals but no close_shift_id,
+    // and there is no same-day close/double shift for that employee+store, treat as double.
+    const salesByOpenShiftId = new Map(
+      allSalesRecords
+        .filter((record) => Boolean(record.open_shift_id))
+        .map((record) => [record.open_shift_id as string, record])
+    );
+    const hasCloseLikeByProfileStoreDay = new Set(
+      effectiveShifts
+        .filter((shift) => shift.shift_type === "close" || shift.shift_type === "double")
+        .map((shift) => `${shift.profile_id}|${shift.store_id}|${cstDateKey(new Date(shift.planned_start_at))}`)
+    );
+
+    effectiveShifts = effectiveShifts.map((shift) => {
+      if (shift.shift_type !== "open") return shift;
+      const linkedSales = salesByOpenShiftId.get(shift.id);
+      if (!linkedSales) return shift;
+      const hasPmTotals = linkedSales.close_sales_cents != null || linkedSales.z_report_cents != null;
+      if (linkedSales.close_shift_id != null || !hasPmTotals) return shift;
+
+      const key = `${shift.profile_id}|${shift.store_id}|${cstDateKey(new Date(shift.planned_start_at))}`;
+      if (hasCloseLikeByProfileStoreDay.has(key)) return shift;
+
+      return { ...shift, shift_type: "double" as const };
+    });
+
     const shiftsCurrentPeriod = effectiveShifts.filter((shift) => {
       const businessDate = cstDateKey(new Date(shift.planned_start_at));
       return businessDate >= from && businessDate <= to;
