@@ -222,10 +222,20 @@ function computeShiftSalesCents(
   if (shiftType === "open") {
     return openX != null ? openX - beginningX : null;
   }
-  if (shiftType === "close" || shiftType === "double") {
+  if (shiftType === "close") {
     const baseClose = closeSales ?? (zReport != null && priorX != null ? zReport - priorX : null);
     if (baseClose == null) return null;
     return baseClose + (isRolloverNight ? midnightX ?? 0 : 0);
+  }
+  if (shiftType === "double") {
+    const amSales = openX != null ? openX - beginningX : null;
+    const pmSales = closeSales ?? (zReport != null && priorX != null ? zReport - priorX : null);
+    const rolloverCarry = isRolloverNight ? midnightX ?? 0 : 0;
+
+    if (amSales != null && pmSales != null) return amSales + pmSales + rolloverCarry;
+    if (pmSales != null) return pmSales + rolloverCarry;
+    if (amSales != null) return amSales + rolloverCarry;
+    return null;
   }
   return null; // 'other' shifts have no sales formula
 }
