@@ -245,9 +245,9 @@ function dayNameFromDate(dateStr: string): DayName {
   return DAY_NAMES[dt.getUTCDay()];
 }
 
-function shiftHours(startedAt: string, endedAt: string | null): number {
+function shiftHours(startAt: string, endedAt: string | null): number {
   if (!endedAt) return 0;
-  const ms = new Date(endedAt).getTime() - new Date(startedAt).getTime();
+  const ms = new Date(endedAt).getTime() - new Date(startAt).getTime();
   return Math.max(0, ms / (1000 * 60 * 60));
 }
 
@@ -467,7 +467,8 @@ export function analyzeStoreData(
     const laborHoursByDate = new Map<string, number>();
     for (const shift of storeShifts) {
       const date = cstDateKey(shift.planned_start_at);
-      const hrs = shiftHours(shift.started_at, shift.ended_at);
+      // Labor math uses planned start + manual end-at (ended_at), not submission timestamps.
+      const hrs = shiftHours(shift.planned_start_at, shift.ended_at);
       laborHoursByDate.set(date, (laborHoursByDate.get(date) ?? 0) + hrs);
     }
 
@@ -488,7 +489,7 @@ export function analyzeStoreData(
     }
 
     const totalLaborHours = storeShifts.reduce(
-      (sum, shift) => sum + shiftHours(shift.started_at, shift.ended_at),
+      (sum, shift) => sum + shiftHours(shift.planned_start_at, shift.ended_at),
       0
     );
 
@@ -690,7 +691,7 @@ export function analyzeStoreData(
       const sales = computeShiftSalesCents(shift.shift_type, salesRow);
       if (sales == null) continue;
       const txn = computeShiftTransactions(shift.shift_type, salesRow);
-      const labor = shiftHours(shift.started_at, shift.ended_at);
+      const labor = shiftHours(shift.planned_start_at, shift.ended_at);
 
       const typeEntry = byShiftType.get(shift.shift_type) ?? {
         totalSales: 0,
@@ -979,7 +980,7 @@ export function analyzeStoreData(
         null;
       const sales = computeShiftSalesCents(shift.shift_type, salesRow);
       const txn = computeShiftTransactions(shift.shift_type, salesRow);
-      const labor = shiftHours(shift.started_at, shift.ended_at);
+      const labor = shiftHours(shift.planned_start_at, shift.ended_at);
 
       const current =
         employeeMap.get(shift.profile_id) ??
