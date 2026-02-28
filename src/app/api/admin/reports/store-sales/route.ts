@@ -13,6 +13,7 @@ import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
 import { supabaseServer } from "@/lib/supabaseServer";
 import {
   analyzeStoreData,
+  type StoreReportProfileRow,
   type StoreReportShiftRow,
   type StoreReportSalesRow,
   type StoreReportSafeCloseoutRow,
@@ -93,7 +94,7 @@ export async function GET(req: Request) {
       supabaseServer
         .from("daily_sales_records")
         .select(
-          "store_id,business_date,open_x_report_cents,close_sales_cents,z_report_cents," +
+          "store_id,business_date,open_shift_id,close_shift_id,open_x_report_cents,close_sales_cents,z_report_cents," +
           "rollover_from_previous_cents,closer_rollover_cents,is_rollover_night,open_transaction_count,close_transaction_count"
         )
         .in("store_id", activeStoreIds)
@@ -125,12 +126,30 @@ export async function GET(req: Request) {
     if (closeoutsRes.error) return NextResponse.json({ error: closeoutsRes.error.message }, { status: 500 });
     if (storesRes.error)    return NextResponse.json({ error: storesRes.error.message },    { status: 500 });
 
+    const profileIds = Array.from(
+      new Set((shiftsRes.data ?? []).map((shift) => shift.profile_id).filter(Boolean))
+    );
+
+    let profiles: StoreReportProfileRow[] = [];
+    if (profileIds.length > 0) {
+      const profilesRes = await supabaseServer
+        .from("profiles")
+        .select("id,name")
+        .in("id", profileIds)
+        .returns<StoreReportProfileRow[]>();
+      if (profilesRes.error) {
+        return NextResponse.json({ error: profilesRes.error.message }, { status: 500 });
+      }
+      profiles = profilesRes.data ?? [];
+    }
+
     // ── Analyze ───────────────────────────────────────────────────────────────
     const summaries = analyzeStoreData(
       shiftsRes.data  ?? [],
       salesRes.data   ?? [],
       closeoutsRes.data ?? [],
       storesRes.data  ?? [],
+      profiles,
       from,
       to,
     );

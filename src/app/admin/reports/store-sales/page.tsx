@@ -1,21 +1,26 @@
 "use client";
 
-/**
- * /admin/reports/store-sales
- *
- * Executive Store Report — per-store aggregated sales, RPLH, cash-flow,
- * weather context, and velocity maps.
- * Outputs: web UI cards, plain-text LLM export (copy), and PDF download.
- */
-
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabaseClient";
-import type { StorePeriodSummary } from "@/lib/storeReportAnalyzer";
 import { pdf } from "@react-pdf/renderer";
+import {
+  Bar,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { StoreReportPDF } from "@/components/pdf/StoreReportPDF";
+import type { PerformerMetric, StorePeriodSummary } from "@/lib/storeReportAnalyzer";
+import { supabase } from "@/lib/supabaseClient";
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+interface StoreOption {
+  id: string;
+  name: string;
+}
 
 function cstDateKey(date: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -27,282 +32,371 @@ function cstDateKey(date: Date): string {
 }
 
 function addDays(date: Date, days: number): Date {
-  const d = new Date(date);
-  d.setDate(d.getDate() + days);
-  return d;
+  const copy = new Date(date);
+  copy.setDate(copy.getDate() + days);
+  return copy;
 }
 
-function d(cents: number): string {
+function formatCurrencyFromCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-function pct(value: number): string {
+function formatHours(hours: number): string {
+  return `${hours.toFixed(1)}h`;
+}
+
+function formatPercent(value: number): string {
   return `${value}%`;
 }
 
-function hrs(hours: number): string {
-  return hours.toFixed(1);
+function formatMetric(
+  metric: PerformerMetric | null,
+  formatter: (value: number) => string
+): string {
+  if (!metric) return "N/A";
+  return `${metric.employeeName} - ${formatter(metric.value)} (${metric.shifts} shifts)`;
 }
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
   URL.revokeObjectURL(url);
 }
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface StoreOption {
-  id: string;
-  name: string;
-}
-
-// ─── Block Components ─────────────────────────────────────────────────────────
-
-function BlockA({ s }: { s: StorePeriodSummary }) {
+function BlockA({ summary }: { summary: StorePeriodSummary }) {
   return (
-    <div className="border rounded p-4 space-y-1">
-      <div className="text-sm font-medium text-zinc-400 uppercase tracking-wider mb-2">Top-Line Velocity &amp; Efficiency</div>
-      <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
+    <div className="rounded border border-zinc-700 p-4">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+        Top-Line Velocity
+      </p>
+      <div className="grid grid-cols-2 gap-3 text-sm">
         <div>
-          <span className="text-zinc-500">Gross Sales</span>
-          <div className="text-xl font-semibold">
-            {s.grossSalesCents != null ? d(s.grossSalesCents) : "—"}
-          </div>
+          <p className="text-zinc-500">Gross Sales</p>
+          <p className="text-lg font-semibold">
+            {summary.grossSalesCents != null ? formatCurrencyFromCents(summary.grossSalesCents) : "N/A"}
+          </p>
         </div>
         <div>
-          <span className="text-zinc-500">RPLH</span>
-          <div className="text-xl font-semibold">
-            {s.rplhCents != null ? d(s.rplhCents) : "—"}
-          </div>
+          <p className="text-zinc-500">RPLH</p>
+          <p className="text-lg font-semibold">
+            {summary.rplhCents != null ? formatCurrencyFromCents(summary.rplhCents) : "N/A"}
+          </p>
         </div>
         <div>
-          <span className="text-zinc-500">Total Transactions</span>
-          <div className="text-lg font-medium">
-            {s.totalTransactions != null ? s.totalTransactions : "—"}
-          </div>
+          <p className="text-zinc-500">Transactions</p>
+          <p className="font-medium">{summary.totalTransactions ?? "N/A"}</p>
         </div>
         <div>
-          <span className="text-zinc-500">Avg Basket Size</span>
-          <div className="text-lg font-medium">
-            {s.avgBasketSizeCents != null ? d(s.avgBasketSizeCents) : "—"}
-          </div>
+          <p className="text-zinc-500">Avg Basket</p>
+          <p className="font-medium">
+            {summary.avgBasketSizeCents != null ? formatCurrencyFromCents(summary.avgBasketSizeCents) : "N/A"}
+          </p>
         </div>
         <div>
-          <span className="text-zinc-500">Total Labor Hours</span>
-          <div className="text-lg font-medium">{hrs(s.totalLaborHours)}</div>
+          <p className="text-zinc-500">Labor Hours</p>
+          <p className="font-medium">{formatHours(summary.totalLaborHours)}</p>
         </div>
       </div>
     </div>
   );
 }
 
-function BlockB({ s }: { s: StorePeriodSummary }) {
-  const hasData = s.cashPct != null || s.depositVarianceCents != null;
+function BlockB({ summary }: { summary: StorePeriodSummary }) {
+  const hasCloseoutData = summary.cashPct != null || summary.depositVarianceCents != null;
   return (
-    <div className="border rounded p-4 space-y-2">
-      <div className="text-sm font-medium text-zinc-400 uppercase tracking-wider mb-2">Risk &amp; Cash Flow</div>
-      {hasData ? (
+    <div className="rounded border border-zinc-700 p-4">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+        Risk And Cash Flow
+      </p>
+      {!hasCloseoutData ? (
+        <p className="text-sm italic text-zinc-500">No safe closeout records in this period.</p>
+      ) : (
         <div className="space-y-2 text-sm">
-          {s.cashPct != null && s.cardPct != null ? (
-            <div>
-              <span className="text-zinc-500">Payment Split</span>
-              <div className="font-medium">
-                {pct(s.cashPct)} Cash / {pct(s.cardPct)} Card
-                <span className="text-xs text-zinc-500 ml-2">
-                  ({s.safeCloseoutDayCount} days)
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div className="text-zinc-500 italic">Payment split: N/A — no safe closeout data</div>
-          )}
-          {s.depositVarianceCents != null ? (
-            <div>
-              <span className="text-zinc-500">Deposit Variance (Shrink)</span>
-              <div
-                className={`font-medium ${
-                  s.depositVarianceCents < 0
-                    ? "text-red-400"
-                    : s.depositVarianceCents > 0
-                    ? "text-emerald-400"
-                    : "text-zinc-300"
-                }`}
-              >
-                {s.depositVarianceCents < 0 ? "-" : s.depositVarianceCents > 0 ? "+" : ""}
-                {d(Math.abs(s.depositVarianceCents))}
-              </div>
-            </div>
-          ) : (
-            <div className="text-zinc-500 italic">Deposit variance: N/A — no safe closeout data</div>
-          )}
-        </div>
-      ) : (
-        <div className="text-zinc-500 italic text-sm">
-          No safe closeout data for this period. Block B requires the safe ledger feature.
+          <p>
+            <span className="text-zinc-500">Payment Split: </span>
+            {summary.cashPct != null && summary.cardPct != null
+              ? `${formatPercent(summary.cashPct)} cash / ${formatPercent(summary.cardPct)} card`
+              : "N/A"}
+          </p>
+          <p>
+            <span className="text-zinc-500">Deposit Variance: </span>
+            {summary.depositVarianceCents != null
+              ? `${summary.depositVarianceCents < 0 ? "-" : summary.depositVarianceCents > 0 ? "+" : ""}${formatCurrencyFromCents(
+                  Math.abs(summary.depositVarianceCents)
+                )}`
+              : "N/A"}
+          </p>
+          <p className="text-xs text-zinc-500">{summary.safeCloseoutDayCount} safe-closeout day(s)</p>
         </div>
       )}
     </div>
   );
 }
 
-function BlockC({ s }: { s: StorePeriodSummary }) {
+function WeatherSummaryCard({ summary }: { summary: StorePeriodSummary }) {
   return (
-    <div className="border rounded p-4 space-y-2">
-      <div className="text-sm font-medium text-zinc-400 uppercase tracking-wider mb-2">Environmental Context</div>
-      {s.weatherTrend != null ? (
+    <div className="rounded border border-zinc-700 p-4">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+        Weather Summary
+      </p>
+      {summary.weatherTrend == null ? (
+        <p className="text-sm italic text-zinc-500">No weather data for this date range.</p>
+      ) : (
         <div className="space-y-2 text-sm">
-          <div className="flex items-center gap-3">
-            <span className="text-zinc-500">Trend</span>
-            <span
-              className={`px-2 py-0.5 rounded text-xs font-medium ${
-                s.weatherTrend === "Volatile"
-                  ? "bg-amber-500/20 text-amber-300 border border-amber-500/30"
-                  : "bg-zinc-700 text-zinc-300"
-              }`}
-            >
-              {s.weatherTrend}
-            </span>
-            {s.dominantWeatherCondition && (
-              <span className="text-zinc-400">· Dominant: {s.dominantWeatherCondition}</span>
-            )}
-          </div>
-          {s.weatherDays.length > 0 && (
-            <div className="space-y-0.5 max-h-40 overflow-y-auto">
-              {s.weatherDays.map((day) => {
-                const startLabel = day.startDesc ?? day.startCondition;
-                const start = day.startTempF != null
-                  ? `${startLabel} (${day.startTempF}°F)`
-                  : startLabel ?? "—";
-                const endLabel = day.endDesc ?? day.endCondition;
-                const end = endLabel != null
-                  ? day.endTempF != null
-                    ? `${endLabel} (${day.endTempF}°F)`
-                    : endLabel
-                  : null;
-                return (
-                  <div key={day.date} className="text-xs text-zinc-400 font-mono">
-                    {day.date}: {start}{end ? ` → ${end}` : ""}
-                  </div>
-                );
-              })}
+          <p>
+            <span className="text-zinc-500">Trend: </span>
+            {summary.weatherTrend}
+          </p>
+          <p>
+            <span className="text-zinc-500">Dominant Mix: </span>
+            {summary.weatherSummary.conditionMix.length > 0
+              ? summary.weatherSummary.conditionMix
+                  .slice(0, 4)
+                  .map((entry) => `${entry.condition} ${entry.pct}%`)
+                  .join(", ")
+              : "N/A"}
+          </p>
+          <p>
+            <span className="text-zinc-500">Temp Min/Avg/Max: </span>
+            {summary.weatherSummary.tempMinF != null &&
+            summary.weatherSummary.tempAvgF != null &&
+            summary.weatherSummary.tempMaxF != null
+              ? `${summary.weatherSummary.tempMinF}F / ${summary.weatherSummary.tempAvgF}F / ${summary.weatherSummary.tempMaxF}F`
+              : "N/A"}
+          </p>
+          {summary.weatherSummary.outlierFlags.length > 0 && (
+            <div className="space-y-1">
+              {summary.weatherSummary.outlierFlags.map((flag) => (
+                <p key={flag} className="text-amber-300">
+                  {flag}
+                </p>
+              ))}
             </div>
           )}
-        </div>
-      ) : (
-        <div className="text-zinc-500 italic text-sm">
-          No weather data — shifts in this period predate weather capture, or store coordinates are not configured.
+          {summary.weatherSummary.weatherImpactHint && (
+            <p className="text-emerald-300">{summary.weatherSummary.weatherImpactHint}</p>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function VelocityCard({ s }: { s: StorePeriodSummary }) {
+function VelocityCard({ summary }: { summary: StorePeriodSummary }) {
   return (
-    <div className="border rounded p-4 space-y-2">
-      <div className="text-sm font-medium text-zinc-400 uppercase tracking-wider mb-2">Velocity Map</div>
-      {s.bestDay || s.worstDay || s.bestShiftType ? (
-        <div className="space-y-1.5 text-sm">
-          {s.bestDay && (
-            <div>
-              <span className="text-zinc-500">Best Day</span>
-              <div className="font-medium">
-                {s.bestDay.label} — {d(s.bestDay.avgSalesCents)} avg
-                {s.bestDay.avgTransactions != null ? `, ${s.bestDay.avgTransactions} txn` : ""}
-              </div>
-            </div>
+    <div className="rounded border border-zinc-700 p-4">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">Velocity Map</p>
+      {summary.bestDay || summary.bestShiftType ? (
+        <div className="space-y-1 text-sm">
+          {summary.bestDay && (
+            <p>
+              <span className="text-zinc-500">Best Day: </span>
+              {summary.bestDay.label} - {formatCurrencyFromCents(summary.bestDay.avgSalesCents)}
+            </p>
           )}
-          {s.worstDay && s.worstDay.label !== s.bestDay?.label && (
-            <div>
-              <span className="text-zinc-500">Worst Day</span>
-              <div className="font-medium text-zinc-400">
-                {s.worstDay.label} — {d(s.worstDay.avgSalesCents)} avg
-                {s.worstDay.avgTransactions != null ? `, ${s.worstDay.avgTransactions} txn` : ""}
-              </div>
-            </div>
+          {summary.worstDay && summary.worstDay.label !== summary.bestDay?.label && (
+            <p>
+              <span className="text-zinc-500">Worst Day: </span>
+              {summary.worstDay.label} - {formatCurrencyFromCents(summary.worstDay.avgSalesCents)}
+            </p>
           )}
-          {s.bestShiftType && (
-            <div>
-              <span className="text-zinc-500">Best Shift Type</span>
-              <div className="font-medium capitalize">
-                {s.bestShiftType.label} — {d(s.bestShiftType.avgSalesCents)} avg
-                {s.bestShiftType.avgTransactions != null ? `, ${s.bestShiftType.avgTransactions} txn` : ""}
-              </div>
-            </div>
+          {summary.bestShiftType && (
+            <p>
+              <span className="text-zinc-500">Best Shift Type: </span>
+              <span className="capitalize">{summary.bestShiftType.label}</span> -{" "}
+              {formatCurrencyFromCents(summary.bestShiftType.avgSalesCents)}
+            </p>
           )}
         </div>
       ) : (
-        <div className="text-zinc-500 italic text-sm">No complete sales records for velocity analysis.</div>
+        <p className="text-sm italic text-zinc-500">No velocity data in this range.</p>
       )}
     </div>
   );
 }
 
-// ─── Store Card ───────────────────────────────────────────────────────────────
-
-function StoreCard({ s }: { s: StorePeriodSummary }) {
-  return (
-    <div className="rounded-lg border border-zinc-700 overflow-hidden">
-      <div className="bg-zinc-800 px-4 py-3 flex items-center gap-3">
-        <span className="text-lg font-semibold">{s.storeName}</span>
-        <span className="text-xs text-zinc-500">{s.periodFrom} – {s.periodTo}</span>
+function DailyTrendChart({ summary }: { summary: StorePeriodSummary }) {
+  if (summary.dailyTrend.length === 0) {
+    return (
+      <div className="rounded border border-zinc-700 p-4">
+        <p className="text-sm italic text-zinc-500">No daily trend data available.</p>
       </div>
-      <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-        <BlockA s={s} />
-        <BlockB s={s} />
-        <BlockC s={s} />
-        <VelocityCard s={s} />
+    );
+  }
+
+  const data = summary.dailyTrend.map((point) => ({
+    date: point.date.slice(5),
+    sales: Number((point.salesCents / 100).toFixed(2)),
+    rolling: Number((point.rolling7SalesCents / 100).toFixed(2)),
+    labor: Number(point.laborHours.toFixed(1)),
+  }));
+
+  return (
+    <div className="rounded border border-zinc-700 p-4">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+        Daily Sales Trend
+      </p>
+      <div className="h-72 w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#27272a" />
+            <XAxis dataKey="date" stroke="#a1a1aa" tick={{ fontSize: 11 }} />
+            <YAxis yAxisId="sales" stroke="#a1a1aa" tick={{ fontSize: 11 }} />
+            <YAxis yAxisId="labor" orientation="right" stroke="#71717a" tick={{ fontSize: 11 }} />
+            <Tooltip
+              contentStyle={{ backgroundColor: "#18181b", border: "1px solid #3f3f46", color: "#fafafa" }}
+              formatter={(value: unknown, name?: string) => {
+                const numericValue = typeof value === "number" ? value : Number(value ?? 0);
+                const label = name ?? "Value";
+                if (label === "Labor Hours") return [numericValue.toFixed(1), label];
+                return [`$${numericValue.toFixed(2)}`, label];
+              }}
+            />
+            <Bar yAxisId="labor" dataKey="labor" name="Labor Hours" fill="#3f3f46" opacity={0.55} />
+            <Line yAxisId="sales" type="monotone" dataKey="sales" name="Daily Sales" stroke="#22d3ee" strokeWidth={2} dot={false} />
+            <Line
+              yAxisId="sales"
+              type="monotone"
+              dataKey="rolling"
+              name="7d Rolling Avg"
+              stroke="#facc15"
+              strokeWidth={2}
+              dot={false}
+            />
+          </ComposedChart>
+        </ResponsiveContainer>
       </div>
     </div>
   );
 }
 
-// ─── Page ─────────────────────────────────────────────────────────────────────
+function DayOfWeekTable({ summary }: { summary: StorePeriodSummary }) {
+  return (
+    <div className="rounded border border-zinc-700 p-4">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+        Day-of-Week Averages
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[760px] text-left text-sm">
+          <thead className="text-zinc-500">
+            <tr>
+              <th className="py-2 pr-3">Day</th>
+              <th className="py-2 pr-3">Avg Sales</th>
+              <th className="py-2 pr-3">Avg Txn</th>
+              <th className="py-2 pr-3">Avg Basket</th>
+              <th className="py-2 pr-3">Avg Labor</th>
+              <th className="py-2 pr-3">Avg RPLH</th>
+              <th className="py-2 pr-3">Samples</th>
+            </tr>
+          </thead>
+          <tbody>
+            {summary.dayOfWeekAverages.map((row) => (
+              <tr key={row.day} className="border-t border-zinc-800">
+                <td className="py-2 pr-3">{row.day.slice(0, 3)}</td>
+                <td className="py-2 pr-3">{row.avgSalesCents != null ? formatCurrencyFromCents(row.avgSalesCents) : "N/A"}</td>
+                <td className="py-2 pr-3">{row.avgTransactions != null ? row.avgTransactions.toFixed(1) : "N/A"}</td>
+                <td className="py-2 pr-3">
+                  {row.avgBasketSizeCents != null ? formatCurrencyFromCents(row.avgBasketSizeCents) : "N/A"}
+                </td>
+                <td className="py-2 pr-3">{row.avgLaborHours != null ? formatHours(row.avgLaborHours) : "N/A"}</td>
+                <td className="py-2 pr-3">{row.avgRplhCents != null ? formatCurrencyFromCents(row.avgRplhCents) : "N/A"}</td>
+                <td className="py-2 pr-3">{row.sampleDays}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function TopPerformersCard({ summary }: { summary: StorePeriodSummary }) {
+  const { volume, efficiency } = summary.topPerformers;
+  return (
+    <div className="rounded border border-zinc-700 p-4">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+        Top Performers
+      </p>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="space-y-1 text-sm">
+          <p className="font-medium text-zinc-300">Volume</p>
+          <p>{formatMetric(volume.totalSales, (value) => formatCurrencyFromCents(value))}</p>
+          <p>{formatMetric(volume.totalTransactions, (value) => `${Math.round(value)} txns`)}</p>
+          <p>{formatMetric(volume.totalLaborHours, (value) => `${value.toFixed(1)}h`)}</p>
+        </div>
+        <div className="space-y-1 text-sm">
+          <p className="font-medium text-zinc-300">Efficiency</p>
+          <p>{formatMetric(efficiency.rplh, (value) => `${formatCurrencyFromCents(value)}/hr`)}</p>
+          <p>{formatMetric(efficiency.transactionsPerLaborHour, (value) => `${value.toFixed(1)} txn/hr`)}</p>
+          <p>{formatMetric(efficiency.basketSize, (value) => formatCurrencyFromCents(value))}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StoreCard({ summary }: { summary: StorePeriodSummary }) {
+  return (
+    <section className="overflow-hidden rounded-lg border border-zinc-700">
+      <header className="flex flex-wrap items-center gap-2 border-b border-zinc-700 bg-zinc-800 px-4 py-3">
+        <h2 className="text-lg font-semibold">{summary.storeName}</h2>
+        <p className="text-xs text-zinc-500">
+          {summary.periodFrom} - {summary.periodTo}
+        </p>
+      </header>
+      <div className="space-y-4 p-4">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <BlockA summary={summary} />
+          <BlockB summary={summary} />
+          <WeatherSummaryCard summary={summary} />
+          <VelocityCard summary={summary} />
+        </div>
+        <DailyTrendChart summary={summary} />
+        <DayOfWeekTable summary={summary} />
+        <TopPerformersCard summary={summary} />
+      </div>
+    </section>
+  );
+}
 
 export default function StoreReportPage() {
   const router = useRouter();
   const [authToken, setAuthToken] = useState<string | null>(null);
   const [stores, setStores] = useState<StoreOption[]>([]);
 
-  // Controls
-  const today = cstDateKey(new Date());
-  const twoWeeksAgo = cstDateKey(addDays(new Date(), -13));
+  const today = useMemo(() => cstDateKey(new Date()), []);
+  const twoWeeksAgo = useMemo(() => cstDateKey(addDays(new Date(), -13)), []);
   const [from, setFrom] = useState(twoWeeksAgo);
   const [to, setTo] = useState(today);
   const [storeId, setStoreId] = useState("all");
 
-  // State
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [summaries, setSummaries] = useState<StorePeriodSummary[] | null>(null);
   const [llmText, setLlmText] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [pdfLoading, setPdfLoading] = useState(false);
-
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  // ── Auth ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       const token = data.session?.access_token ?? null;
       setAuthToken(token);
-      if (!token) { router.push("/admin/login"); return; }
-      // Load store dropdown
+      if (!token) {
+        router.push("/admin/login");
+        return;
+      }
       fetch("/api/admin/reports/store-sales?meta=true", {
         headers: { Authorization: `Bearer ${token}` },
       })
-        .then((r) => r.json())
+        .then((res) => res.json())
         .then((json) => setStores(json.stores ?? []))
-        .catch(() => {});
+        .catch(() => setStores([]));
     });
   }, [router]);
-
-  // ── Generate ──────────────────────────────────────────────────────────────
 
   const generate = useCallback(async () => {
     if (!authToken) return;
@@ -310,182 +404,170 @@ export default function StoreReportPage() {
     setError(null);
     setSummaries(null);
     setLlmText(null);
-
     try {
       const params = new URLSearchParams({ from, to, storeId, format: "json" });
-      const res = await fetch(`/api/admin/reports/store-sales?${params}`, {
+      const res = await fetch(`/api/admin/reports/store-sales?${params.toString()}`, {
         headers: { Authorization: `Bearer ${authToken}` },
       });
       const json = await res.json();
-      if (!res.ok) { setError(json.error ?? "Failed to load report."); return; }
+      if (!res.ok) {
+        setError(json.error ?? "Failed to load report.");
+        return;
+      }
       setSummaries(json.summaries ?? []);
 
-      // Also fetch the text format for the LLM export
       const textParams = new URLSearchParams({ from, to, storeId, format: "text" });
-      const textRes = await fetch(`/api/admin/reports/store-sales?${textParams}`, {
+      const textRes = await fetch(`/api/admin/reports/store-sales?${textParams.toString()}`, {
         headers: { Authorization: `Bearer ${authToken}` },
       });
       if (textRes.ok) {
         setLlmText(await textRes.text());
       }
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Unknown error");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Unknown error");
     } finally {
       setLoading(false);
     }
   }, [authToken, from, to, storeId]);
 
-  // ── Copy ──────────────────────────────────────────────────────────────────
-
-  async function handleCopy() {
+  const handleCopy = useCallback(async () => {
     if (!llmText) return;
     try {
       await navigator.clipboard.writeText(llmText);
       setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 1500);
     } catch {
       if (textareaRef.current) {
         textareaRef.current.select();
         document.execCommand("copy");
         setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
+        setTimeout(() => setCopied(false), 1500);
       }
     }
-  }
+  }, [llmText]);
 
-  // ── PDF Download ──────────────────────────────────────────────────────────
-
-  async function handlePdf() {
+  const handlePdf = useCallback(async () => {
     if (!summaries) return;
     setPdfLoading(true);
     try {
-      const blob = await pdf(
-        <StoreReportPDF summaries={summaries} from={from} to={to} />
-      ).toBlob();
+      const blob = await pdf(<StoreReportPDF summaries={summaries} from={from} to={to} />).toBlob();
       downloadBlob(blob, `store-report-${from}-to-${to}.pdf`);
-    } catch (e) {
-      console.error("PDF generation failed:", e);
+    } catch (err) {
+      console.error("PDF generation failed", err);
     } finally {
       setPdfLoading(false);
     }
-  }
-
-  // ── Render ────────────────────────────────────────────────────────────────
+  }, [from, summaries, to]);
 
   return (
-    <div className="min-h-screen bg-zinc-900 text-zinc-100 p-6 max-w-5xl mx-auto space-y-6">
-      {/* Header */}
-      <div>
+    <div className="mx-auto min-h-screen max-w-6xl space-y-6 bg-zinc-900 p-4 text-zinc-100 md:p-6">
+      <header>
         <h1 className="text-2xl font-semibold">Store Report</h1>
-        <p className="text-sm text-zinc-500 mt-1">
-          Aggregated store-level sales, efficiency, cash flow, and weather context.
+        <p className="mt-1 text-sm text-zinc-500">
+          Rollover-aware store performance, weather summary, trend chart, and top performers.
         </p>
-      </div>
+      </header>
 
-      {/* Controls */}
-      <div className="border border-zinc-700 rounded-lg p-4 space-y-4">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <div>
-            <label className="text-xs text-zinc-500 block mb-1">From</label>
+      <section className="rounded-lg border border-zinc-700 p-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+          <label className="text-sm">
+            <span className="mb-1 block text-xs text-zinc-500">From</span>
             <input
               type="date"
-              className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-sm"
+              className="w-full rounded border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm"
               value={from}
-              onChange={(e) => setFrom(e.target.value)}
+              onChange={(event) => setFrom(event.target.value)}
             />
-          </div>
-          <div>
-            <label className="text-xs text-zinc-500 block mb-1">To</label>
+          </label>
+          <label className="text-sm">
+            <span className="mb-1 block text-xs text-zinc-500">To</span>
             <input
               type="date"
-              className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-sm"
+              className="w-full rounded border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm"
               value={to}
-              onChange={(e) => setTo(e.target.value)}
+              onChange={(event) => setTo(event.target.value)}
             />
-          </div>
-          <div>
-            <label className="text-xs text-zinc-500 block mb-1">Store</label>
+          </label>
+          <label className="text-sm md:col-span-2">
+            <span className="mb-1 block text-xs text-zinc-500">Store</span>
             <select
-              className="w-full bg-zinc-800 border border-zinc-600 rounded px-3 py-2 text-sm"
+              className="w-full rounded border border-zinc-600 bg-zinc-800 px-3 py-2 text-sm"
               value={storeId}
-              onChange={(e) => setStoreId(e.target.value)}
+              onChange={(event) => setStoreId(event.target.value)}
             >
               <option value="all">Both Stores</option>
-              {stores.map((s) => (
-                <option key={s.id} value={s.id}>{s.name}</option>
+              {stores.map((store) => (
+                <option key={store.id} value={store.id}>
+                  {store.name}
+                </option>
               ))}
             </select>
-          </div>
+          </label>
         </div>
-        <button
-          onClick={generate}
-          disabled={loading}
-          className="bg-zinc-100 text-zinc-900 px-5 py-2 rounded font-medium text-sm hover:bg-white disabled:opacity-50"
-        >
-          {loading ? "Generating…" : "Generate Report"}
-        </button>
-      </div>
-
-      {/* Error */}
-      {error && (
-        <div className="border border-red-500/40 bg-red-500/10 rounded p-3 text-sm text-red-300">
-          {error}
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={generate}
+            disabled={loading}
+            className="rounded bg-zinc-100 px-4 py-2 text-sm font-medium text-zinc-900 disabled:opacity-50"
+          >
+            {loading ? "Generating..." : "Generate Report"}
+          </button>
+          {summaries && summaries.length > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={handleCopy}
+                className="rounded border border-zinc-600 px-4 py-2 text-sm hover:bg-zinc-800"
+              >
+                {copied ? "Copied" : "Copy LLM Export"}
+              </button>
+              <button
+                type="button"
+                onClick={handlePdf}
+                disabled={pdfLoading}
+                className="rounded border border-zinc-600 px-4 py-2 text-sm hover:bg-zinc-800 disabled:opacity-50"
+              >
+                {pdfLoading ? "Building PDF..." : "Download PDF"}
+              </button>
+            </>
+          )}
         </div>
-      )}
+      </section>
 
-      {/* Results */}
+      {error && <div className="rounded border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-300">{error}</div>}
+
       {summaries && summaries.length > 0 && (
         <div className="space-y-6">
-          {/* Action bar */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <button
-              onClick={handleCopy}
-              className="border border-zinc-600 rounded px-4 py-1.5 text-sm hover:bg-zinc-800"
-            >
-              {copied ? "✓ Copied" : "Copy LLM Export"}
-            </button>
-            <button
-              onClick={handlePdf}
-              disabled={pdfLoading}
-              className="border border-zinc-600 rounded px-4 py-1.5 text-sm hover:bg-zinc-800 disabled:opacity-50"
-            >
-              {pdfLoading ? "Generating PDF…" : "Download PDF"}
-            </button>
-          </div>
-
-          {/* Store cards */}
-          <div className="space-y-6">
-            {summaries.map((s) => (
-              <StoreCard key={s.storeId} s={s} />
-            ))}
-          </div>
-
-          {/* LLM Export textarea */}
+          {summaries.map((summary) => (
+            <StoreCard key={summary.storeId} summary={summary} />
+          ))}
           {llmText && (
-            <div className="space-y-2">
+            <section className="space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-zinc-500 font-medium">LLM Export (plain text)</span>
+                <p className="text-sm font-medium text-zinc-500">LLM Export</p>
                 <button
+                  type="button"
                   onClick={handleCopy}
-                  className="text-xs border border-zinc-600 rounded px-3 py-1 hover:bg-zinc-800"
+                  className="rounded border border-zinc-600 px-3 py-1 text-xs hover:bg-zinc-800"
                 >
-                  {copied ? "✓ Copied" : "Copy"}
+                  {copied ? "Copied" : "Copy"}
                 </button>
               </div>
               <textarea
                 ref={textareaRef}
                 readOnly
                 value={llmText}
-                className="w-full h-64 bg-zinc-900 border border-zinc-700 rounded p-3 text-xs font-mono text-zinc-300 resize-y"
+                className="h-64 w-full resize-y rounded border border-zinc-700 bg-zinc-900 p-3 font-mono text-xs text-zinc-300"
               />
-            </div>
+            </section>
           )}
         </div>
       )}
 
       {summaries && summaries.length === 0 && (
-        <div className="border border-zinc-700 rounded p-6 text-center text-zinc-500 text-sm">
-          No data found for the selected period and store.
+        <div className="rounded border border-zinc-700 p-6 text-center text-sm text-zinc-500">
+          No data found for the selected filters.
         </div>
       )}
     </div>
