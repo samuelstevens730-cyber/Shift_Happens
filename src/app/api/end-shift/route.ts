@@ -360,6 +360,35 @@ export async function POST(req: Request) {
       const isOpenSales = shiftType === "open";
       const isCloseSales = shiftType === "close" || shiftType === "double";
 
+      // Require transaction count entry at clock-out for sales-tracked shifts.
+      // This prevents silent nulls that skew basket-size and txn-based metrics.
+      if (
+        isOpenSales &&
+        !(
+          typeof body.openTransactionCount === "number" &&
+          Number.isInteger(body.openTransactionCount) &&
+          body.openTransactionCount > 0
+        )
+      ) {
+        return NextResponse.json(
+          { error: "Transaction count is required before clock-out for open shifts." },
+          { status: 400 }
+        );
+      }
+      if (
+        isCloseSales &&
+        !(
+          typeof body.closeTransactionCount === "number" &&
+          Number.isInteger(body.closeTransactionCount) &&
+          body.closeTransactionCount > 0
+        )
+      ) {
+        return NextResponse.json(
+          { error: "Transaction count is required before clock-out for close/double shifts." },
+          { status: 400 }
+        );
+      }
+
       if (isOpenSales) {
         if (!Number.isFinite(body.salesXReportCents ?? null) || (body.salesXReportCents ?? 0) < 0) {
           return NextResponse.json({ error: "Missing or invalid X report total." }, { status: 400 });

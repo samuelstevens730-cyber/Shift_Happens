@@ -680,9 +680,9 @@ export function analyzeStoreData(
         salesByCloseShiftId.get(shift.id) ??
         salesByDate.get(date) ??
         null;
-      const sales = salesRow ? grossSalesForDay(salesRow) : closeoutSalesByDate.get(date) ?? null;
+      const sales = computeShiftSalesCents(shift.shift_type, salesRow);
       if (sales == null) continue;
-      const txn = salesRow ? transactionsForDay(salesRow) : null;
+      const txn = computeShiftTransactions(shift.shift_type, salesRow);
       const labor = shiftHours(shift.started_at, shift.ended_at);
 
       const typeEntry = byShiftType.get(shift.shift_type) ?? {
