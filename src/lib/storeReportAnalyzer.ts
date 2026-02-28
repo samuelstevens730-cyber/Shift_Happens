@@ -156,6 +156,43 @@ export interface TopPerformers {
   };
 }
 
+export interface VolatilitySummary {
+  stdDevDailySalesCents: number | null;
+  coefficientOfVariationPct: number | null;
+  belowOneSigmaDays: number;
+  aboveOneSigmaDays: number;
+  largestUpSwingCents: number | null;
+  largestDownSwingCents: number | null;
+}
+
+export interface CashRiskSummary {
+  varianceDays: number;
+  totalVarianceCents: number | null;
+  avgVariancePerDayCents: number | null;
+  largestSingleDayVarianceCents: number | null;
+  varianceRatePct: number | null;
+}
+
+export interface ShiftTypeBreakdownRow {
+  shiftType: string;
+  avgSalesCents: number | null;
+  avgTransactions: number | null;
+  avgBasketCents: number | null;
+  avgRplhCents: number | null;
+  sampleSize: number;
+}
+
+export interface DataIntegritySummary {
+  expectedDays: number;
+  missingSalesDays: number;
+  missingTransactionDays: number;
+  missingLaborDays: number;
+  rolloverAdjustedDays: number;
+  lateCloseouts: number | null;
+  manualOverrides: number | null;
+  auditFlagsTriggered: number | null;
+}
+
 export interface StorePeriodSummary {
   storeId: string;
   storeName: string;
@@ -186,6 +223,10 @@ export interface StorePeriodSummary {
 
   dailyTrend: DailyTrendPoint[];
   dayOfWeekAverages: DayOfWeekAveragesRow[];
+  shiftTypeBreakdown: ShiftTypeBreakdownRow[];
+  volatility: VolatilitySummary;
+  cashRisk: CashRiskSummary;
+  dataIntegrity: DataIntegritySummary;
   topPerformers: TopPerformers;
 }
 
@@ -304,6 +345,17 @@ function round1(value: number): number {
   return Math.round(value * 10) / 10;
 }
 
+function dateRange(start: string, end: string): string[] {
+  const dates: string[] = [];
+  let cursor = new Date(`${start}T00:00:00.000Z`);
+  const stop = new Date(`${end}T00:00:00.000Z`);
+  while (cursor <= stop) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor = new Date(cursor.getTime() + 24 * 60 * 60 * 1000);
+  }
+  return dates;
+}
+
 function pickTopMetric<T>(
   entries: T[],
   valueSelector: (entry: T) => number | null,
@@ -333,6 +385,15 @@ interface EmployeeRollup {
   totalSalesCents: number;
   totalTransactions: number;
   transactionShiftCount: number;
+  totalLaborHours: number;
+}
+
+interface ShiftTypeRollup {
+  shiftType: string;
+  sampleSize: number;
+  totalSalesCents: number;
+  totalTransactions: number;
+  transactionSamples: number;
   totalLaborHours: number;
 }
 
@@ -368,12 +429,17 @@ export function analyzeStoreData(
     }
 
     const closeoutSalesByDate = new Map<string, number>();
+    const closeoutVarianceByDate = new Map<string, number>();
     for (const closeout of storeCloseouts) {
       closeoutSalesByDate.set(
         closeout.business_date,
         (closeoutSalesByDate.get(closeout.business_date) ?? 0) +
           closeout.cash_sales_cents +
           closeout.card_sales_cents
+      );
+      closeoutVarianceByDate.set(
+        closeout.business_date,
+        (closeoutVarianceByDate.get(closeout.business_date) ?? 0) + closeout.variance_cents
       );
     }
 
@@ -450,6 +516,28 @@ export function analyzeStoreData(
       totalPayment != null && totalPayment > 0 && cardSalesCents != null
         ? Math.round((cardSalesCents / totalPayment) * 100)
         : null;
+    const varianceEntries = [...closeoutVarianceByDate.values()];
+    const varianceDays = varianceEntries.filter((value) => value !== 0).length;
+    const totalVarianceCents =
+      varianceEntries.length > 0 ? varianceEntries.reduce((sum, value) => sum + value, 0) : null;
+    const avgVariancePerDayCents =
+      varianceEntries.length > 0 && totalVarianceCents != null
+        ? Math.round(totalVarianceCents / varianceEntries.length)
+        : null;
+    const largestSingleDayVarianceCents =
+      varianceEntries.length > 0
+        ? varianceEntries.reduce((max, value) => (Math.abs(value) > Math.abs(max) ? value : max), varianceEntries[0])
+        : null;
+    const varianceRatePct =
+      varianceEntries.length > 0 ? Math.round((varianceDays / varianceEntries.length) * 100) : null;
+
+    const cashRisk: CashRiskSummary = {
+      varianceDays,
+      totalVarianceCents,
+      avgVariancePerDayCents,
+      largestSingleDayVarianceCents,
+      varianceRatePct,
+    };
 
     const weatherByDate = new Map<string, WeatherDay>();
     for (const shift of storeShifts) {
@@ -567,6 +655,7 @@ export function analyzeStoreData(
       string,
       { totalSales: number; totalTxn: number; txnDays: number; count: number }
     >();
+    const shiftTypeRollups = new Map<string, ShiftTypeRollup>();
     for (const row of storeSales) {
       const sales = grossSalesForDay(row);
       if (sales == null) continue;
@@ -594,6 +683,7 @@ export function analyzeStoreData(
       const sales = salesRow ? grossSalesForDay(salesRow) : closeoutSalesByDate.get(date) ?? null;
       if (sales == null) continue;
       const txn = salesRow ? transactionsForDay(salesRow) : null;
+      const labor = shiftHours(shift.started_at, shift.ended_at);
 
       const typeEntry = byShiftType.get(shift.shift_type) ?? {
         totalSales: 0,
@@ -608,6 +698,23 @@ export function analyzeStoreData(
         typeEntry.txnDays += 1;
       }
       byShiftType.set(shift.shift_type, typeEntry);
+
+      const typeRollup = shiftTypeRollups.get(shift.shift_type) ?? {
+        shiftType: shift.shift_type,
+        sampleSize: 0,
+        totalSalesCents: 0,
+        totalTransactions: 0,
+        transactionSamples: 0,
+        totalLaborHours: 0,
+      };
+      typeRollup.sampleSize += 1;
+      typeRollup.totalSalesCents += sales;
+      typeRollup.totalLaborHours += labor;
+      if (txn != null) {
+        typeRollup.totalTransactions += txn;
+        typeRollup.transactionSamples += 1;
+      }
+      shiftTypeRollups.set(shift.shift_type, typeRollup);
     }
 
     function toVelocityEntry(
@@ -631,6 +738,26 @@ export function analyzeStoreData(
       .filter(([, entry]) => entry.count > 0)
       .map(([label, entry]) => toVelocityEntry(label, entry))
       .sort((a, b) => b.avgSalesCents - a.avgSalesCents);
+
+    const shiftTypeBreakdown: ShiftTypeBreakdownRow[] = [...shiftTypeRollups.values()]
+      .map((row) => {
+        const avgSalesCents = row.sampleSize > 0 ? Math.round(row.totalSalesCents / row.sampleSize) : null;
+        const avgTransactions =
+          row.transactionSamples > 0 ? round1(row.totalTransactions / row.transactionSamples) : null;
+        const avgBasketCents =
+          row.totalTransactions > 0 ? Math.round(row.totalSalesCents / row.totalTransactions) : null;
+        const avgRplhCents =
+          row.totalLaborHours > 0 ? Math.round(row.totalSalesCents / row.totalLaborHours) : null;
+        return {
+          shiftType: row.shiftType,
+          avgSalesCents,
+          avgTransactions,
+          avgBasketCents,
+          avgRplhCents,
+          sampleSize: row.sampleSize,
+        };
+      })
+      .sort((a, b) => (b.avgSalesCents ?? 0) - (a.avgSalesCents ?? 0));
 
     const dailyRollups = new Map<string, DayRollup>();
     for (const [date, sales] of grossByDate.entries()) {
@@ -757,6 +884,80 @@ export function analyzeStoreData(
         sampleDays: bucket.sampleDays,
       };
     });
+
+    let volatility: VolatilitySummary = {
+      stdDevDailySalesCents: null,
+      coefficientOfVariationPct: null,
+      belowOneSigmaDays: 0,
+      aboveOneSigmaDays: 0,
+      largestUpSwingCents: null,
+      largestDownSwingCents: null,
+    };
+    const salesSeries = sortedDates.map((date) => dailyRollups.get(date)?.salesCents ?? 0);
+    if (salesSeries.length > 0) {
+      const mean = salesSeries.reduce((sum, value) => sum + value, 0) / salesSeries.length;
+      const variance =
+        salesSeries.reduce((sum, value) => sum + (value - mean) ** 2, 0) / salesSeries.length;
+      const stdDev = Math.sqrt(variance);
+      const belowThreshold = mean - stdDev;
+      const aboveThreshold = mean + stdDev;
+      let largestUpSwing = Number.NEGATIVE_INFINITY;
+      let largestDownSwing = Number.POSITIVE_INFINITY;
+      for (let idx = 1; idx < salesSeries.length; idx += 1) {
+        const delta = salesSeries[idx] - salesSeries[idx - 1];
+        if (delta > largestUpSwing) largestUpSwing = delta;
+        if (delta < largestDownSwing) largestDownSwing = delta;
+      }
+
+      volatility = {
+        stdDevDailySalesCents: Math.round(stdDev),
+        coefficientOfVariationPct: mean !== 0 ? round1((stdDev / mean) * 100) : null,
+        belowOneSigmaDays: salesSeries.filter((value) => value < belowThreshold).length,
+        aboveOneSigmaDays: salesSeries.filter((value) => value > aboveThreshold).length,
+        largestUpSwingCents:
+          salesSeries.length > 1 && largestUpSwing !== Number.NEGATIVE_INFINITY
+            ? Math.round(largestUpSwing)
+            : null,
+        largestDownSwingCents:
+          salesSeries.length > 1 && largestDownSwing !== Number.POSITIVE_INFINITY
+            ? Math.round(largestDownSwing)
+            : null,
+      };
+    }
+
+    const expectedDates = dateRange(periodFrom, periodTo);
+    const expectedDateSet = new Set(expectedDates);
+    const salesDateSet = new Set(grossByDate.keys());
+    const missingSalesDays = expectedDates.filter((date) => !salesDateSet.has(date)).length;
+    const missingTransactionDays = expectedDates.filter(
+      (date) => salesDateSet.has(date) && !txByDate.has(date)
+    ).length;
+    const missingLaborDays = expectedDates.filter((date) => {
+      if (!salesDateSet.has(date)) return false;
+      const labor = laborHoursByDate.get(date);
+      return labor == null || labor <= 0;
+    }).length;
+    const rolloverAdjustedDays = new Set(
+      storeSales
+        .filter(
+          (row) =>
+            (row.rollover_from_previous_cents ?? 0) > 0 ||
+            (Boolean(row.is_rollover_night) && (row.closer_rollover_cents ?? 0) > 0)
+        )
+        .map((row) => row.business_date)
+        .filter((date) => expectedDateSet.has(date))
+    ).size;
+
+    const dataIntegrity: DataIntegritySummary = {
+      expectedDays: expectedDates.length,
+      missingSalesDays,
+      missingTransactionDays,
+      missingLaborDays,
+      rolloverAdjustedDays,
+      lateCloseouts: null,
+      manualOverrides: null,
+      auditFlagsTriggered: null,
+    };
 
     const employeeMap = new Map<string, EmployeeRollup>();
     for (const shift of storeShifts) {
@@ -898,6 +1099,10 @@ export function analyzeStoreData(
 
       dailyTrend,
       dayOfWeekAverages,
+      shiftTypeBreakdown,
+      volatility,
+      cashRisk,
+      dataIntegrity,
       topPerformers,
     };
   });

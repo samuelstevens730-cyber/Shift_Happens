@@ -28,6 +28,23 @@ function formatDayOfWeekTable(summary: StorePeriodSummary): string[] {
   return lines;
 }
 
+function formatShiftTypeTable(summary: StorePeriodSummary): string[] {
+  const lines: string[] = [];
+  lines.push("Shift-Type Breakdown:");
+  lines.push("  Type | Avg Sales | Avg Txn | Avg Basket | Avg RPLH | n");
+  for (const row of summary.shiftTypeBreakdown) {
+    lines.push(
+      `  ${row.shiftType} | ` +
+        `${row.avgSalesCents != null ? dollarsFromCents(row.avgSalesCents) : "N/A"} | ` +
+        `${row.avgTransactions != null ? row.avgTransactions.toFixed(1) : "N/A"} | ` +
+        `${row.avgBasketCents != null ? dollarsFromCents(row.avgBasketCents) : "N/A"} | ` +
+        `${row.avgRplhCents != null ? dollarsFromCents(row.avgRplhCents) : "N/A"} | ` +
+        `${row.sampleSize}`
+    );
+  }
+  return lines;
+}
+
 export function formatStoreReport(
   summaries: StorePeriodSummary[],
   periodFrom: string,
@@ -75,6 +92,37 @@ export function formatStoreReport(
       }`
     );
     lines.push(`  Safe Closeout Days: ${summary.safeCloseoutDayCount}`);
+    lines.push(
+      `  Variance Days: ${summary.cashRisk.varianceDays}` +
+        (summary.cashRisk.varianceRatePct != null ? ` (${summary.cashRisk.varianceRatePct}%)` : "")
+    );
+    lines.push(
+      `  Total Variance: ${
+        summary.cashRisk.totalVarianceCents != null
+          ? `${summary.cashRisk.totalVarianceCents < 0 ? "-" : summary.cashRisk.totalVarianceCents > 0 ? "+" : ""}${dollarsFromCents(
+              Math.abs(summary.cashRisk.totalVarianceCents)
+            )}`
+          : "N/A"
+      }`
+    );
+    lines.push(
+      `  Avg Variance/Day: ${
+        summary.cashRisk.avgVariancePerDayCents != null
+          ? `${summary.cashRisk.avgVariancePerDayCents < 0 ? "-" : summary.cashRisk.avgVariancePerDayCents > 0 ? "+" : ""}${dollarsFromCents(
+              Math.abs(summary.cashRisk.avgVariancePerDayCents)
+            )}`
+          : "N/A"
+      }`
+    );
+    lines.push(
+      `  Largest Single-Day Variance: ${
+        summary.cashRisk.largestSingleDayVarianceCents != null
+          ? `${summary.cashRisk.largestSingleDayVarianceCents < 0 ? "-" : summary.cashRisk.largestSingleDayVarianceCents > 0 ? "+" : ""}${dollarsFromCents(
+              Math.abs(summary.cashRisk.largestSingleDayVarianceCents)
+            )}`
+          : "N/A"
+      }`
+    );
     lines.push("");
 
     lines.push("Weather Summary:");
@@ -107,6 +155,41 @@ export function formatStoreReport(
     if (summary.weatherSummary.weatherImpactHint) {
       lines.push(`  Weather Impact Hint: ${summary.weatherSummary.weatherImpactHint}`);
     }
+    lines.push("");
+
+    lines.push("Distribution and Volatility:");
+    lines.push(
+      `  Std Dev Daily Sales: ${
+        summary.volatility.stdDevDailySalesCents != null
+          ? dollarsFromCents(summary.volatility.stdDevDailySalesCents)
+          : "N/A"
+      }`
+    );
+    lines.push(
+      `  Coefficient of Variation: ${
+        summary.volatility.coefficientOfVariationPct != null
+          ? `${summary.volatility.coefficientOfVariationPct}%`
+          : "N/A"
+      }`
+    );
+    lines.push(
+      `  Outlier Counts: ${summary.volatility.belowOneSigmaDays} below -1 sigma / ` +
+        `${summary.volatility.aboveOneSigmaDays} above +1 sigma`
+    );
+    lines.push(
+      `  Largest 1-Day Swing Up: ${
+        summary.volatility.largestUpSwingCents != null
+          ? dollarsFromCents(summary.volatility.largestUpSwingCents)
+          : "N/A"
+      }`
+    );
+    lines.push(
+      `  Largest 1-Day Swing Down: ${
+        summary.volatility.largestDownSwingCents != null
+          ? dollarsFromCents(summary.volatility.largestDownSwingCents)
+          : "N/A"
+      }`
+    );
     lines.push("");
 
     lines.push("Velocity Map:");
@@ -146,6 +229,20 @@ export function formatStoreReport(
     lines.push("");
 
     lines.push(...formatDayOfWeekTable(summary));
+    lines.push("");
+    lines.push(...formatShiftTypeTable(summary));
+    lines.push("");
+
+    lines.push("Data Integrity:");
+    lines.push(`  Expected Days: ${summary.dataIntegrity.expectedDays}`);
+    lines.push(`  Missing Sales Days: ${summary.dataIntegrity.missingSalesDays}`);
+    lines.push(`  Days Missing Txn Count: ${summary.dataIntegrity.missingTransactionDays}`);
+    lines.push(`  Days Missing Labor: ${summary.dataIntegrity.missingLaborDays}`);
+    lines.push(`  Rollover Adjustments Applied: ${summary.dataIntegrity.rolloverAdjustedDays}`);
+    lines.push(
+      `  Late Closeouts / Overrides / Audit Flags: ${summary.dataIntegrity.lateCloseouts ?? "N/A"} / ` +
+        `${summary.dataIntegrity.manualOverrides ?? "N/A"} / ${summary.dataIntegrity.auditFlagsTriggered ?? "N/A"}`
+    );
     lines.push("");
 
     lines.push("Top Performers:");

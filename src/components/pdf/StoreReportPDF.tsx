@@ -90,6 +90,51 @@ const styles = StyleSheet.create({
     color: "#374151",
     marginBottom: 1,
   },
+  chartLegendRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 4,
+  },
+  chartLegendItem: {
+    fontSize: 7,
+    color: "#4B5563",
+  },
+  chartRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 3,
+    gap: 6,
+  },
+  chartDate: {
+    width: 44,
+    fontSize: 7,
+    color: "#6B7280",
+  },
+  chartBars: {
+    width: 180,
+    gap: 1,
+  },
+  chartTrack: {
+    width: 180,
+    height: 5,
+    backgroundColor: "#E5E7EB",
+    borderRadius: 2,
+    overflow: "hidden",
+  },
+  chartSalesBar: {
+    height: 5,
+    backgroundColor: "#22D3EE",
+  },
+  chartRollingBar: {
+    height: 5,
+    backgroundColor: "#FACC15",
+  },
+  chartLaborText: {
+    width: 38,
+    fontSize: 7,
+    color: "#4B5563",
+    textAlign: "right",
+  },
   muted: {
     color: "#9CA3AF",
     fontStyle: "italic",
@@ -196,6 +241,34 @@ function BlockB({ summary }: { summary: StorePeriodSummary }) {
             </Text>
           </View>
           <Text style={styles.subValue}>{summary.safeCloseoutDayCount} safe-closeout day(s)</Text>
+          <Text style={styles.subValue}>
+            Variance days: {summary.cashRisk.varianceDays}
+            {summary.cashRisk.varianceRatePct != null ? ` (${summary.cashRisk.varianceRatePct}%)` : ""}
+          </Text>
+          <Text style={styles.subValue}>
+            Total variance:{" "}
+            {summary.cashRisk.totalVarianceCents != null
+              ? `${summary.cashRisk.totalVarianceCents < 0 ? "-" : summary.cashRisk.totalVarianceCents > 0 ? "+" : ""}${dollarsFromCents(
+                  Math.abs(summary.cashRisk.totalVarianceCents)
+                )}`
+              : "N/A"}
+          </Text>
+          <Text style={styles.subValue}>
+            Avg variance/day:{" "}
+            {summary.cashRisk.avgVariancePerDayCents != null
+              ? `${summary.cashRisk.avgVariancePerDayCents < 0 ? "-" : summary.cashRisk.avgVariancePerDayCents > 0 ? "+" : ""}${dollarsFromCents(
+                  Math.abs(summary.cashRisk.avgVariancePerDayCents)
+                )}`
+              : "N/A"}
+          </Text>
+          <Text style={styles.subValue}>
+            Largest single-day variance:{" "}
+            {summary.cashRisk.largestSingleDayVarianceCents != null
+              ? `${summary.cashRisk.largestSingleDayVarianceCents < 0 ? "-" : summary.cashRisk.largestSingleDayVarianceCents > 0 ? "+" : ""}${dollarsFromCents(
+                  Math.abs(summary.cashRisk.largestSingleDayVarianceCents)
+                )}`
+              : "N/A"}
+          </Text>
         </>
       )}
     </View>
@@ -276,6 +349,84 @@ function VelocityBlock({ summary }: { summary: StorePeriodSummary }) {
   );
 }
 
+function VolatilityBlock({ summary }: { summary: StorePeriodSummary }) {
+  return (
+    <View style={styles.block}>
+      <Text style={styles.blockTitle}>Distribution And Volatility</Text>
+      {summary.volatility.stdDevDailySalesCents == null ? (
+        <Text style={styles.muted}>Not enough daily sales data.</Text>
+      ) : (
+        <>
+          <Text style={styles.subValue}>
+            Std dev (daily sales): {dollarsFromCents(summary.volatility.stdDevDailySalesCents)}
+          </Text>
+          <Text style={styles.subValue}>
+            Coefficient of variation:{" "}
+            {summary.volatility.coefficientOfVariationPct != null
+              ? `${summary.volatility.coefficientOfVariationPct}%`
+              : "N/A"}
+          </Text>
+          <Text style={styles.subValue}>
+            Outliers: {summary.volatility.belowOneSigmaDays} below -1 sigma / {summary.volatility.aboveOneSigmaDays} above +1 sigma
+          </Text>
+          <Text style={styles.subValue}>
+            Largest 1-day swing up:{" "}
+            {summary.volatility.largestUpSwingCents != null
+              ? dollarsFromCents(summary.volatility.largestUpSwingCents)
+              : "N/A"}
+          </Text>
+          <Text style={styles.subValue}>
+            Largest 1-day swing down:{" "}
+            {summary.volatility.largestDownSwingCents != null
+              ? dollarsFromCents(summary.volatility.largestDownSwingCents)
+              : "N/A"}
+          </Text>
+        </>
+      )}
+    </View>
+  );
+}
+
+function TrendChartBlock({ summary }: { summary: StorePeriodSummary }) {
+  const points = summary.dailyTrend.slice(-10);
+  const maxSales = points.reduce((max, point) => Math.max(max, point.salesCents, point.rolling7SalesCents), 0);
+
+  return (
+    <View style={styles.block}>
+      <Text style={styles.blockTitle}>Daily Sales Trend Chart</Text>
+      {points.length === 0 || maxSales <= 0 ? (
+        <Text style={styles.muted}>No daily trend data.</Text>
+      ) : (
+        <>
+          <View style={styles.chartLegendRow}>
+            <Text style={styles.chartLegendItem}>Cyan = Daily Sales</Text>
+            <Text style={styles.chartLegendItem}>Yellow = 7d Rolling Avg</Text>
+            <Text style={styles.chartLegendItem}>Right label = Labor Hours</Text>
+          </View>
+          {points.map((point) => {
+            const salesWidth = Math.max(2, Math.round((point.salesCents / maxSales) * 180));
+            const rollingWidth = Math.max(2, Math.round((point.rolling7SalesCents / maxSales) * 180));
+            return (
+              <View key={point.date} style={styles.chartRow}>
+                <Text style={styles.chartDate}>{point.date.slice(5)}</Text>
+                <View style={styles.chartBars}>
+                  <View style={styles.chartTrack}>
+                    <View style={[styles.chartSalesBar, { width: salesWidth }]} />
+                  </View>
+                  <View style={styles.chartTrack}>
+                    <View style={[styles.chartRollingBar, { width: rollingWidth }]} />
+                  </View>
+                </View>
+                <Text style={styles.chartLaborText}>{point.laborHours.toFixed(1)}h</Text>
+              </View>
+            );
+          })}
+        </>
+      )}
+    </View>
+  );
+}
+
 function DayOfWeekBlock({ summary }: { summary: StorePeriodSummary }) {
   const rows = summary.dayOfWeekAverages.filter((row) => row.sampleDays > 0);
   return (
@@ -311,21 +462,52 @@ function DayOfWeekBlock({ summary }: { summary: StorePeriodSummary }) {
   );
 }
 
-function TrendBlock({ summary }: { summary: StorePeriodSummary }) {
-  const points = summary.dailyTrend.slice(-5);
+function ShiftTypeBreakdownBlock({ summary }: { summary: StorePeriodSummary }) {
   return (
     <View style={styles.block}>
-      <Text style={styles.blockTitle}>Recent Daily Trend Snapshot</Text>
-      {points.length === 0 ? (
-        <Text style={styles.muted}>No daily trend data.</Text>
+      <Text style={styles.blockTitle}>Shift-Type Breakdown</Text>
+      {summary.shiftTypeBreakdown.length === 0 ? (
+        <Text style={styles.muted}>No shift-type data.</Text>
       ) : (
-        points.map((point) => (
-          <Text key={point.date} style={styles.mono}>
-            {point.date}: sales {dollarsFromCents(point.salesCents)} | roll7 {dollarsFromCents(point.rolling7SalesCents)} |
-            labor {point.laborHours.toFixed(1)}h
-          </Text>
-        ))
+        <>
+          <View style={styles.tableHeader}>
+            <Text style={styles.colDay}>Type</Text>
+            <Text style={styles.colMoney}>Sales</Text>
+            <Text style={styles.colNum}>Txn</Text>
+            <Text style={styles.colMoney}>Basket</Text>
+            <Text style={styles.colWide}>RPLH / n</Text>
+          </View>
+          {summary.shiftTypeBreakdown.map((row) => (
+            <View key={row.shiftType} style={styles.tableRow}>
+              <Text style={styles.colDay}>{row.shiftType}</Text>
+              <Text style={styles.colMoney}>{row.avgSalesCents != null ? dollarsFromCents(row.avgSalesCents) : "N/A"}</Text>
+              <Text style={styles.colNum}>{row.avgTransactions != null ? row.avgTransactions.toFixed(1) : "N/A"}</Text>
+              <Text style={styles.colMoney}>{row.avgBasketCents != null ? dollarsFromCents(row.avgBasketCents) : "N/A"}</Text>
+              <Text style={styles.colWide}>
+                {row.avgRplhCents != null ? dollarsFromCents(row.avgRplhCents) : "N/A"} / {row.sampleSize}
+              </Text>
+            </View>
+          ))}
+        </>
       )}
+    </View>
+  );
+}
+
+function DataIntegrityBlock({ summary }: { summary: StorePeriodSummary }) {
+  const integrity = summary.dataIntegrity;
+  return (
+    <View style={styles.block}>
+      <Text style={styles.blockTitle}>Data Integrity</Text>
+      <Text style={styles.subValue}>Expected days: {integrity.expectedDays}</Text>
+      <Text style={styles.subValue}>Missing sales days: {integrity.missingSalesDays}</Text>
+      <Text style={styles.subValue}>Days missing txn count: {integrity.missingTransactionDays}</Text>
+      <Text style={styles.subValue}>Days missing labor hours: {integrity.missingLaborDays}</Text>
+      <Text style={styles.subValue}>Rollover-adjusted days: {integrity.rolloverAdjustedDays}</Text>
+      <Text style={styles.subValue}>
+        Late closeouts / overrides / audit flags: {integrity.lateCloseouts ?? "N/A"} /{" "}
+        {integrity.manualOverrides ?? "N/A"} / {integrity.auditFlagsTriggered ?? "N/A"}
+      </Text>
     </View>
   );
 }
@@ -389,8 +571,11 @@ export function StoreReportPDF({ summaries, from, to }: Props) {
               <BlockB summary={summary} />
               <WeatherBlock summary={summary} />
               <VelocityBlock summary={summary} />
-              <TrendBlock summary={summary} />
+              <VolatilityBlock summary={summary} />
+              <TrendChartBlock summary={summary} />
               <DayOfWeekBlock summary={summary} />
+              <ShiftTypeBreakdownBlock summary={summary} />
+              <DataIntegrityBlock summary={summary} />
               <TopPerformersBlock summary={summary} />
             </View>
           </View>

@@ -7,6 +7,7 @@ import {
   Bar,
   CartesianGrid,
   ComposedChart,
+  Legend,
   Line,
   ResponsiveContainer,
   Tooltip,
@@ -105,7 +106,7 @@ function BlockA({ summary }: { summary: StorePeriodSummary }) {
 }
 
 function BlockB({ summary }: { summary: StorePeriodSummary }) {
-  const hasCloseoutData = summary.cashPct != null || summary.depositVarianceCents != null;
+  const hasCloseoutData = summary.cashPct != null || summary.cashRisk.totalVarianceCents != null;
   return (
     <div className="rounded border border-zinc-700 p-4">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
@@ -129,7 +130,73 @@ function BlockB({ summary }: { summary: StorePeriodSummary }) {
                 )}`
               : "N/A"}
           </p>
+          <p>
+            <span className="text-zinc-500">Variance Days: </span>
+            {summary.cashRisk.varianceDays}
+            {summary.cashRisk.varianceRatePct != null ? ` (${summary.cashRisk.varianceRatePct}%)` : ""}
+          </p>
+          <p>
+            <span className="text-zinc-500">Total Variance: </span>
+            {summary.cashRisk.totalVarianceCents != null
+              ? `${summary.cashRisk.totalVarianceCents < 0 ? "-" : summary.cashRisk.totalVarianceCents > 0 ? "+" : ""}${formatCurrencyFromCents(
+                  Math.abs(summary.cashRisk.totalVarianceCents)
+                )}`
+              : "N/A"}
+          </p>
+          <p>
+            <span className="text-zinc-500">Avg Variance/Day: </span>
+            {summary.cashRisk.avgVariancePerDayCents != null
+              ? `${summary.cashRisk.avgVariancePerDayCents < 0 ? "-" : summary.cashRisk.avgVariancePerDayCents > 0 ? "+" : ""}${formatCurrencyFromCents(
+                  Math.abs(summary.cashRisk.avgVariancePerDayCents)
+                )}`
+              : "N/A"}
+          </p>
+          <p>
+            <span className="text-zinc-500">Largest 1-Day Variance: </span>
+            {summary.cashRisk.largestSingleDayVarianceCents != null
+              ? `${summary.cashRisk.largestSingleDayVarianceCents < 0 ? "-" : summary.cashRisk.largestSingleDayVarianceCents > 0 ? "+" : ""}${formatCurrencyFromCents(
+                  Math.abs(summary.cashRisk.largestSingleDayVarianceCents)
+                )}`
+              : "N/A"}
+          </p>
           <p className="text-xs text-zinc-500">{summary.safeCloseoutDayCount} safe-closeout day(s)</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function VolatilityCard({ summary }: { summary: StorePeriodSummary }) {
+  const volatility = summary.volatility;
+  return (
+    <div className="rounded border border-zinc-700 p-4">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+        Distribution And Volatility
+      </p>
+      {volatility.stdDevDailySalesCents == null ? (
+        <p className="text-sm italic text-zinc-500">Not enough day-level sales to compute volatility.</p>
+      ) : (
+        <div className="space-y-2 text-sm">
+          <p>
+            <span className="text-zinc-500">Std Dev (Daily Sales): </span>
+            {formatCurrencyFromCents(volatility.stdDevDailySalesCents)}
+          </p>
+          <p>
+            <span className="text-zinc-500">Coefficient of Variation: </span>
+            {volatility.coefficientOfVariationPct != null ? `${volatility.coefficientOfVariationPct}%` : "N/A"}
+          </p>
+          <p>
+            <span className="text-zinc-500">Outlier Days: </span>
+            {volatility.belowOneSigmaDays} below -1 sigma / {volatility.aboveOneSigmaDays} above +1 sigma
+          </p>
+          <p>
+            <span className="text-zinc-500">Largest 1-Day Swing Up: </span>
+            {volatility.largestUpSwingCents != null ? formatCurrencyFromCents(volatility.largestUpSwingCents) : "N/A"}
+          </p>
+          <p>
+            <span className="text-zinc-500">Largest 1-Day Swing Down: </span>
+            {volatility.largestDownSwingCents != null ? formatCurrencyFromCents(volatility.largestDownSwingCents) : "N/A"}
+          </p>
         </div>
       )}
     </div>
@@ -255,6 +322,12 @@ function DailyTrendChart({ summary }: { summary: StorePeriodSummary }) {
                 return [`$${numericValue.toFixed(2)}`, label];
               }}
             />
+            <Legend
+              verticalAlign="top"
+              align="left"
+              iconType="circle"
+              wrapperStyle={{ fontSize: 11, color: "#d4d4d8" }}
+            />
             <Bar yAxisId="labor" dataKey="labor" name="Labor Hours" fill="#3f3f46" opacity={0.55} />
             <Line yAxisId="sales" type="monotone" dataKey="sales" name="Daily Sales" stroke="#22d3ee" strokeWidth={2} dot={false} />
             <Line
@@ -321,18 +394,110 @@ function TopPerformersCard({ summary }: { summary: StorePeriodSummary }) {
         Top Performers
       </p>
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-        <div className="space-y-1 text-sm">
-          <p className="font-medium text-zinc-300">Volume</p>
-          <p>{formatMetric(volume.totalSales, (value) => formatCurrencyFromCents(value))}</p>
-          <p>{formatMetric(volume.totalTransactions, (value) => `${Math.round(value)} txns`)}</p>
-          <p>{formatMetric(volume.totalLaborHours, (value) => `${value.toFixed(1)}h`)}</p>
+        <div className="space-y-2 text-sm">
+          <p className="font-medium text-zinc-300">Volume Leaders</p>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Total Sales</p>
+            <p>{formatMetric(volume.totalSales, (value) => formatCurrencyFromCents(value))}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Total Transactions</p>
+            <p>{formatMetric(volume.totalTransactions, (value) => `${Math.round(value)} txns`)}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Total Labor Hours</p>
+            <p>{formatMetric(volume.totalLaborHours, (value) => `${value.toFixed(1)}h`)}</p>
+          </div>
         </div>
-        <div className="space-y-1 text-sm">
-          <p className="font-medium text-zinc-300">Efficiency</p>
-          <p>{formatMetric(efficiency.rplh, (value) => `${formatCurrencyFromCents(value)}/hr`)}</p>
-          <p>{formatMetric(efficiency.transactionsPerLaborHour, (value) => `${value.toFixed(1)} txn/hr`)}</p>
-          <p>{formatMetric(efficiency.basketSize, (value) => formatCurrencyFromCents(value))}</p>
+        <div className="space-y-2 text-sm">
+          <p className="font-medium text-zinc-300">Efficiency Leaders</p>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">RPLH (Sales Per Labor Hour)</p>
+            <p>{formatMetric(efficiency.rplh, (value) => `${formatCurrencyFromCents(value)}/hr`)}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Transactions Per Labor Hour</p>
+            <p>{formatMetric(efficiency.transactionsPerLaborHour, (value) => `${value.toFixed(1)} txn/hr`)}</p>
+          </div>
+          <div>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">Basket Size</p>
+            <p>{formatMetric(efficiency.basketSize, (value) => formatCurrencyFromCents(value))}</p>
+          </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function ShiftTypeBreakdownTable({ summary }: { summary: StorePeriodSummary }) {
+  return (
+    <div className="rounded border border-zinc-700 p-4">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+        Shift-Type Breakdown
+      </p>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[720px] text-left text-sm">
+          <thead className="text-zinc-500">
+            <tr>
+              <th className="py-2 pr-3">Shift Type</th>
+              <th className="py-2 pr-3">Avg Sales</th>
+              <th className="py-2 pr-3">Avg Txn</th>
+              <th className="py-2 pr-3">Avg Basket</th>
+              <th className="py-2 pr-3">Avg RPLH</th>
+              <th className="py-2 pr-3">Sample (n)</th>
+            </tr>
+          </thead>
+          <tbody>
+            {summary.shiftTypeBreakdown.map((row) => (
+              <tr key={row.shiftType} className="border-t border-zinc-800">
+                <td className="py-2 pr-3 capitalize">{row.shiftType}</td>
+                <td className="py-2 pr-3">{row.avgSalesCents != null ? formatCurrencyFromCents(row.avgSalesCents) : "N/A"}</td>
+                <td className="py-2 pr-3">{row.avgTransactions != null ? row.avgTransactions.toFixed(1) : "N/A"}</td>
+                <td className="py-2 pr-3">{row.avgBasketCents != null ? formatCurrencyFromCents(row.avgBasketCents) : "N/A"}</td>
+                <td className="py-2 pr-3">{row.avgRplhCents != null ? formatCurrencyFromCents(row.avgRplhCents) : "N/A"}</td>
+                <td className="py-2 pr-3">{row.sampleSize}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+function DataIntegrityCard({ summary }: { summary: StorePeriodSummary }) {
+  const integrity = summary.dataIntegrity;
+  return (
+    <div className="rounded border border-zinc-700 p-4">
+      <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">
+        Data Integrity
+      </p>
+      <div className="grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
+        <p>
+          <span className="text-zinc-500">Expected Days: </span>
+          {integrity.expectedDays}
+        </p>
+        <p>
+          <span className="text-zinc-500">Missing Sales Days: </span>
+          {integrity.missingSalesDays}
+        </p>
+        <p>
+          <span className="text-zinc-500">Days Missing Txn Count: </span>
+          {integrity.missingTransactionDays}
+        </p>
+        <p>
+          <span className="text-zinc-500">Days Missing Labor: </span>
+          {integrity.missingLaborDays}
+        </p>
+        <p>
+          <span className="text-zinc-500">Rollover Adjustments Applied: </span>
+          {integrity.rolloverAdjustedDays}
+        </p>
+        <p>
+          <span className="text-zinc-500">Late Closeouts / Overrides / Audit Flags: </span>
+          {integrity.lateCloseouts ?? "N/A"} / {integrity.manualOverrides ?? "N/A"} /{" "}
+          {integrity.auditFlagsTriggered ?? "N/A"}
+        </p>
       </div>
     </div>
   );
@@ -353,9 +518,12 @@ function StoreCard({ summary }: { summary: StorePeriodSummary }) {
           <BlockB summary={summary} />
           <WeatherSummaryCard summary={summary} />
           <VelocityCard summary={summary} />
+          <VolatilityCard summary={summary} />
+          <DataIntegrityCard summary={summary} />
         </div>
         <DailyTrendChart summary={summary} />
         <DayOfWeekTable summary={summary} />
+        <ShiftTypeBreakdownTable summary={summary} />
         <TopPerformersCard summary={summary} />
       </div>
     </section>
