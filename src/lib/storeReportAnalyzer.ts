@@ -202,12 +202,15 @@ export function analyzeStoreData(
     // Fallback for days that have no safe closeout: daily_sales_records formula.
     let grossSalesCents: number | null = null;
     let totalTransactions: number | null = null;
+    let txTrackedGrossSalesCents: number | null = null;
     const grossByDate = new Map<string, number>();
+    const txTrackedDates = new Set<string>();
 
     for (const row of storeSales) {
       const dayTxn = transactionsForDay(row);
       if (dayTxn != null) {
         totalTransactions = (totalTransactions ?? 0) + dayTxn;
+        txTrackedDates.add(row.business_date);
       }
       const daySales = grossSalesForDay(row);
       if (daySales != null) {
@@ -225,9 +228,17 @@ export function analyzeStoreData(
       grossSalesCents = (grossSalesCents ?? 0) + daySales;
     }
 
+    // Basket size should only use days where transaction counts were captured.
+    for (const date of txTrackedDates) {
+      const daySales = grossByDate.get(date);
+      if (daySales != null) {
+        txTrackedGrossSalesCents = (txTrackedGrossSalesCents ?? 0) + daySales;
+      }
+    }
+
     const avgBasketSizeCents =
-      grossSalesCents != null && totalTransactions != null && totalTransactions > 0
-        ? Math.round(grossSalesCents / totalTransactions)
+      txTrackedGrossSalesCents != null && totalTransactions != null && totalTransactions > 0
+        ? Math.round(txTrackedGrossSalesCents / totalTransactions)
         : null;
 
     // Labor hours: sum of ended shifts

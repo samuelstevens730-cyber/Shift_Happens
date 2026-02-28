@@ -1,26 +1,26 @@
 # Shift Happens WFM - Tighten Up / Finish Checklist
 
 ## 0) Ship-blockers (before calling features "complete")
-- [ ] **Add transaction count tracking to clock-out**
-  - [ ] DB: store `transaction_count` on the canonical shift/closeout record
-  - [ ] UI: required integer input on clock-out (sales only; no voids/no-sales/reports)
-  - [ ] Validation: block `sales_total > 0 && transaction_count == 0`
-  - [ ] Reports: compute **basket size** safely (no divide-by-zero; prefer `null` when tx=0)
-  - [ ] Backward compat: old records do not break reports (treat missing/0 as `null`)
+- [x] **Add transaction count tracking to clock-out**
+  - [x] DB: store `transaction_count` on the canonical shift/closeout record
+  - [x] UI: required integer input on clock-out (sales only; no voids/no-sales/reports)
+  - [x] Validation: block `sales_total > 0 && transaction_count == 0`
+  - [x] Reports: compute **basket size** safely (no divide-by-zero; prefer `null` when tx=0)
+  - [x] Backward compat: old records do not break reports (treat missing/0 as `null`)
 
 ## 0.1) In-flight feature: Weather tracking (clock in/out + reporting)
-- [ ] **Weather data model**
-  - [ ] Decide canonical storage level: shift-level snapshot vs day/store-level snapshot
-  - [ ] Define required fields (temp, precipitation, condition, source timestamp, source provider)
-  - [ ] Keep nullable for historical rows and API failure tolerance
-- [ ] **Collection flow**
-  - [ ] Capture weather at clock-in and/or clock-out with deterministic rules
-  - [ ] Add retry and timeout behavior for weather API calls
-  - [ ] Define fallback behavior when weather API is unavailable (do not block critical shift actions)
-- [ ] **Reporting integration**
-  - [ ] Include weather dimensions in store-level performance report
-  - [ ] Ensure weather joins are null-safe and do not drop rows
-  - [ ] Add filters/grouping for weather impact analysis
+- [x] **Weather data model**
+  - [x] Decide canonical storage level: shift-level snapshot vs day/store-level snapshot
+  - [x] Define required fields (temp, precipitation, condition, source timestamp, source provider)
+  - [x] Keep nullable for historical rows and API failure tolerance
+- [x] **Collection flow**
+  - [x] Capture weather at clock-in and/or clock-out with deterministic rules
+  - [x] Add retry and timeout behavior for weather API calls
+  - [x] Define fallback behavior when weather API is unavailable (do not block critical shift actions)
+- [x] **Reporting integration**
+  - [x] Include weather dimensions in store-level performance report
+  - [x] Ensure weather joins are null-safe and do not drop rows
+  - [x] Add filters/grouping for weather impact analysis
 
 ## 0.2) In-flight feature: Store-level sales/performance report
 - [ ] **Report contract**
