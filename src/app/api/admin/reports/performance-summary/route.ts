@@ -90,6 +90,12 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "'from' must be on or before 'to'.", code: "invalid_range" }, { status: 400 });
     }
 
+    const fromUtc = new Date(`${from}T00:00:00.000Z`);
+    const toUtc = new Date(`${to}T00:00:00.000Z`);
+    const periodDays = Math.floor((toUtc.getTime() - fromUtc.getTime()) / 86_400_000) + 1;
+    const previousFrom = cstDateKey(addDays(fromUtc, -periodDays));
+    const previousTo = cstDateKey(addDays(fromUtc, -1));
+
     const storeIdParam = p.get("storeId") ?? "all";
     if (storeIdParam !== "all" && !managerStoreIds.includes(storeIdParam)) {
       return NextResponse.json({ error: "Store not in scope.", code: "forbidden_store" }, { status: 403 });
@@ -127,7 +133,7 @@ export async function GET(req: Request) {
       .from("shifts")
       .select("id,store_id,profile_id,shift_type,planned_start_at,started_at,ended_at,last_action,start_weather_condition,start_weather_desc,start_temp_f,end_weather_condition,end_weather_desc,end_temp_f")
       .in("store_id", activeStoreIds)
-      .gte("started_at", `${from}T00:00:00.000Z`)
+      .gte("started_at", `${previousFrom}T00:00:00.000Z`)
       .lte("started_at", `${to}T23:59:59.999Z`)
       .neq("last_action", "removed");
 
@@ -152,7 +158,7 @@ export async function GET(req: Request) {
           "id,store_id,business_date,open_shift_id,close_shift_id,open_x_report_cents,close_sales_cents,z_report_cents,rollover_from_previous_cents,closer_rollover_cents,is_rollover_night,open_transaction_count,close_transaction_count,mid_x_report_cents"
         )
         .in("store_id", activeStoreIds)
-        .gte("business_date", from)
+        .gte("business_date", previousFrom)
         .lte("business_date", to)
         .returns<SalesRecordRow[]>(),
       supabaseServer
@@ -181,7 +187,7 @@ export async function GET(req: Request) {
         .select("id,store_id,profile_id,shift_type,planned_start_at,started_at,ended_at,last_action,start_weather_condition,start_weather_desc,start_temp_f,end_weather_condition,end_weather_desc,end_temp_f")
         .in("store_id", activeStoreIds)
         .in("profile_id", benchmarkEmployeeIds)
-        .gte("started_at", `${from}T00:00:00.000Z`)
+        .gte("started_at", `${previousFrom}T00:00:00.000Z`)
         .lte("started_at", `${to}T23:59:59.999Z`)
         .neq("last_action", "removed")
         .returns<RawShiftRow[]>();
@@ -202,6 +208,16 @@ export async function GET(req: Request) {
       { benchmarkEmployeeIds: benchmarkEmployeeIds.length > 0 ? benchmarkEmployeeIds : undefined }
     );
 
+    const { summaries: previousSummaries } = analyzeEmployeeSales(
+      allShifts,
+      salesRes.data ?? [],
+      storesRes.data ?? [],
+      profilesRes.data ?? [],
+      previousFrom,
+      previousTo,
+      { benchmarkEmployeeIds: benchmarkEmployeeIds.length > 0 ? benchmarkEmployeeIds : undefined }
+    );
+
     // If filtered to a single employee, drop benchmark employees from output
     const outputSummaries = employeeIdParam
       ? summaries.filter((s) => s.employeeId === employeeIdParam)
@@ -218,65 +234,16 @@ export async function GET(req: Request) {
     let deltas: ReturnType<typeof computePeriodDelta>[] | undefined;
 
     if (includeDelta && outputSummaries.length > 0) {
-      const employeeIds = outputSummaries.map((s) => s.employeeId);
-
-      // Determine which snapshot type to compare against
-      // Quarterly compares against previous quarterly; others compare same type
-      const deltaReportType = reportType;
-      const storeIdForSnapshot = storeIdParam !== "all" ? storeIdParam : null;
-
-      // Fetch the most recent prior snapshot per employee
-      const previousSnapshotsRes = await supabaseServer
-        .from("performance_snapshots")
-        .select("employee_id,snapshot,period_from,period_to")
-        .in("employee_id", employeeIds)
-        .eq("report_type", deltaReportType)
-        .lt("period_to", from)
-        .is("store_id", storeIdForSnapshot === null ? null : undefined)
-        .order("period_to", { ascending: false })
-        .returns<Array<{ employee_id: string; snapshot: EmployeePeriodSummary; period_from: string; period_to: string }>>();
-
-      if (!previousSnapshotsRes.error) {
-        // Deduplicate: keep only the most recent per employee
-        const mostRecentByEmployee = new Map<string, EmployeePeriodSummary>();
-        for (const row of previousSnapshotsRes.data ?? []) {
-          if (!mostRecentByEmployee.has(row.employee_id)) {
-            mostRecentByEmployee.set(row.employee_id, row.snapshot);
-          }
-        }
-
-        // Handle per-store snapshots differently (use .eq instead of .is)
-        if (storeIdForSnapshot !== null) {
-          const perStoreRes = await supabaseServer
-            .from("performance_snapshots")
-            .select("employee_id,snapshot,period_from,period_to")
-            .in("employee_id", employeeIds)
-            .eq("report_type", deltaReportType)
-            .eq("store_id", storeIdForSnapshot)
-            .lt("period_to", from)
-            .order("period_to", { ascending: false })
-            .returns<Array<{ employee_id: string; snapshot: EmployeePeriodSummary; period_from: string; period_to: string }>>();
-
-          if (!perStoreRes.error) {
-            for (const row of perStoreRes.data ?? []) {
-              if (!mostRecentByEmployee.has(row.employee_id)) {
-                mostRecentByEmployee.set(row.employee_id, row.snapshot);
-              }
-            }
-          }
-        }
-
-        deltas = [];
-        for (const current of outputSummaries) {
-          const previous = mostRecentByEmployee.get(current.employeeId);
-          if (previous) {
-            deltas.push(computePeriodDelta(current, previous));
-          }
+      const previousByEmployee = new Map(previousSummaries.map((s) => [s.employeeId, s]));
+      deltas = [];
+      for (const current of outputSummaries) {
+        const previous = previousByEmployee.get(current.employeeId);
+        if (previous) {
+          deltas.push(computePeriodDelta(current, previous));
         }
       }
     }
 
-    // ── Save snapshots ─────────────────────────────────────────────────────────
     if (saveSnapshot && outputSummaries.length > 0) {
       const storeIdForSnapshot = storeIdParam !== "all" ? storeIdParam : null;
       const snapshotRows = outputSummaries.map((s) => ({

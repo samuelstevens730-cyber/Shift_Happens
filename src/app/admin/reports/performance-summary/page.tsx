@@ -34,6 +34,18 @@ function d(cents: number): string {
   return `$${(cents / 100).toFixed(0)}`;
 }
 
+function signedMoneyDelta(cents: number | null | undefined): string {
+  if (cents == null) return "N/A vs prev";
+  const sign = cents >= 0 ? "+" : "-";
+  return `${sign}${d(Math.abs(cents))} vs prev`;
+}
+
+function signedNumberDelta(value: number | null | undefined, digits = 1): string {
+  if (value == null) return "N/A vs prev";
+  const sign = value >= 0 ? "+" : "-";
+  return `${sign}${Math.abs(value).toFixed(digits)} vs prev`;
+}
+
 function pct(value: number): string {
   return `${value.toFixed(0)}%`;
 }
@@ -151,14 +163,23 @@ function EmployeeCard({
         <div>
           <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Adj Avg / Shift</p>
           <p className="text-xl font-semibold text-zinc-100">{d(summary.avgAdjustedPerShiftCents)}</p>
+          {delta && (
+            <p className="text-xs text-zinc-500 mt-0.5">{signedMoneyDelta(delta.adjAvgDeltaCents)}</p>
+          )}
         </div>
         <div>
           <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Raw Avg / Shift</p>
           <p className="text-xl font-semibold text-zinc-300">{d(summary.avgRawPerShiftCents)}</p>
+          {delta && (
+            <p className="text-xs text-zinc-500 mt-0.5">{signedMoneyDelta(delta.rawAvgDeltaCents)}</p>
+          )}
         </div>
         <div>
           <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Adj / Hr</p>
           <p className="text-xl font-semibold text-zinc-300">{d(summary.avgAdjustedPerHourCents)}</p>
+          {delta && (
+            <p className="text-xs text-zinc-500 mt-0.5">{signedMoneyDelta(delta.adjustedPerHourDeltaCents)}</p>
+          )}
         </div>
         <div>
           <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">vs Benchmark</p>

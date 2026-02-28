@@ -22,6 +22,12 @@ export interface PeriodDelta {
   currentPeriod: string;   // e.g. "2026-02-10 – 2026-02-23"
   previousPeriod: string;
 
+  // Top-line metric deltas (null when previous period lacks a usable baseline)
+  rawAvgDeltaCents: number | null;
+  adjustedPerHourDeltaCents: number | null;
+  avgTransactionsPerShiftDelta: number | null;
+  avgSalesPerTransactionDeltaCents: number | null;
+
   // Core adj avg movement (cents)
   adjAvgDeltaCents: number;
   adjAvgDeltaPct: number;
@@ -60,6 +66,11 @@ export function computePeriodDelta(
   current: EmployeePeriodSummary,
   previous: EmployeePeriodSummary
 ): PeriodDelta {
+  const deltaNumber = (curr: number | null | undefined, prev: number | null | undefined): number | null => {
+    if (curr == null || prev == null) return null;
+    return curr - prev;
+  };
+
   const periodLabel = (s: EmployeePeriodSummary) => `${s.period.from} – ${s.period.to}`;
 
   const adjAvgDeltaCents = current.avgAdjustedPerShiftCents - previous.avgAdjustedPerShiftCents;
@@ -150,6 +161,10 @@ export function computePeriodDelta(
     employeeId: current.employeeId,
     currentPeriod: periodLabel(current),
     previousPeriod: periodLabel(previous),
+    rawAvgDeltaCents: deltaNumber(current.avgRawPerShiftCents, previous.avgRawPerShiftCents),
+    adjustedPerHourDeltaCents: deltaNumber(current.avgAdjustedPerHourCents, previous.avgAdjustedPerHourCents),
+    avgTransactionsPerShiftDelta: deltaNumber(current.avgTransactionsPerShift, previous.avgTransactionsPerShift),
+    avgSalesPerTransactionDeltaCents: deltaNumber(current.avgSalesPerTransactionCents, previous.avgSalesPerTransactionCents),
     adjAvgDeltaCents,
     adjAvgDeltaPct: Math.round(adjAvgDeltaPct * 10) / 10,
     gapVsBenchmarkDeltaCents,
