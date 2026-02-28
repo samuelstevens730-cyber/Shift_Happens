@@ -458,7 +458,11 @@ export default function AdminDashboardPage() {
   function actionDestination(item: DashboardActionItem): string {
     const shiftDetailPath = (() => {
       if (item.category === "people" && item.id.startsWith("people-")) {
-        return `/admin/shifts/${item.id.replace("people-", "")}`;
+        // IDs are formatted as "people-<subtype>-<UUID>" (e.g. people-override-<UUID>,
+        // people-manualclose-<UUID>). Strip the full "people-<subtype>-" prefix to
+        // get the raw UUID; replacing only "people-" would leave "override-<UUID>".
+        const rawId = item.id.replace(/^people-(?:override|manualclose)-/, "");
+        return `/admin/shifts/${rawId}`;
       }
       if (item.category === "scheduling" && item.id.startsWith("scheduling-")) {
         return `/admin/shifts/${item.id.replace("scheduling-", "")}`;
