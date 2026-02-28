@@ -291,6 +291,11 @@ function grossSalesForDay(row: StoreReportSalesRow): number | null {
       : null;
 
   if (amSales != null && pmSales != null) return amSales + pmSales + rolloverCarryOut;
+  // If AM side is missing but Z is present, prefer Z-based reconstruction to
+  // avoid undercounting full-day sales (common on some double-shift records).
+  if (amSales == null && row.z_report_cents != null) {
+    return row.z_report_cents - rolloverCarryIn + rolloverCarryOut;
+  }
   if (pmSales != null) return pmSales + rolloverCarryOut;
   if (amSales != null) return amSales + rolloverCarryOut;
   if (row.z_report_cents != null) return row.z_report_cents - rolloverCarryIn + rolloverCarryOut;
@@ -383,6 +388,7 @@ interface EmployeeRollup {
   employeeName: string;
   shifts: number;
   totalSalesCents: number;
+  totalSalesWithTxnCents: number;
   totalTransactions: number;
   transactionShiftCount: number;
   totalLaborHours: number;
@@ -392,6 +398,7 @@ interface ShiftTypeRollup {
   shiftType: string;
   sampleSize: number;
   totalSalesCents: number;
+  totalSalesWithTxnCents: number;
   totalTransactions: number;
   transactionSamples: number;
   totalLaborHours: number;
@@ -703,6 +710,7 @@ export function analyzeStoreData(
         shiftType: shift.shift_type,
         sampleSize: 0,
         totalSalesCents: 0,
+        totalSalesWithTxnCents: 0,
         totalTransactions: 0,
         transactionSamples: 0,
         totalLaborHours: 0,
@@ -711,6 +719,7 @@ export function analyzeStoreData(
       typeRollup.totalSalesCents += sales;
       typeRollup.totalLaborHours += labor;
       if (txn != null) {
+        typeRollup.totalSalesWithTxnCents += sales;
         typeRollup.totalTransactions += txn;
         typeRollup.transactionSamples += 1;
       }
@@ -745,7 +754,7 @@ export function analyzeStoreData(
         const avgTransactions =
           row.transactionSamples > 0 ? round1(row.totalTransactions / row.transactionSamples) : null;
         const avgBasketCents =
-          row.totalTransactions > 0 ? Math.round(row.totalSalesCents / row.totalTransactions) : null;
+          row.totalTransactions > 0 ? Math.round(row.totalSalesWithTxnCents / row.totalTransactions) : null;
         const avgRplhCents =
           row.totalLaborHours > 0 ? Math.round(row.totalSalesCents / row.totalLaborHours) : null;
         return {
@@ -979,6 +988,7 @@ export function analyzeStoreData(
           employeeName: profileNameById.get(shift.profile_id) ?? "Unknown",
           shifts: 0,
           totalSalesCents: 0,
+          totalSalesWithTxnCents: 0,
           totalTransactions: 0,
           transactionShiftCount: 0,
           totalLaborHours: 0,
@@ -986,6 +996,7 @@ export function analyzeStoreData(
       current.shifts += 1;
       if (sales != null) current.totalSalesCents += sales;
       if (txn != null) {
+        if (sales != null) current.totalSalesWithTxnCents += sales;
         current.totalTransactions += txn;
         current.transactionShiftCount += 1;
       }
@@ -1056,8 +1067,8 @@ export function analyzeStoreData(
         basketSize: pickTopMetric(
           employeeRollups,
           (entry) =>
-            entry.totalSalesCents > 0 && entry.totalTransactions > 0
-              ? entry.totalSalesCents / entry.totalTransactions
+            entry.totalSalesWithTxnCents > 0 && entry.totalTransactions > 0
+              ? entry.totalSalesWithTxnCents / entry.totalTransactions
               : null,
           (entry, value) => ({
             employeeId: entry.employeeId,
