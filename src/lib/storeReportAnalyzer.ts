@@ -166,7 +166,9 @@ export interface StorePreviousDeltas {
   adjustedGrossSalesCents: number | null;
   totalTransactions: number | null;
   avgBasketSizeCents: number | null;
+  adjustedAvgBasketSizeCents: number | null;
   rplhCents: number | null;
+  adjustedRplhCents: number | null;
 }
 
 export interface VolatilitySummary {
@@ -1217,7 +1219,9 @@ function analyzeStoreDataForWindow(
         adjustedGrossSalesCents: null,
         totalTransactions: null,
         avgBasketSizeCents: null,
+        adjustedAvgBasketSizeCents: null,
         rplhCents: null,
+        adjustedRplhCents: null,
       },
     };
   });
@@ -1298,7 +1302,12 @@ export function analyzeStoreData(
         ),
         totalTransactions: delta(summary.totalTransactions, prev?.totalTransactions ?? null),
         avgBasketSizeCents: delta(summary.avgBasketSizeCents, prev?.avgBasketSizeCents ?? null),
+        adjustedAvgBasketSizeCents: delta(
+          summary.adjustedAvgBasketSizeCents,
+          prev?.adjustedAvgBasketSizeCents ?? null
+        ),
         rplhCents: delta(summary.rplhCents, prev?.rplhCents ?? null),
+        adjustedRplhCents: delta(summary.adjustedRplhCents, prev?.adjustedRplhCents ?? null),
       },
     };
   });

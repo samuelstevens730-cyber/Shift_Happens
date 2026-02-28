@@ -194,40 +194,45 @@ function BlockA({ summary }: { summary: StorePeriodSummary }) {
     <View style={styles.block}>
       <Text style={styles.blockTitle}>Top-Line Velocity</Text>
       <View style={styles.row}>
-        <Text style={styles.label}>Gross Sales Raw / Adj</Text>
+        <Text style={styles.label}>Gross Sales</Text>
         <Text style={styles.value}>
-          {summary.grossSalesCents != null ? dollarsFromCents(summary.grossSalesCents) : "N/A"} /{" "}
-          {summary.adjustedGrossSalesCents != null ? dollarsFromCents(summary.adjustedGrossSalesCents) : "N/A"}
+          {summary.grossSalesCents != null ? dollarsFromCents(summary.grossSalesCents) : "N/A"}
         </Text>
       </View>
       <Text style={styles.subValue}>
-        Delta raw/adj: {deltaLabel(summary.previousDeltas.grossSalesCents, true)} /{" "}
-        {deltaLabel(summary.previousDeltas.adjustedGrossSalesCents, true)}
+        Delta: {deltaLabel(summary.previousDeltas.grossSalesCents, true)}
+      </Text>
+      <Text style={styles.subValue}>
+        Normalized Volume:{" "}
+        {summary.adjustedGrossSalesCents != null ? dollarsFromCents(summary.adjustedGrossSalesCents) : "N/A"} (
+        {deltaLabel(summary.previousDeltas.adjustedGrossSalesCents, true)})
       </Text>
       <View style={styles.row}>
         <Text style={styles.label}>Transactions</Text>
         <Text style={styles.value}>
           {summary.totalTransactions != null ? summary.totalTransactions : "N/A"}
-          {summary.avgBasketSizeCents != null || summary.adjustedAvgBasketSizeCents != null
-            ? ` | Basket ${summary.avgBasketSizeCents != null ? dollarsFromCents(summary.avgBasketSizeCents) : "N/A"} / ${
-                summary.adjustedAvgBasketSizeCents != null ? dollarsFromCents(summary.adjustedAvgBasketSizeCents) : "N/A"
-              }`
-            : ""}
+          {summary.avgBasketSizeCents != null ? ` | Basket ${dollarsFromCents(summary.avgBasketSizeCents)}` : ""}
         </Text>
       </View>
       <Text style={styles.subValue}>Transactions delta: {deltaLabel(summary.previousDeltas.totalTransactions)}</Text>
+      <Text style={styles.subValue}>
+        Normalized Basket:{" "}
+        {summary.adjustedAvgBasketSizeCents != null ? dollarsFromCents(summary.adjustedAvgBasketSizeCents) : "N/A"} (
+        {deltaLabel(summary.previousDeltas.adjustedAvgBasketSizeCents, true)})
+      </Text>
       <View style={styles.row}>
         <Text style={styles.label}>Labor Hours</Text>
         <Text style={styles.value}>{hours(summary.totalLaborHours)}</Text>
       </View>
       <View style={styles.row}>
-        <Text style={styles.label}>RPLH Raw / Adj</Text>
-        <Text style={styles.value}>
-          {summary.rplhCents != null ? dollarsFromCents(summary.rplhCents) : "N/A"} /{" "}
-          {summary.adjustedRplhCents != null ? dollarsFromCents(summary.adjustedRplhCents) : "N/A"}
-        </Text>
+        <Text style={styles.label}>RPLH</Text>
+        <Text style={styles.value}>{summary.rplhCents != null ? dollarsFromCents(summary.rplhCents) : "N/A"}</Text>
       </View>
       <Text style={styles.subValue}>RPLH delta: {deltaLabel(summary.previousDeltas.rplhCents, true)}</Text>
+      <Text style={styles.subValue}>
+        Normalized RPLH: {summary.adjustedRplhCents != null ? dollarsFromCents(summary.adjustedRplhCents) : "N/A"} (
+        {deltaLabel(summary.previousDeltas.adjustedRplhCents, true)})
+      </Text>
       <Text style={styles.subValue}>Basket delta: {deltaLabel(summary.previousDeltas.avgBasketSizeCents, true)}</Text>
       <Text style={styles.subValue}>Normalization factor: {summary.storeScalingFactor.toFixed(1)}x</Text>
     </View>

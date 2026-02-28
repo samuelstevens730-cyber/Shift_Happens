@@ -91,55 +91,75 @@ function BlockA({ summary }: { summary: StorePeriodSummary }) {
       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
         Top-Line Velocity
       </p>
-      <div className="grid grid-cols-2 gap-3 text-sm">
+      <div className="space-y-4">
         <div>
-          <p className="text-zinc-500">Gross Sales (Raw)</p>
-          <p className="text-lg font-semibold">
+          <p className="text-zinc-500">Gross Sales</p>
+          <p className="text-4xl font-bold text-white">
             {summary.grossSalesCents != null ? formatCurrencyFromCents(summary.grossSalesCents) : "N/A"}
             <DeltaText delta={summary.previousDeltas.grossSalesCents} money />
           </p>
-        </div>
-        <div>
-          <p className="text-zinc-500">Gross Sales (Adjusted)</p>
-          <p className="text-lg font-semibold">
+          <p className="text-sm text-zinc-500">
+            Normalized Volume:{" "}
             {summary.adjustedGrossSalesCents != null ? formatCurrencyFromCents(summary.adjustedGrossSalesCents) : "N/A"}
-            <DeltaText delta={summary.previousDeltas.adjustedGrossSalesCents} money />
+            {" | "}
+            {summary.previousDeltas.adjustedGrossSalesCents != null
+              ? `${summary.previousDeltas.adjustedGrossSalesCents > 0 ? "+" : summary.previousDeltas.adjustedGrossSalesCents < 0 ? "-" : ""}${formatCurrencyFromCents(
+                  Math.abs(summary.previousDeltas.adjustedGrossSalesCents)
+                )} vs prev`
+              : "N/A vs prev"}
           </p>
         </div>
+
         <div>
-          <p className="text-zinc-500">Transactions</p>
-          <p className="font-medium">
-            {summary.totalTransactions ?? "N/A"}
-            <DeltaText delta={summary.previousDeltas.totalTransactions} />
-          </p>
-        </div>
-        <div>
-          <p className="text-zinc-500">Avg Basket (Raw / Adj)</p>
-          <p className="font-medium">
+          <p className="text-zinc-500">Basket Size</p>
+          <p className="text-4xl font-bold text-white">
             {summary.avgBasketSizeCents != null ? formatCurrencyFromCents(summary.avgBasketSizeCents) : "N/A"}
-            {" / "}
+            <DeltaText delta={summary.previousDeltas.avgBasketSizeCents} money />
+          </p>
+          <p className="text-sm text-zinc-500">
+            Normalized Basket:{" "}
             {summary.adjustedAvgBasketSizeCents != null
               ? formatCurrencyFromCents(summary.adjustedAvgBasketSizeCents)
               : "N/A"}
-            <DeltaText delta={summary.previousDeltas.avgBasketSizeCents} money />
+            {" | "}
+            {summary.previousDeltas.adjustedAvgBasketSizeCents != null
+              ? `${summary.previousDeltas.adjustedAvgBasketSizeCents > 0 ? "+" : summary.previousDeltas.adjustedAvgBasketSizeCents < 0 ? "-" : ""}${formatCurrencyFromCents(
+                  Math.abs(summary.previousDeltas.adjustedAvgBasketSizeCents)
+                )} vs prev`
+              : "N/A vs prev"}
           </p>
         </div>
+
         <div>
-          <p className="text-zinc-500">Labor Hours</p>
-          <p className="font-medium">{formatHours(summary.totalLaborHours)}</p>
-        </div>
-        <div>
-          <p className="text-zinc-500">RPLH (Raw / Adj)</p>
-          <p className="font-medium">
+          <p className="text-zinc-500">RPLH</p>
+          <p className="text-4xl font-bold text-white">
             {summary.rplhCents != null ? formatCurrencyFromCents(summary.rplhCents) : "N/A"}
-            {" / "}
-            {summary.adjustedRplhCents != null ? formatCurrencyFromCents(summary.adjustedRplhCents) : "N/A"}
             <DeltaText delta={summary.previousDeltas.rplhCents} money />
           </p>
+          <p className="text-sm text-zinc-500">
+            Normalized RPLH:{" "}
+            {summary.adjustedRplhCents != null ? formatCurrencyFromCents(summary.adjustedRplhCents) : "N/A"}
+            {" | "}
+            {summary.previousDeltas.adjustedRplhCents != null
+              ? `${summary.previousDeltas.adjustedRplhCents > 0 ? "+" : summary.previousDeltas.adjustedRplhCents < 0 ? "-" : ""}${formatCurrencyFromCents(
+                  Math.abs(summary.previousDeltas.adjustedRplhCents)
+                )} vs prev`
+              : "N/A vs prev"}
+          </p>
         </div>
-        <div className="col-span-2 text-xs text-zinc-500">
-          Store normalization factor: {summary.storeScalingFactor.toFixed(1)}x
+
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <p>
+            <span className="text-zinc-500">Transactions: </span>
+            {summary.totalTransactions ?? "N/A"}
+            <DeltaText delta={summary.previousDeltas.totalTransactions} />
+          </p>
+          <p>
+            <span className="text-zinc-500">Labor Hours: </span>
+            {formatHours(summary.totalLaborHours)}
+          </p>
         </div>
+        <div className="text-xs text-zinc-500">Store normalization factor: {summary.storeScalingFactor.toFixed(1)}x</div>
       </div>
     </div>
   );
@@ -337,9 +357,7 @@ function DailyTrendChart({ summary }: { summary: StorePeriodSummary }) {
   const data = summary.dailyTrend.map((point) => ({
     date: point.date.slice(5),
     sales: Number((point.salesCents / 100).toFixed(2)),
-    adjustedSales: Number((point.adjustedSalesCents / 100).toFixed(2)),
     rolling: Number((point.rolling7SalesCents / 100).toFixed(2)),
-    adjustedRolling: Number((point.adjustedRolling7SalesCents / 100).toFixed(2)),
     labor: Number(point.laborHours.toFixed(1)),
   }));
 
@@ -372,7 +390,6 @@ function DailyTrendChart({ summary }: { summary: StorePeriodSummary }) {
             />
             <Bar yAxisId="labor" dataKey="labor" name="Labor Hours" fill="#3f3f46" opacity={0.55} />
             <Line yAxisId="sales" type="monotone" dataKey="sales" name="Daily Sales" stroke="#22d3ee" strokeWidth={2} dot={false} />
-            <Line yAxisId="sales" type="monotone" dataKey="adjustedSales" name="Adjusted Daily Sales" stroke="#38bdf8" strokeWidth={1.5} dot={false} strokeDasharray="4 4" />
             <Line
               yAxisId="sales"
               type="monotone"
@@ -381,16 +398,6 @@ function DailyTrendChart({ summary }: { summary: StorePeriodSummary }) {
               stroke="#facc15"
               strokeWidth={2}
               dot={false}
-            />
-            <Line
-              yAxisId="sales"
-              type="monotone"
-              dataKey="adjustedRolling"
-              name="7d Rolling Avg (Adjusted)"
-              stroke="#f59e0b"
-              strokeWidth={1.5}
-              dot={false}
-              strokeDasharray="4 4"
             />
           </ComposedChart>
         </ResponsiveContainer>
