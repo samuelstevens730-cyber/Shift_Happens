@@ -1,4 +1,5 @@
 import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
+import { pdfStyles } from "@/components/pdf/PdfStyles";
 import type { EmployeePeriodSummary } from "@/lib/salesAnalyzer";
 import type { PeriodDelta } from "@/lib/salesDelta";
 
@@ -13,23 +14,75 @@ type Props = {
 };
 
 const styles = StyleSheet.create({
-  page: { padding: 24, fontSize: 10, color: "#111827" },
-  heading: { fontSize: 16, fontWeight: 700, marginBottom: 2 },
-  subheading: { fontSize: 10, color: "#4b5563", marginBottom: 14 },
-  employeeBlock: { borderWidth: 1, borderColor: "#e5e7eb", borderRadius: 6, padding: 10, marginBottom: 10 },
-  employeeName: { fontSize: 12, fontWeight: 700, marginBottom: 2 },
-  employeeMeta: { fontSize: 9, color: "#4b5563", marginBottom: 8 },
-  metricsRow: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginBottom: 6 },
-  metric: { minWidth: 95 },
-  metricLabel: { fontSize: 8, color: "#6b7280" },
-  metricValue: { fontSize: 11, fontWeight: 700 },
-  metricDelta: { fontSize: 8, color: "#4b5563" },
-  note: { fontSize: 8, color: "#374151", marginTop: 2 },
-  sectionTitle: { fontSize: 9, fontWeight: 700, marginTop: 6, marginBottom: 2 },
-  tableHeader: { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: "#e5e7eb", paddingBottom: 2, marginBottom: 2 },
-  row: { flexDirection: "row", paddingVertical: 1 },
-  colDay: { width: "30%" },
-  colNum: { width: "35%", textAlign: "right" },
+  card: {
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    borderRadius: 4,
+    padding: 8,
+    marginBottom: 8,
+  },
+  cardHeader: {
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+    paddingBottom: 4,
+    marginBottom: 6,
+  },
+  cardTitle: {
+    fontSize: 11,
+    fontWeight: 700,
+  },
+  cardMeta: {
+    fontSize: 8,
+    color: "#4B5563",
+    marginTop: 2,
+  },
+  metricGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginBottom: 4,
+  },
+  metricCell: {
+    width: "33.33%",
+    paddingRight: 8,
+    paddingBottom: 4,
+  },
+  metricLabel: {
+    fontSize: 7,
+    color: "#6B7280",
+    textTransform: "uppercase",
+    marginBottom: 1,
+  },
+  metricValue: {
+    fontSize: 10,
+    fontWeight: 700,
+  },
+  metricDelta: {
+    fontSize: 7,
+    color: "#4B5563",
+    marginTop: 1,
+  },
+  notesWrap: {
+    marginTop: 4,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    paddingTop: 4,
+  },
+  notesTitle: {
+    fontSize: 8,
+    fontWeight: 700,
+    marginBottom: 2,
+  },
+  noteRow: {
+    fontSize: 8,
+    color: "#374151",
+    marginBottom: 1,
+  },
+  splitTable: {
+    marginTop: 5,
+  },
+  splitColType: { width: "40%" },
+  splitColShifts: { width: "20%", textAlign: "right" },
+  splitColAvg: { width: "40%", textAlign: "right" },
 });
 
 const money = (cents: number) => `$${(cents / 100).toFixed(0)}`;
@@ -44,6 +97,16 @@ const signedNumberDelta = (value: number | null | undefined, digits = 1) => {
   return `${sign}${Math.abs(value).toFixed(digits)} vs prev`;
 };
 
+function metric(label: string, value: string, delta?: string) {
+  return (
+    <View style={styles.metricCell}>
+      <Text style={styles.metricLabel}>{label}</Text>
+      <Text style={styles.metricValue}>{value}</Text>
+      {delta ? <Text style={styles.metricDelta}>{delta}</Text> : null}
+    </View>
+  );
+}
+
 export function PerformanceSummaryPDF({
   from,
   to,
@@ -55,102 +118,84 @@ export function PerformanceSummaryPDF({
 }: Props) {
   return (
     <Document>
-      <Page size="A4" style={styles.page}>
-        <Text style={styles.heading}>Sales Performance Report</Text>
-        <Text style={styles.subheading}>
-          Period: {from} to {to}
+      <Page size="A4" style={pdfStyles.pagePortrait}>
+        <Text style={pdfStyles.title}>Sales Performance Report</Text>
+        <Text style={pdfStyles.subtitle}>Period: {from} to {to}</Text>
+        <Text style={[pdfStyles.subtitle, { marginBottom: 8 }]}>
+          Employees: {summaries.length}
         </Text>
 
         {summaries.map((summary) => {
           const delta = deltasByEmployeeId[summary.employeeId];
           const goalGap =
             goalBenchmarkCents != null ? summary.avgAdjustedPerShiftCents - goalBenchmarkCents : null;
+          const benchmarkGap =
+            benchmarkCents != null && summary.gapVsBenchmarkCents != null
+              ? `${summary.gapVsBenchmarkCents >= 0 ? "+" : "-"}${money(Math.abs(summary.gapVsBenchmarkCents))}`
+              : "N/A";
 
           return (
-            <View key={summary.employeeId} style={styles.employeeBlock}>
-              <Text style={styles.employeeName}>{summary.employeeName}</Text>
-              <Text style={styles.employeeMeta}>
-                {summary.primaryStore} · {summary.totalShifts} shifts ({summary.countableShifts} w/ sales) ·{" "}
-                {summary.totalHours.toFixed(1)} hrs
-              </Text>
+            <View key={summary.employeeId} style={styles.card} wrap={false}>
+              <View style={styles.cardHeader}>
+                <Text style={styles.cardTitle}>{summary.employeeName}</Text>
+                <Text style={styles.cardMeta}>
+                  {summary.primaryStore} - {summary.totalShifts} shifts ({summary.countableShifts} with sales) -{" "}
+                  {summary.totalHours.toFixed(1)} hours
+                </Text>
+              </View>
 
-              <View style={styles.metricsRow}>
-                <View style={styles.metric}>
-                  <Text style={styles.metricLabel}>Adj Avg / Shift</Text>
-                  <Text style={styles.metricValue}>{money(summary.avgAdjustedPerShiftCents)}</Text>
-                  {delta ? <Text style={styles.metricDelta}>{signedMoneyDelta(delta.adjAvgDeltaCents)}</Text> : null}
-                </View>
-                <View style={styles.metric}>
-                  <Text style={styles.metricLabel}>Raw Avg / Shift</Text>
-                  <Text style={styles.metricValue}>{money(summary.avgRawPerShiftCents)}</Text>
-                  {delta ? <Text style={styles.metricDelta}>{signedMoneyDelta(delta.rawAvgDeltaCents)}</Text> : null}
-                </View>
-                <View style={styles.metric}>
-                  <Text style={styles.metricLabel}>Adj / Hr</Text>
-                  <Text style={styles.metricValue}>{money(summary.avgAdjustedPerHourCents)}</Text>
-                  {delta ? (
-                    <Text style={styles.metricDelta}>{signedMoneyDelta(delta.adjustedPerHourDeltaCents)}</Text>
-                  ) : null}
-                </View>
-                <View style={styles.metric}>
-                  <Text style={styles.metricLabel}>vs Benchmark</Text>
-                  <Text style={styles.metricValue}>
-                    {benchmarkCents != null && summary.gapVsBenchmarkCents != null
-                      ? `${summary.gapVsBenchmarkCents >= 0 ? "+" : "-"}${money(Math.abs(summary.gapVsBenchmarkCents))}`
-                      : "—"}
-                  </Text>
-                </View>
-                {goalBenchmarkCents != null && (
-                  <View style={styles.metric}>
-                    <Text style={styles.metricLabel}>vs Goal</Text>
-                    <Text style={styles.metricValue}>
-                      {goalGap != null ? `${goalGap >= 0 ? "+" : "-"}${money(Math.abs(goalGap))}` : "—"}
-                    </Text>
-                  </View>
+              <View style={styles.metricGrid}>
+                {metric("Adj Avg / Shift", money(summary.avgAdjustedPerShiftCents), delta ? signedMoneyDelta(delta.adjAvgDeltaCents) : undefined)}
+                {metric("Raw Avg / Shift", money(summary.avgRawPerShiftCents), delta ? signedMoneyDelta(delta.rawAvgDeltaCents) : undefined)}
+                {metric("Adj / Hr", money(summary.avgAdjustedPerHourCents), delta ? signedMoneyDelta(delta.adjustedPerHourDeltaCents) : undefined)}
+                {metric("vs Benchmark", benchmarkGap)}
+                {goalBenchmarkCents != null
+                  ? metric(
+                      "vs Goal",
+                      goalGap != null ? `${goalGap >= 0 ? "+" : "-"}${money(Math.abs(goalGap))}` : "N/A"
+                    )
+                  : null}
+                {metric(
+                  "Txn / Shift",
+                  summary.avgTransactionsPerShift != null ? summary.avgTransactionsPerShift.toFixed(1) : "N/A",
+                  delta
+                    ? `${signedNumberDelta(delta.avgTransactionsPerShiftDelta, 1)} | ${signedMoneyDelta(
+                        delta.avgSalesPerTransactionDeltaCents
+                      )}`
+                    : summary.avgSalesPerTransactionCents != null
+                    ? `${money(summary.avgSalesPerTransactionCents)}/txn`
+                    : undefined
                 )}
-                <View style={styles.metric}>
-                  <Text style={styles.metricLabel}>Txn / Shift</Text>
-                  <Text style={styles.metricValue}>
-                    {summary.avgTransactionsPerShift != null ? summary.avgTransactionsPerShift.toFixed(1) : "—"}
-                  </Text>
-                  {summary.avgSalesPerTransactionCents != null ? (
-                    <Text style={styles.note}>{money(summary.avgSalesPerTransactionCents)}/txn</Text>
-                  ) : null}
-                  {delta ? (
-                    <Text style={styles.metricDelta}>
-                      {signedNumberDelta(delta.avgTransactionsPerShiftDelta, 1)} ·{" "}
-                      {signedMoneyDelta(delta.avgSalesPerTransactionDeltaCents)}
-                    </Text>
-                  ) : null}
-                </View>
               </View>
 
               {delta && delta.notableChanges.length > 0 ? (
-                <View>
-                  <Text style={styles.sectionTitle}>Period-over-period notes</Text>
+                <View style={styles.notesWrap}>
+                  <Text style={styles.notesTitle}>Period-over-period Notes</Text>
                   {delta.notableChanges.slice(0, 4).map((note, i) => (
-                    <Text key={`${summary.employeeId}-note-${i}`} style={styles.note}>
-                      • {note}
+                    <Text key={`${summary.employeeId}-note-${i}`} style={styles.noteRow}>
+                      - {note}
                     </Text>
                   ))}
                 </View>
               ) : null}
 
               {includeShiftDetail && summary.byShiftType.length > 0 ? (
-                <View>
-                  <Text style={styles.sectionTitle}>Shift Type Breakdown</Text>
-                  <View style={styles.tableHeader}>
-                    <Text style={styles.colDay}>Type</Text>
-                    <Text style={styles.colNum}>Shifts</Text>
-                    <Text style={styles.colNum}>Adj Avg</Text>
-                  </View>
-                  {summary.byShiftType.map((row) => (
-                    <View key={`${summary.employeeId}-type-${row.type}`} style={styles.row}>
-                      <Text style={styles.colDay}>{row.type}</Text>
-                      <Text style={styles.colNum}>{row.shifts}</Text>
-                      <Text style={styles.colNum}>{money(row.avgAdjustedCents)}</Text>
+                <View style={styles.splitTable}>
+                  <Text style={pdfStyles.sectionTitle}>Shift Type Breakdown</Text>
+                  <View style={pdfStyles.table}>
+                    <View style={pdfStyles.tableRow}>
+                      <Text style={[pdfStyles.th, styles.splitColType]}>Type</Text>
+                      <Text style={[pdfStyles.th, styles.splitColShifts]}>Shifts</Text>
+                      <Text style={[pdfStyles.th, styles.splitColAvg]}>Adj Avg</Text>
                     </View>
-                  ))}
+                    {summary.byShiftType.map((row) => (
+                      <View key={`${summary.employeeId}-type-${row.type}`} style={pdfStyles.tableRow}>
+                        <Text style={[pdfStyles.td, styles.splitColType]}>{row.type}</Text>
+                        <Text style={[pdfStyles.td, styles.splitColShifts]}>{row.shifts}</Text>
+                        <Text style={[pdfStyles.td, styles.splitColAvg]}>{money(row.avgAdjustedCents)}</Text>
+                      </View>
+                    ))}
+                  </View>
                 </View>
               ) : null}
             </View>

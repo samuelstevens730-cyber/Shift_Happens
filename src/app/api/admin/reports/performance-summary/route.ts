@@ -127,11 +127,13 @@ export async function GET(req: Request) {
         ? Math.round(parseFloat(goalBenchmarkCentsParam))
         : null;
 
+    type ShiftRowWithSchedule = RawShiftRow & { schedule_shift_id: string | null };
+
     // ── Data fetch ─────────────────────────────────────────────────────────────
     // Build shift query (optionally filtered to a single employee)
     let shiftsQuery = supabaseServer
       .from("shifts")
-      .select("id,store_id,profile_id,shift_type,planned_start_at,started_at,ended_at,last_action,start_weather_condition,start_weather_desc,start_temp_f,end_weather_condition,end_weather_desc,end_temp_f")
+      .select("id,store_id,profile_id,shift_type,planned_start_at,started_at,ended_at,last_action,schedule_shift_id,start_weather_condition,start_weather_desc,start_temp_f,end_weather_condition,end_weather_desc,end_temp_f")
       .in("store_id", activeStoreIds)
       .gte("started_at", `${previousFrom}T00:00:00.000Z`)
       .lte("started_at", `${to}T23:59:59.999Z`)
@@ -151,7 +153,7 @@ export async function GET(req: Request) {
       !benchmarkEmployeeIds.includes(employeeIdParam);
 
     const [shiftsRes, salesRes, storesRes, profilesRes] = await Promise.all([
-      shiftsQuery.returns<RawShiftRow[]>(),
+      shiftsQuery.returns<ShiftRowWithSchedule[]>(),
       supabaseServer
         .from("daily_sales_records")
         .select(
@@ -178,33 +180,96 @@ export async function GET(req: Request) {
       }
     }
 
-    let allShifts: RawShiftRow[] = shiftsRes.data ?? [];
+    let allShifts: ShiftRowWithSchedule[] = shiftsRes.data ?? [];
 
     // Fetch benchmark-employee shifts separately if filtered to a single employee
     if (needBenchmarkFetch) {
       const benchmarkShiftsRes = await supabaseServer
         .from("shifts")
-        .select("id,store_id,profile_id,shift_type,planned_start_at,started_at,ended_at,last_action,start_weather_condition,start_weather_desc,start_temp_f,end_weather_condition,end_weather_desc,end_temp_f")
+        .select("id,store_id,profile_id,shift_type,planned_start_at,started_at,ended_at,last_action,schedule_shift_id,start_weather_condition,start_weather_desc,start_temp_f,end_weather_condition,end_weather_desc,end_temp_f")
         .in("store_id", activeStoreIds)
         .in("profile_id", benchmarkEmployeeIds)
         .gte("started_at", `${previousFrom}T00:00:00.000Z`)
         .lte("started_at", `${to}T23:59:59.999Z`)
         .neq("last_action", "removed")
-        .returns<RawShiftRow[]>();
+        .returns<ShiftRowWithSchedule[]>();
 
       if (!benchmarkShiftsRes.error) {
         allShifts = [...allShifts, ...(benchmarkShiftsRes.data ?? [])];
       }
     }
 
+
+    const scheduledShiftIds = Array.from(
+      new Set(allShifts.map((s) => s.schedule_shift_id).filter((v): v is string => Boolean(v)))
+    );
+
+    let effectiveShifts: RawShiftRow[] = allShifts.map((s) => ({
+      id: s.id,
+      store_id: s.store_id,
+      profile_id: s.profile_id,
+      shift_type: s.shift_type,
+      planned_start_at: s.planned_start_at,
+      started_at: s.started_at,
+      ended_at: s.ended_at,
+      last_action: s.last_action,
+      start_weather_condition: s.start_weather_condition,
+      start_weather_desc: s.start_weather_desc,
+      start_temp_f: s.start_temp_f,
+      end_weather_condition: s.end_weather_condition,
+      end_weather_desc: s.end_weather_desc,
+      end_temp_f: s.end_temp_f,
+    }));
+
+    if (scheduledShiftIds.length > 0) {
+      const scheduledRes = await supabaseServer
+        .from("schedule_shifts")
+        .select("id,shift_type,shift_mode")
+        .in("id", scheduledShiftIds)
+        .returns<Array<{ id: string; shift_type: string | null; shift_mode: string | null }>>();
+
+      if (!scheduledRes.error) {
+        const isScheduledDoubleById = new Map<string, boolean>(
+          (scheduledRes.data ?? []).map((row) => [
+            row.id,
+            row.shift_mode === "double" || row.shift_type === "double",
+          ])
+        );
+
+        effectiveShifts = allShifts.map((s) => {
+          const forceDouble =
+            s.shift_type !== "double" &&
+            s.schedule_shift_id != null &&
+            isScheduledDoubleById.get(s.schedule_shift_id) === true;
+
+          return {
+            id: s.id,
+            store_id: s.store_id,
+            profile_id: s.profile_id,
+            shift_type: forceDouble ? "double" : s.shift_type,
+            planned_start_at: s.planned_start_at,
+            started_at: s.started_at,
+            ended_at: s.ended_at,
+            last_action: s.last_action,
+            start_weather_condition: s.start_weather_condition,
+            start_weather_desc: s.start_weather_desc,
+            start_temp_f: s.start_temp_f,
+            end_weather_condition: s.end_weather_condition,
+            end_weather_desc: s.end_weather_desc,
+            end_temp_f: s.end_temp_f,
+          };
+        });
+      }
+    }
+
     // ── Run analyzer ───────────────────────────────────────────────────────────
     const allSalesRecords = salesRes.data ?? [];
 
-    const shiftsCurrentPeriod = allShifts.filter((shift) => {
+    const shiftsCurrentPeriod = effectiveShifts.filter((shift) => {
       const businessDate = cstDateKey(new Date(shift.planned_start_at));
       return businessDate >= from && businessDate <= to;
     });
-    const shiftsPreviousPeriod = allShifts.filter((shift) => {
+    const shiftsPreviousPeriod = effectiveShifts.filter((shift) => {
       const businessDate = cstDateKey(new Date(shift.planned_start_at));
       return businessDate >= previousFrom && businessDate <= previousTo;
     });
@@ -241,7 +306,7 @@ export async function GET(req: Request) {
       ? summaries.filter((s) => s.employeeId === employeeIdParam)
       : summaries;
 
-    if (outputSummaries.length === 0 && allShifts.length === 0) {
+    if (outputSummaries.length === 0 && effectiveShifts.length === 0) {
       return NextResponse.json(
         { error: "No shifts found for the selected range and filters.", code: "no_data" },
         { status: 404 }
