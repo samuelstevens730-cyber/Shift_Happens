@@ -443,7 +443,7 @@ export default function PerformanceSummaryPage() {
   const [employeeId, setEmployeeId] = useState("");
   const [reportType, setReportType] = useState<"biweekly" | "monthly" | "quarterly" | "custom">("biweekly");
   const [periodLabel, setPeriodLabel] = useState("");
-  const [includeDelta, setIncludeDelta] = useState(false);
+  const [includeDelta, setIncludeDelta] = useState(true);
   const [saveSnapshot, setSaveSnapshot] = useState(false);
   const [benchmarkIds, setBenchmarkIds] = useState("8e6fc70a-55df-467c-9e37-0f1f74c6f2fd, b576b7ac-95d3-43e2-9a86-3027abfdef5d");
   const [goalBenchmark, setGoalBenchmark] = useState(""); // dollar amount per shift, e.g. "350"

@@ -198,9 +198,27 @@ export async function GET(req: Request) {
     }
 
     // ── Run analyzer ───────────────────────────────────────────────────────────
+    const allSalesRecords = salesRes.data ?? [];
+
+    const shiftsCurrentPeriod = allShifts.filter((shift) => {
+      const businessDate = cstDateKey(new Date(shift.planned_start_at));
+      return businessDate >= from && businessDate <= to;
+    });
+    const shiftsPreviousPeriod = allShifts.filter((shift) => {
+      const businessDate = cstDateKey(new Date(shift.planned_start_at));
+      return businessDate >= previousFrom && businessDate <= previousTo;
+    });
+
+    const salesCurrentPeriod = allSalesRecords.filter(
+      (record) => record.business_date >= from && record.business_date <= to
+    );
+    const salesPreviousPeriod = allSalesRecords.filter(
+      (record) => record.business_date >= previousFrom && record.business_date <= previousTo
+    );
+
     const { summaries, benchmarkCents, storeFactors } = analyzeEmployeeSales(
-      allShifts,
-      salesRes.data ?? [],
+      shiftsCurrentPeriod,
+      salesCurrentPeriod,
       storesRes.data ?? [],
       profilesRes.data ?? [],
       from,
@@ -209,8 +227,8 @@ export async function GET(req: Request) {
     );
 
     const { summaries: previousSummaries } = analyzeEmployeeSales(
-      allShifts,
-      salesRes.data ?? [],
+      shiftsPreviousPeriod,
+      salesPreviousPeriod,
       storesRes.data ?? [],
       profilesRes.data ?? [],
       previousFrom,
