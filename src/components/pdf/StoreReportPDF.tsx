@@ -32,7 +32,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#D1D5DB",
     borderRadius: 4,
-    overflow: "hidden",
   },
   sectionHeader: {
     backgroundColor: "#1F2937",
@@ -52,13 +51,20 @@ const styles = StyleSheet.create({
   },
   body: {
     padding: 9,
-    gap: 6,
+    gap: 8,
+  },
+  blockRow: {
+    flexDirection: "row",
+    gap: 8,
   },
   block: {
     borderWidth: 1,
     borderColor: "#E5E7EB",
     borderRadius: 3,
     padding: 7,
+  },
+  blockHalf: {
+    width: "49%",
   },
   blockTitle: {
     fontSize: 7,
@@ -84,12 +90,6 @@ const styles = StyleSheet.create({
     color: "#374151",
     marginBottom: 1,
   },
-  mono: {
-    fontFamily: "Courier",
-    fontSize: 8,
-    color: "#374151",
-    marginBottom: 1,
-  },
   chartLegendRow: {
     flexDirection: "row",
     gap: 8,
@@ -111,11 +111,11 @@ const styles = StyleSheet.create({
     color: "#6B7280",
   },
   chartBars: {
-    width: 180,
+    width: 170,
     gap: 1,
   },
   chartTrack: {
-    width: 180,
+    width: 170,
     height: 5,
     backgroundColor: "#E5E7EB",
     borderRadius: 2,
@@ -388,8 +388,11 @@ function VolatilityBlock({ summary }: { summary: StorePeriodSummary }) {
 }
 
 function TrendChartBlock({ summary }: { summary: StorePeriodSummary }) {
-  const points = summary.dailyTrend.slice(-10);
-  const maxSales = points.reduce((max, point) => Math.max(max, point.salesCents, point.rolling7SalesCents), 0);
+  const points = summary.dailyTrend.slice(-7);
+  const maxSales = points.reduce(
+    (max, point) => Math.max(max, point.salesCents, point.rolling7SalesCents),
+    0
+  );
 
   return (
     <View style={styles.block}>
@@ -404,8 +407,8 @@ function TrendChartBlock({ summary }: { summary: StorePeriodSummary }) {
             <Text style={styles.chartLegendItem}>Right label = Labor Hours</Text>
           </View>
           {points.map((point) => {
-            const salesWidth = Math.max(2, Math.round((point.salesCents / maxSales) * 180));
-            const rollingWidth = Math.max(2, Math.round((point.rolling7SalesCents / maxSales) * 180));
+            const salesWidth = Math.max(2, Math.round((point.salesCents / maxSales) * 170));
+            const rollingWidth = Math.max(2, Math.round((point.rolling7SalesCents / maxSales) * 170));
             return (
               <View key={point.date} style={styles.chartRow}>
                 <Text style={styles.chartDate}>{point.date.slice(5)}</Text>
@@ -559,7 +562,7 @@ export function StoreReportPDF({ summaries, from, to }: Props) {
         </View>
 
         {summaries.map((summary) => (
-          <View key={summary.storeId} style={styles.section} wrap={false}>
+          <View key={summary.storeId} style={styles.section}>
             <View style={styles.sectionHeader}>
               <Text style={styles.sectionHeaderTitle}>{summary.storeName}</Text>
               <Text style={styles.sectionHeaderMeta}>
@@ -567,10 +570,22 @@ export function StoreReportPDF({ summaries, from, to }: Props) {
               </Text>
             </View>
             <View style={styles.body}>
-              <BlockA summary={summary} />
-              <BlockB summary={summary} />
-              <WeatherBlock summary={summary} />
-              <VelocityBlock summary={summary} />
+              <View style={styles.blockRow}>
+                <View style={styles.blockHalf}>
+                  <BlockA summary={summary} />
+                </View>
+                <View style={styles.blockHalf}>
+                  <BlockB summary={summary} />
+                </View>
+              </View>
+              <View style={styles.blockRow}>
+                <View style={styles.blockHalf}>
+                  <WeatherBlock summary={summary} />
+                </View>
+                <View style={styles.blockHalf}>
+                  <VelocityBlock summary={summary} />
+                </View>
+              </View>
               <VolatilityBlock summary={summary} />
               <TrendChartBlock summary={summary} />
               <DayOfWeekBlock summary={summary} />
