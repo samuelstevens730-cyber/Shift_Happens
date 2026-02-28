@@ -32,6 +32,8 @@ export interface StoreReportSalesRow {
   close_sales_cents: number | null; // PM-only net (z - priorX); most reliable per-shift figure
   z_report_cents: number | null;
   rollover_from_previous_cents: number | null;
+  closer_rollover_cents: number | null;
+  is_rollover_night: boolean | null;
   open_transaction_count: number | null;
   close_transaction_count: number | null;
 }
@@ -127,16 +129,20 @@ function shiftHours(startedAt: string, endedAt: string | null): number {
  * no matching safe closeout record.
  */
 function grossSalesForDay(row: StoreReportSalesRow): number | null {
-  const rollover = row.rollover_from_previous_cents ?? 0;
+  const rolloverCarryIn = row.rollover_from_previous_cents ?? 0;
+  const rolloverCarryOut =
+    Boolean(row.is_rollover_night) && row.closer_rollover_cents != null
+      ? row.closer_rollover_cents
+      : 0;
   const pmSales  = row.close_sales_cents;
   const amSales  = row.open_x_report_cents != null
-    ? row.open_x_report_cents - rollover
+    ? row.open_x_report_cents - rolloverCarryIn
     : null;
-  if (amSales != null && pmSales != null) return amSales + pmSales;
-  if (pmSales != null) return pmSales;
-  if (amSales != null) return amSales;
+  if (amSales != null && pmSales != null) return amSales + pmSales + rolloverCarryOut;
+  if (pmSales != null) return pmSales + rolloverCarryOut;
+  if (amSales != null) return amSales + rolloverCarryOut;
   // Last resort: raw Z minus rollover (single-shift days with no openX/closeSales)
-  if (row.z_report_cents != null) return row.z_report_cents - rollover;
+  if (row.z_report_cents != null) return row.z_report_cents - rolloverCarryIn + rolloverCarryOut;
   return null;
 }
 
@@ -196,25 +202,27 @@ export function analyzeStoreData(
     // Fallback for days that have no safe closeout: daily_sales_records formula.
     let grossSalesCents: number | null = null;
     let totalTransactions: number | null = null;
+    const grossByDate = new Map<string, number>();
 
-    // Sum all closeout-backed days first.
-    for (const daySales of closeoutSalesByDate.values()) {
-      grossSalesCents = (grossSalesCents ?? 0) + daySales;
-    }
-
-    // Iterate daily_sales_records: always collect transactions;
-    // add sales only for days not already covered by a closeout.
     for (const row of storeSales) {
       const dayTxn = transactionsForDay(row);
       if (dayTxn != null) {
         totalTransactions = (totalTransactions ?? 0) + dayTxn;
       }
-      if (!closeoutSalesByDate.has(row.business_date)) {
-        const daySales = grossSalesForDay(row);
-        if (daySales != null) {
-          grossSalesCents = (grossSalesCents ?? 0) + daySales;
-        }
+      const daySales = grossSalesForDay(row);
+      if (daySales != null) {
+        grossByDate.set(row.business_date, daySales);
       }
+    }
+
+    for (const [date, closeoutSales] of closeoutSalesByDate.entries()) {
+      if (!grossByDate.has(date)) {
+        grossByDate.set(date, closeoutSales);
+      }
+    }
+
+    for (const daySales of grossByDate.values()) {
+      grossSalesCents = (grossSalesCents ?? 0) + daySales;
     }
 
     const avgBasketSizeCents =
@@ -317,7 +325,7 @@ export function analyzeStoreData(
     const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
     for (const row of storeSales) {
-      const sales = closeoutSalesByDate.get(row.business_date) ?? grossSalesForDay(row);
+      const sales = grossSalesForDay(row);
       if (sales == null) continue;
       // Day of week from business_date (YYYY-MM-DD)
       const [y, m, d] = row.business_date.split("-").map(Number);
@@ -337,7 +345,7 @@ export function analyzeStoreData(
       if (!s.ended_at) continue;
       const dateKey = s.planned_start_at.slice(0, 10);
       const salesRow = storeSales.find((r) => r.business_date === dateKey);
-      const sales = closeoutSalesByDate.get(dateKey) ?? (salesRow ? grossSalesForDay(salesRow) : null);
+      const sales = salesRow ? grossSalesForDay(salesRow) : closeoutSalesByDate.get(dateKey) ?? null;
       if (sales == null) continue;
       const txn = salesRow ? transactionsForDay(salesRow) : null;
 

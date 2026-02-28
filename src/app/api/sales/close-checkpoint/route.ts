@@ -7,8 +7,8 @@ type Body = {
   salesZReportCents?: number;
   salesPriorXCents?: number;
   salesConfirmed?: boolean;
-  /** Transactions rung in the PM half of a double / close shift. 0 = not captured. */
-  closeTransactionCount?: number | null;
+  // closeTransactionCount intentionally omitted — transactions are captured
+  // at midnight clock-out (end-shift), not at the 10 PM Z-report checkpoint.
 };
 
 type ShiftRow = {
@@ -112,14 +112,6 @@ export async function POST(req: Request) {
     const priorXReportCents = Math.round(priorXRaw ?? 0);
     const closeSalesCents = zReportCents - priorXReportCents;
 
-    // Zero-contamination guard: treat 0 as "not captured" (same as null).
-    const closeTxnCount =
-      typeof body.closeTransactionCount === "number" &&
-      Number.isInteger(body.closeTransactionCount) &&
-      body.closeTransactionCount > 0
-        ? body.closeTransactionCount
-        : null;
-
     const { data: dailyRecord, error: dailyErr } = await supabaseServer
       .from("daily_sales_records")
       .upsert(
@@ -130,7 +122,8 @@ export async function POST(req: Request) {
           close_sales_cents: closeSalesCents,
           z_report_cents: zReportCents,
           is_rollover_night: true,
-          ...(closeTxnCount != null ? { close_transaction_count: closeTxnCount } : {}),
+          // close_transaction_count is NOT written here — it's captured at
+          // midnight clock-out (end-shift) where the closer knows the full count.
         },
         { onConflict: "store_id,business_date" }
       )

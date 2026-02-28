@@ -521,6 +521,18 @@ export async function POST(req: Request) {
       }
 
       if (isCloseSales && isRolloverNight) {
+        // The closer clocks out at midnight after the full 5 PM–midnight window.
+        // We don't write sales figures here (those live in the rollover endpoint),
+        // but we DO write the transaction count — it covers the full shift period
+        // so performance reports can compute an accurate basket size once the
+        // rollover sales amount is submitted via /api/sales/rollover.
+        const closeTxnCount =
+          typeof body.closeTransactionCount === "number" &&
+          Number.isInteger(body.closeTransactionCount) &&
+          body.closeTransactionCount > 0
+            ? body.closeTransactionCount
+            : null;
+
         const { error: markRolloverErr } = await supabaseServer
           .from("daily_sales_records")
           .upsert(
@@ -529,6 +541,7 @@ export async function POST(req: Request) {
               business_date: businessDate,
               close_shift_id: shift.id,
               is_rollover_night: true,
+              ...(closeTxnCount != null ? { close_transaction_count: closeTxnCount } : {}),
             },
             { onConflict: "store_id,business_date" }
           );

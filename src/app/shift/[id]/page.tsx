@@ -231,7 +231,7 @@ export default function ShiftPage() {
   const [salesContextErr, setSalesContextErr] = useState<string | null>(null);
   const [closeCheckpointPriorX, setCloseCheckpointPriorX] = useState("");
   const [closeCheckpointZ, setCloseCheckpointZ] = useState("");
-  const [closeCheckpointTxnCount, setCloseCheckpointTxnCount] = useState("");
+
   const [closeCheckpointConfirm, setCloseCheckpointConfirm] = useState(false);
   const [closeCheckpointNeedsConfirm, setCloseCheckpointNeedsConfirm] = useState(false);
   const [closeCheckpointVarianceCents, setCloseCheckpointVarianceCents] = useState<number | null>(null);
@@ -738,14 +738,6 @@ export default function ShiftPage() {
       setCloseCheckpointErr("Enter valid non-negative sales amounts.");
       return;
     }
-    // Zero-contamination guard: blank / 0 → null (not captured)
-    const ccTxnCount =
-      closeCheckpointTxnCount !== "" &&
-      /^\d+$/.test(closeCheckpointTxnCount.trim()) &&
-      Number(closeCheckpointTxnCount) > 0
-        ? Number(closeCheckpointTxnCount)
-        : null;
-
     setCloseCheckpointSaving(true);
     try {
       const res = await fetch("/api/sales/close-checkpoint", {
@@ -759,7 +751,6 @@ export default function ShiftPage() {
           salesPriorXCents: priorXCents,
           salesZReportCents: zCents,
           salesConfirmed: closeCheckpointNeedsConfirm ? closeCheckpointConfirm : false,
-          closeTransactionCount: ccTxnCount,
         }),
       });
       const json = await res.json();
@@ -1033,14 +1024,6 @@ export default function ShiftPage() {
                   value={closeCheckpointZ}
                   onChange={e => setCloseCheckpointZ(e.target.value)}
                   placeholder="0.00"
-                />
-                <label className="text-sm">Transaction count <span className="text-slate-400">(# of sales rung — optional)</span></label>
-                <input
-                  className="w-full border border-cyan-400/30 bg-slate-900/50 text-slate-100 rounded p-2"
-                  inputMode="numeric"
-                  value={closeCheckpointTxnCount}
-                  onChange={e => setCloseCheckpointTxnCount(e.target.value)}
-                  placeholder="e.g. 42"
                 />
               </div>
 
