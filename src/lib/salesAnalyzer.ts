@@ -233,6 +233,9 @@ function computeShiftSalesCents(
     const rolloverCarry = isRolloverNight ? midnightX ?? 0 : 0;
 
     if (amSales != null && pmSales != null) return amSales + pmSales + rolloverCarry;
+    // Historical fallback: if AM side is missing (legacy data issue), use full-day Z
+    // so doubles do not collapse to PM-only sales.
+    if (amSales == null && zReport != null) return zReport - beginningX + rolloverCarry;
     if (pmSales != null) return pmSales + rolloverCarry;
     if (amSales != null) return amSales + rolloverCarry;
     return null;
