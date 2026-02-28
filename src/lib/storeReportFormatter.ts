@@ -63,15 +63,24 @@ export function formatStoreReport(
     lines.push("");
 
     lines.push("Top-Line Velocity:");
-    lines.push(`  Gross Sales: ${summary.grossSalesCents != null ? dollarsFromCents(summary.grossSalesCents) : "N/A"}`);
+    lines.push(
+      `  Gross Sales (Raw / Adj): ` +
+        `${summary.grossSalesCents != null ? dollarsFromCents(summary.grossSalesCents) : "N/A"} / ` +
+        `${summary.adjustedGrossSalesCents != null ? dollarsFromCents(summary.adjustedGrossSalesCents) : "N/A"}`
+    );
     lines.push(
       `  Transactions: ${summary.totalTransactions ?? "N/A"} | ` +
-        `Avg Basket: ${summary.avgBasketSizeCents != null ? dollarsFromCents(summary.avgBasketSizeCents) : "N/A"}`
+        `Avg Basket (Raw / Adj): ` +
+        `${summary.avgBasketSizeCents != null ? dollarsFromCents(summary.avgBasketSizeCents) : "N/A"} / ` +
+        `${summary.adjustedAvgBasketSizeCents != null ? dollarsFromCents(summary.adjustedAvgBasketSizeCents) : "N/A"}`
     );
     lines.push(
       `  Labor Hours: ${summary.totalLaborHours.toFixed(1)}h | ` +
-        `RPLH: ${summary.rplhCents != null ? dollarsFromCents(summary.rplhCents) : "N/A"}`
+        `RPLH (Raw / Adj): ` +
+        `${summary.rplhCents != null ? dollarsFromCents(summary.rplhCents) : "N/A"} / ` +
+        `${summary.adjustedRplhCents != null ? dollarsFromCents(summary.adjustedRplhCents) : "N/A"}`
     );
+    lines.push(`  Normalization Factor: ${summary.storeScalingFactor.toFixed(1)}x`);
     lines.push("");
 
     lines.push("Risk and Cash Flow:");
@@ -218,11 +227,12 @@ export function formatStoreReport(
     } else {
       for (const point of summary.dailyTrend.slice(-7)) {
         lines.push(
-          `  ${point.date}: sales ${dollarsFromCents(point.salesCents)}, ` +
-            `roll7 ${dollarsFromCents(point.rolling7SalesCents)}, ` +
+          `  ${point.date}: sales raw/adj ${dollarsFromCents(point.salesCents)} / ${dollarsFromCents(point.adjustedSalesCents)}, ` +
+            `roll7 raw/adj ${dollarsFromCents(point.rolling7SalesCents)} / ${dollarsFromCents(point.adjustedRolling7SalesCents)}, ` +
             `labor ${point.laborHours.toFixed(1)}h, ` +
             `txn ${point.transactions ?? "N/A"}, ` +
-            `basket ${point.basketSizeCents != null ? dollarsFromCents(point.basketSizeCents) : "N/A"}`
+            `basket raw/adj ${point.basketSizeCents != null ? dollarsFromCents(point.basketSizeCents) : "N/A"} / ` +
+            `${point.adjustedBasketSizeCents != null ? dollarsFromCents(point.adjustedBasketSizeCents) : "N/A"}`
         );
       }
     }

@@ -4,6 +4,7 @@
  * Aggregates per-store data for the executive store report.
  * Pure computation only (no DB calls).
  */
+import { applyScalingFactor, computeScalingFactors, type StoreTotals } from "@/lib/salesNormalization";
 
 const DAY_NAMES = [
   "Sunday",
@@ -119,11 +120,15 @@ export interface WeatherSummary {
 export interface DailyTrendPoint {
   date: string;
   salesCents: number;
+  adjustedSalesCents: number;
   rolling7SalesCents: number;
+  adjustedRolling7SalesCents: number;
   laborHours: number;
   rplhCents: number | null;
+  adjustedRplhCents: number | null;
   transactions: number | null;
   basketSizeCents: number | null;
+  adjustedBasketSizeCents: number | null;
 }
 
 export interface DayOfWeekAveragesRow {
@@ -200,10 +205,14 @@ export interface StorePeriodSummary {
   periodTo: string;
 
   grossSalesCents: number | null;
+  adjustedGrossSalesCents: number | null;
+  storeScalingFactor: number;
   totalTransactions: number | null;
   avgBasketSizeCents: number | null;
+  adjustedAvgBasketSizeCents: number | null;
   totalLaborHours: number;
   rplhCents: number | null;
+  adjustedRplhCents: number | null;
 
   cashSalesCents: number | null;
   cardSalesCents: number | null;
@@ -413,6 +422,41 @@ export function analyzeStoreData(
   periodFrom: string,
   periodTo: string
 ): StorePeriodSummary[] {
+  const activeShifts = shifts.filter((shift) => shift.last_action !== "removed");
+  const salesByStore = new Map<string, StoreReportSalesRow[]>();
+  for (const row of salesRecords) {
+    const rows = salesByStore.get(row.store_id) ?? [];
+    rows.push(row);
+    salesByStore.set(row.store_id, rows);
+  }
+
+  // Build normalization factors using the same per-shift math as employee analytics.
+  const storeTotals: StoreTotals[] = stores.map((store) => {
+    const storeShifts = activeShifts.filter((shift) => shift.store_id === store.id && shift.ended_at != null);
+    const storeSales = salesByStore.get(store.id) ?? [];
+    const byOpen = new Map<string, StoreReportSalesRow>();
+    const byClose = new Map<string, StoreReportSalesRow>();
+    const byDate = new Map<string, StoreReportSalesRow>();
+    for (const row of storeSales) {
+      if (row.open_shift_id) byOpen.set(row.open_shift_id, row);
+      if (row.close_shift_id) byClose.set(row.close_shift_id, row);
+      byDate.set(row.business_date, row);
+    }
+    let totalSalesCents = 0;
+    let shiftCount = 0;
+    for (const shift of storeShifts) {
+      const date = cstDateKey(shift.planned_start_at);
+      const row = byOpen.get(shift.id) ?? byClose.get(shift.id) ?? byDate.get(date) ?? null;
+      const sales = computeShiftSalesCents(shift.shift_type, row);
+      if (sales != null) {
+        totalSalesCents += sales;
+        shiftCount += 1;
+      }
+    }
+    return { storeId: store.id, totalSalesCents, shiftCount };
+  });
+  const storeFactors = computeScalingFactors(storeTotals);
+
   const profileNameById = new Map(
     profiles.map((profile) => [profile.id, profile.name?.trim() || "Unknown"])
   );
@@ -451,16 +495,22 @@ export function analyzeStoreData(
     }
 
     const grossByDate = new Map<string, number>();
+    const adjustedGrossByDate = new Map<string, number>();
     const txByDate = new Map<string, number>();
+    const factor = storeFactors.get(store.id) ?? 1;
     for (const row of storeSales) {
       const daySales = grossSalesForDay(row);
-      if (daySales != null) grossByDate.set(row.business_date, daySales);
+      if (daySales != null) {
+        grossByDate.set(row.business_date, daySales);
+        adjustedGrossByDate.set(row.business_date, applyScalingFactor(daySales, store.id, storeFactors));
+      }
       const dayTxn = transactionsForDay(row);
       if (dayTxn != null) txByDate.set(row.business_date, dayTxn);
     }
     for (const [date, closeoutSales] of closeoutSalesByDate.entries()) {
       if (!grossByDate.has(date)) {
         grossByDate.set(date, closeoutSales);
+        adjustedGrossByDate.set(date, applyScalingFactor(closeoutSales, store.id, storeFactors));
       }
     }
 
@@ -473,8 +523,12 @@ export function analyzeStoreData(
     }
 
     let grossSalesCents: number | null = null;
+    let adjustedGrossSalesCents: number | null = null;
     for (const value of grossByDate.values()) {
       grossSalesCents = (grossSalesCents ?? 0) + value;
+    }
+    for (const value of adjustedGrossByDate.values()) {
+      adjustedGrossSalesCents = (adjustedGrossSalesCents ?? 0) + value;
     }
 
     let totalTransactions: number | null = null;
@@ -483,9 +537,14 @@ export function analyzeStoreData(
     }
 
     let txTrackedGrossSalesCents: number | null = null;
+    let txTrackedAdjustedGrossSalesCents: number | null = null;
     for (const date of txByDate.keys()) {
       const sales = grossByDate.get(date);
       if (sales != null) txTrackedGrossSalesCents = (txTrackedGrossSalesCents ?? 0) + sales;
+      const adjustedSales = adjustedGrossByDate.get(date);
+      if (adjustedSales != null) {
+        txTrackedAdjustedGrossSalesCents = (txTrackedAdjustedGrossSalesCents ?? 0) + adjustedSales;
+      }
     }
 
     const totalLaborHours = storeShifts.reduce(
@@ -497,9 +556,17 @@ export function analyzeStoreData(
       txTrackedGrossSalesCents != null && totalTransactions != null && totalTransactions > 0
         ? Math.round(txTrackedGrossSalesCents / totalTransactions)
         : null;
+    const adjustedAvgBasketSizeCents =
+      txTrackedAdjustedGrossSalesCents != null && totalTransactions != null && totalTransactions > 0
+        ? Math.round(txTrackedAdjustedGrossSalesCents / totalTransactions)
+        : null;
     const rplhCents =
       grossSalesCents != null && totalLaborHours > 0
         ? Math.round(grossSalesCents / totalLaborHours)
+        : null;
+    const adjustedRplhCents =
+      adjustedGrossSalesCents != null && totalLaborHours > 0
+        ? Math.round(adjustedGrossSalesCents / totalLaborHours)
         : null;
 
     let cashSalesCents: number | null = null;
@@ -800,20 +867,36 @@ export function analyzeStoreData(
         0
       );
       const rolling7SalesCents = Math.round(rollingSales / window.length);
+      const adjustedSalesCents = adjustedGrossByDate.get(date) ?? applyScalingFactor(rollup.salesCents, store.id, storeFactors);
+      const adjustedRollingSales = window.reduce(
+        (sum, itemDate) =>
+          sum + (adjustedGrossByDate.get(itemDate) ?? applyScalingFactor(dailyRollups.get(itemDate)?.salesCents ?? 0, store.id, storeFactors)),
+        0
+      );
+      const adjustedRolling7SalesCents = Math.round(adjustedRollingSales / window.length);
       const rplh = rollup.laborHours > 0 ? Math.round(rollup.salesCents / rollup.laborHours) : null;
+      const adjustedRplh = rollup.laborHours > 0 ? Math.round(adjustedSalesCents / rollup.laborHours) : null;
       const basket =
         rollup.transactions != null && rollup.transactions > 0
           ? Math.round(rollup.salesCents / rollup.transactions)
+          : null;
+      const adjustedBasket =
+        rollup.transactions != null && rollup.transactions > 0
+          ? Math.round(adjustedSalesCents / rollup.transactions)
           : null;
 
       dailyTrend.push({
         date,
         salesCents: rollup.salesCents,
+        adjustedSalesCents,
         rolling7SalesCents,
+        adjustedRolling7SalesCents,
         laborHours: round1(rollup.laborHours),
         rplhCents: rplh,
+        adjustedRplhCents: adjustedRplh,
         transactions: rollup.transactions,
         basketSizeCents: basket,
+        adjustedBasketSizeCents: adjustedBasket,
       });
     }
 
@@ -1088,10 +1171,14 @@ export function analyzeStoreData(
       periodTo,
 
       grossSalesCents,
+      adjustedGrossSalesCents,
+      storeScalingFactor: round1(factor),
       totalTransactions,
       avgBasketSizeCents,
+      adjustedAvgBasketSizeCents,
       totalLaborHours: round1(totalLaborHours),
       rplhCents,
+      adjustedRplhCents,
 
       cashSalesCents,
       cardSalesCents,

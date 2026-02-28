@@ -75,15 +75,15 @@ function BlockA({ summary }: { summary: StorePeriodSummary }) {
       </p>
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div>
-          <p className="text-zinc-500">Gross Sales</p>
+          <p className="text-zinc-500">Gross Sales (Raw)</p>
           <p className="text-lg font-semibold">
             {summary.grossSalesCents != null ? formatCurrencyFromCents(summary.grossSalesCents) : "N/A"}
           </p>
         </div>
         <div>
-          <p className="text-zinc-500">RPLH</p>
+          <p className="text-zinc-500">Gross Sales (Adjusted)</p>
           <p className="text-lg font-semibold">
-            {summary.rplhCents != null ? formatCurrencyFromCents(summary.rplhCents) : "N/A"}
+            {summary.adjustedGrossSalesCents != null ? formatCurrencyFromCents(summary.adjustedGrossSalesCents) : "N/A"}
           </p>
         </div>
         <div>
@@ -91,14 +91,29 @@ function BlockA({ summary }: { summary: StorePeriodSummary }) {
           <p className="font-medium">{summary.totalTransactions ?? "N/A"}</p>
         </div>
         <div>
-          <p className="text-zinc-500">Avg Basket</p>
+          <p className="text-zinc-500">Avg Basket (Raw / Adj)</p>
           <p className="font-medium">
             {summary.avgBasketSizeCents != null ? formatCurrencyFromCents(summary.avgBasketSizeCents) : "N/A"}
+            {" / "}
+            {summary.adjustedAvgBasketSizeCents != null
+              ? formatCurrencyFromCents(summary.adjustedAvgBasketSizeCents)
+              : "N/A"}
           </p>
         </div>
         <div>
           <p className="text-zinc-500">Labor Hours</p>
           <p className="font-medium">{formatHours(summary.totalLaborHours)}</p>
+        </div>
+        <div>
+          <p className="text-zinc-500">RPLH (Raw / Adj)</p>
+          <p className="font-medium">
+            {summary.rplhCents != null ? formatCurrencyFromCents(summary.rplhCents) : "N/A"}
+            {" / "}
+            {summary.adjustedRplhCents != null ? formatCurrencyFromCents(summary.adjustedRplhCents) : "N/A"}
+          </p>
+        </div>
+        <div className="col-span-2 text-xs text-zinc-500">
+          Store normalization factor: {summary.storeScalingFactor.toFixed(1)}x
         </div>
       </div>
     </div>
@@ -297,7 +312,9 @@ function DailyTrendChart({ summary }: { summary: StorePeriodSummary }) {
   const data = summary.dailyTrend.map((point) => ({
     date: point.date.slice(5),
     sales: Number((point.salesCents / 100).toFixed(2)),
+    adjustedSales: Number((point.adjustedSalesCents / 100).toFixed(2)),
     rolling: Number((point.rolling7SalesCents / 100).toFixed(2)),
+    adjustedRolling: Number((point.adjustedRolling7SalesCents / 100).toFixed(2)),
     labor: Number(point.laborHours.toFixed(1)),
   }));
 
@@ -330,14 +347,25 @@ function DailyTrendChart({ summary }: { summary: StorePeriodSummary }) {
             />
             <Bar yAxisId="labor" dataKey="labor" name="Labor Hours" fill="#3f3f46" opacity={0.55} />
             <Line yAxisId="sales" type="monotone" dataKey="sales" name="Daily Sales" stroke="#22d3ee" strokeWidth={2} dot={false} />
+            <Line yAxisId="sales" type="monotone" dataKey="adjustedSales" name="Adjusted Daily Sales" stroke="#38bdf8" strokeWidth={1.5} dot={false} strokeDasharray="4 4" />
             <Line
               yAxisId="sales"
               type="monotone"
               dataKey="rolling"
-              name="7d Rolling Avg"
+              name="7d Rolling Avg (Raw)"
               stroke="#facc15"
               strokeWidth={2}
               dot={false}
+            />
+            <Line
+              yAxisId="sales"
+              type="monotone"
+              dataKey="adjustedRolling"
+              name="7d Rolling Avg (Adjusted)"
+              stroke="#f59e0b"
+              strokeWidth={1.5}
+              dot={false}
+              strokeDasharray="4 4"
             />
           </ComposedChart>
         </ResponsiveContainer>
