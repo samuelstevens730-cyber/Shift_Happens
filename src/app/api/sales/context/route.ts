@@ -7,6 +7,7 @@ type ShiftType = "open" | "close" | "double" | "other";
 type DailySalesRecordRow = {
   id: string;
   open_x_report_cents: number | null;
+  mid_x_report_cents: number | null;
   close_sales_cents: number | null;
   z_report_cents: number | null;
   closer_rollover_cents: number | null;
@@ -77,13 +78,13 @@ export async function GET(req: Request) {
         .maybeSingle<{ has_rollover: boolean | null }>(),
       supabaseServer
         .from("daily_sales_records")
-        .select("id, open_x_report_cents, close_sales_cents, z_report_cents, closer_rollover_cents, opener_rollover_cents, is_rollover_night")
+        .select("id, open_x_report_cents, mid_x_report_cents, close_sales_cents, z_report_cents, closer_rollover_cents, opener_rollover_cents, is_rollover_night")
         .eq("store_id", storeId)
         .eq("business_date", businessDate)
         .maybeSingle<DailySalesRecordRow>(),
       supabaseServer
         .from("daily_sales_records")
-        .select("id, open_x_report_cents, close_sales_cents, z_report_cents, closer_rollover_cents, opener_rollover_cents, is_rollover_night")
+        .select("id, open_x_report_cents, mid_x_report_cents, close_sales_cents, z_report_cents, closer_rollover_cents, opener_rollover_cents, is_rollover_night")
         .eq("store_id", storeId)
         .eq("business_date", previousDateOnly(businessDate))
         .maybeSingle<DailySalesRecordRow>(),
@@ -96,9 +97,16 @@ export async function GET(req: Request) {
 
     const salesTrackingEnabled = Boolean(settingsRes.data?.sales_tracking_enabled);
     const salesRolloverEnabled = settingsRes.data?.sales_rollover_enabled ?? true;
-    const priorXReportCents = shiftType === "close" || shiftType === "double"
-      ? (dailyRecordRes.data?.open_x_report_cents ?? null)
-      : null;
+    // For close shifts the opener's X report is the prior-X.
+    // For double shifts the changeover-panel mid-X is the correct source (the
+    // opener_x column is never written for doubles); fall back to open_x in
+    // case a double shift record was manually populated.
+    const priorXReportCents =
+      shiftType === "close"
+        ? (dailyRecordRes.data?.open_x_report_cents ?? null)
+        : shiftType === "double"
+        ? (dailyRecordRes.data?.mid_x_report_cents ?? dailyRecordRes.data?.open_x_report_cents ?? null)
+        : null;
     const isRolloverNight = Boolean(rolloverConfigRes.data?.has_rollover) && Boolean(salesRolloverEnabled);
 
     const prev = prevRecordRes.data;

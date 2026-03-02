@@ -734,7 +734,9 @@ export default function ShiftPage() {
 
     const priorXCents = parseMoneyInputToCents(closeCheckpointPriorX);
     const zCents = parseMoneyInputToCents(closeCheckpointZ);
-    if (priorXCents == null || zCents == null) {
+    // Double shifts have no separate opener, so prior X is optional (backend defaults to 0).
+    const effectivePriorXCents = priorXCents ?? (shiftType === "double" ? 0 : null);
+    if (effectivePriorXCents == null || zCents == null) {
       setCloseCheckpointErr("Enter valid non-negative sales amounts.");
       return;
     }
@@ -756,7 +758,7 @@ export default function ShiftPage() {
         },
         body: JSON.stringify({
           shiftId,
-          salesPriorXCents: priorXCents,
+          salesPriorXCents: effectivePriorXCents,
           salesZReportCents: zCents,
           salesConfirmed: closeCheckpointNeedsConfirm ? closeCheckpointConfirm : false,
           closeTransactionCount: ccTxnCount,
@@ -1856,7 +1858,11 @@ function ClockOutModal({
   const isCloseOrDouble = shiftType === "close" || shiftType === "double";
   const salesInputsValid =
     (!requiresSalesForOpen || salesXReportCents != null) &&
-    (!requiresSalesForClose || (salesZReportCents != null && salesPriorXCents != null));
+    (!requiresSalesForClose || (
+      salesZReportCents != null &&
+      // Double shifts have no separate opener; prior X is optional (backend defaults to 0).
+      (shiftType === "double" || salesPriorXCents != null)
+    ));
 
   // Reset confirmations when drawer goes back in range
   useEffect(() => {
