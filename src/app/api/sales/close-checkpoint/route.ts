@@ -119,6 +119,14 @@ export async function POST(req: Request) {
     const priorXReportCents = Math.round(priorXRaw ?? 0);
     const closeSalesCents = zReportCents - priorXReportCents;
 
+    // Zero-contamination guard: treat 0 as "not captured" (same as null).
+    const closeTxnCount =
+      typeof body.closeTransactionCount === "number" &&
+      Number.isInteger(body.closeTransactionCount) &&
+      body.closeTransactionCount > 0
+        ? body.closeTransactionCount
+        : null;
+
     const { data: dailyRecord, error: dailyErr } = await supabaseServer
       .from("daily_sales_records")
       .upsert(
