@@ -237,11 +237,12 @@ export async function POST(req: Request) {
       );
     }
 
-    let resolvedShiftType: ShiftType =
-      matchedSchedule?.shift_type ??
-      doubleSchedule?.shift_type ??
-      nearestSchedule?.shift_type ??
-      "other";
+    // If ANY published scheduled row for today resolves to a double, the employee
+    // is working a double — period. This takes priority over matchedSchedule so that
+    // stale or partially-saved open rows can't downgrade a double to an open shift.
+    let resolvedShiftType: ShiftType = doubleSchedule
+      ? "double"
+      : (matchedSchedule?.shift_type ?? nearestSchedule?.shift_type ?? "other");
 
     const resolvedScheduleId =
       matchedSchedule?.id ??

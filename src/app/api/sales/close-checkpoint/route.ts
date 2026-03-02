@@ -54,12 +54,8 @@ export async function POST(req: Request) {
     if (!body?.shiftId) return NextResponse.json({ error: "Missing shiftId." }, { status: 400 });
 
     const zReportRaw = body.salesZReportCents;
-    const priorXRaw = body.salesPriorXCents;
     if (!Number.isFinite(zReportRaw) || (zReportRaw ?? 0) < 0) {
       return NextResponse.json({ error: "Missing or invalid Z report total." }, { status: 400 });
-    }
-    if (!Number.isFinite(priorXRaw) || (priorXRaw ?? 0) < 0) {
-      return NextResponse.json({ error: "Missing or invalid prior X report total." }, { status: 400 });
     }
 
     const { data: shift, error: shiftErr } = await supabaseServer
@@ -77,6 +73,17 @@ export async function POST(req: Request) {
     }
     if (shift.shift_type !== "close" && shift.shift_type !== "double") {
       return NextResponse.json({ error: "Close checkpoint is only valid for close or double shifts." }, { status: 400 });
+    }
+
+    // Validate priorX now that we know the shift type.
+    // Close shifts require an explicit prior-X (the opener must have submitted one).
+    // Double shifts have no separate opener, so prior-X is optional; default to 0 if absent.
+    let priorXRaw: number | null = body.salesPriorXCents ?? null;
+    if (!Number.isFinite(priorXRaw) || (priorXRaw ?? 0) < 0) {
+      if (shift.shift_type !== "double") {
+        return NextResponse.json({ error: "Missing or invalid prior X report total." }, { status: 400 });
+      }
+      priorXRaw = 0;
     }
 
     const businessDate = getCstDateKey(shift.planned_start_at);
@@ -122,6 +129,10 @@ export async function POST(req: Request) {
           close_sales_cents: closeSalesCents,
           z_report_cents: zReportCents,
           is_rollover_night: true,
+          // For double shifts, write priorX as open_x_report_cents so the DB trigger
+          // balance formula (open_x + close_sales = z) resolves correctly.
+          ...(shift.shift_type === "double" ? { open_x_report_cents: priorXReportCents } : {}),
+          ...(closeTxnCount != null ? { close_transaction_count: closeTxnCount } : {}),
           // close_transaction_count is NOT written here — it's captured at
           // midnight clock-out (end-shift) where the closer knows the full count.
         },

@@ -72,6 +72,7 @@ type SalesDailyRecordRow = {
   out_of_balance: boolean | null;
   balance_variance_cents: number | null;
   open_x_report_cents?: number | null;
+  mid_x_report_cents?: number | null;
 };
 
 const SCHEDULED_OVERRIDE_GRACE_MINUTES = 15;
@@ -458,10 +459,10 @@ export async function POST(req: Request) {
           const [dailyRecordLookupRes, closeoutLookupRes] = await Promise.all([
             supabaseServer
               .from("daily_sales_records")
-              .select("id,open_x_report_cents")
+              .select("id,open_x_report_cents,mid_x_report_cents")
               .eq("store_id", shift.store_id)
               .eq("business_date", businessDate)
-              .maybeSingle<{ id: string; open_x_report_cents: number | null }>(),
+              .maybeSingle<{ id: string; open_x_report_cents: number | null; mid_x_report_cents: number | null }>(),
             supabaseServer
               .from("safe_closeouts")
               .select("id,status,cash_sales_cents,card_sales_cents")
@@ -487,6 +488,10 @@ export async function POST(req: Request) {
           }
           if (priorXReportCents == null) {
             priorXReportCents = dailyRecordLookupRes.data?.open_x_report_cents ?? null;
+            // For double shifts, also fall back to the changeover-panel mid-X.
+            if (priorXReportCents == null && shiftType === "double") {
+              priorXReportCents = dailyRecordLookupRes.data?.mid_x_report_cents ?? null;
+            }
           }
         }
 
@@ -494,7 +499,13 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: "Missing or invalid Z report total." }, { status: 400 });
         }
         if (priorXReportCents == null) {
-          return NextResponse.json({ error: "Missing prior X report total. Ensure open shift sales are entered." }, { status: 400 });
+          if (shiftType === "double") {
+            // Double shifts have no separate opener; if no changeover X was captured, treat as 0
+            // (full Z attributed to the PM half). The balance formula still holds: 0 + Z = Z.
+            priorXReportCents = 0;
+          } else {
+            return NextResponse.json({ error: "Missing prior X report total. Ensure open shift sales are entered." }, { status: 400 });
+          }
         }
 
         const closeSalesCents = zReportCents - priorXReportCents;
@@ -516,6 +527,10 @@ export async function POST(req: Request) {
               close_shift_id: shift.id,
               close_sales_cents: closeSalesCents,
               z_report_cents: zReportCents,
+              // For double shifts, write the priorX as open_x_report_cents so the DB
+              // trigger balance formula (open_x + close_sales = z) resolves correctly.
+              // For a normal close shift this column was already written by the opener.
+              ...(shiftType === "double" ? { open_x_report_cents: priorXReportCents } : {}),
               ...(closeTxnCount != null ? { close_transaction_count: closeTxnCount } : {}),
             },
             { onConflict: "store_id,business_date" }
