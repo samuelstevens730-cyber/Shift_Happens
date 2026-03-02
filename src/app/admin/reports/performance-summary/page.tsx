@@ -9,9 +9,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { pdf } from "@react-pdf/renderer";
 import { supabase } from "@/lib/supabaseClient";
 import type { EmployeePeriodSummary } from "@/lib/salesAnalyzer";
 import type { PeriodDelta } from "@/lib/salesDelta";
+import { PerformanceSummaryPDF } from "@/components/pdf/PerformanceSummaryPDF";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -32,6 +34,18 @@ function addDays(date: Date, days: number): Date {
 
 function d(cents: number): string {
   return `$${(cents / 100).toFixed(0)}`;
+}
+
+function signedMoneyDelta(cents: number | null | undefined): string {
+  if (cents == null) return "N/A vs prev";
+  const sign = cents >= 0 ? "+" : "-";
+  return `${sign}${d(Math.abs(cents))} vs prev`;
+}
+
+function signedNumberDelta(value: number | null | undefined, digits = 1): string {
+  if (value == null) return "N/A vs prev";
+  const sign = value >= 0 ? "+" : "-";
+  return `${sign}${Math.abs(value).toFixed(digits)} vs prev`;
 }
 
 function pct(value: number): string {
@@ -151,14 +165,23 @@ function EmployeeCard({
         <div>
           <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Adj Avg / Shift</p>
           <p className="text-xl font-semibold text-zinc-100">{d(summary.avgAdjustedPerShiftCents)}</p>
+          {delta && (
+            <p className="text-xs text-zinc-500 mt-0.5">{signedMoneyDelta(delta.adjAvgDeltaCents)}</p>
+          )}
         </div>
         <div>
           <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Raw Avg / Shift</p>
           <p className="text-xl font-semibold text-zinc-300">{d(summary.avgRawPerShiftCents)}</p>
+          {delta && (
+            <p className="text-xs text-zinc-500 mt-0.5">{signedMoneyDelta(delta.rawAvgDeltaCents)}</p>
+          )}
         </div>
         <div>
           <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">Adj / Hr</p>
           <p className="text-xl font-semibold text-zinc-300">{d(summary.avgAdjustedPerHourCents)}</p>
+          {delta && (
+            <p className="text-xs text-zinc-500 mt-0.5">{signedMoneyDelta(delta.adjustedPerHourDeltaCents)}</p>
+          )}
         </div>
         <div>
           <p className="text-xs text-zinc-500 uppercase tracking-wider mb-1">vs Benchmark</p>
@@ -422,7 +445,7 @@ export default function PerformanceSummaryPage() {
   const [employeeId, setEmployeeId] = useState("");
   const [reportType, setReportType] = useState<"biweekly" | "monthly" | "quarterly" | "custom">("biweekly");
   const [periodLabel, setPeriodLabel] = useState("");
-  const [includeDelta, setIncludeDelta] = useState(false);
+  const [includeDelta, setIncludeDelta] = useState(true);
   const [saveSnapshot, setSaveSnapshot] = useState(false);
   const [benchmarkIds, setBenchmarkIds] = useState("8e6fc70a-55df-467c-9e37-0f1f74c6f2fd, b576b7ac-95d3-43e2-9a86-3027abfdef5d");
   const [goalBenchmark, setGoalBenchmark] = useState(""); // dollar amount per shift, e.g. "350"
@@ -439,8 +462,9 @@ export default function PerformanceSummaryPage() {
 
   // Copy state: tracks which copy (primary|full) is in-flight or just succeeded
   const [copyStatus, setCopyStatus] = useState<{ detail: "primary" | "full"; status: "copying" | "success" } | null>(null);
+  const [exportingPdf, setExportingPdf] = useState<"primary" | "full" | null>(null);
 
-  // Expand-all: when true every EmployeeCard forces both expandable sections open (used for Print Full)
+  // Expand-all: when true every EmployeeCard forces both expandable sections open (used for {exportingPdf === "full" ? "Exporting..." : "Export PDF (Full)"})
   const [expandAll, setExpandAll] = useState(false);
 
   const reportRef = useRef<HTMLDivElement>(null);
@@ -567,16 +591,38 @@ export default function PerformanceSummaryPage() {
   }, [token, from, to, storeId, reportType, includeDelta, employeeId, periodLabel, benchmarkIds, goalBenchmark]);
 
   // ── Print helpers ─────────────────────────────────────────────────────────────
-  const printPrimary = useCallback(() => {
-    // Print whatever is currently visible (no forced expansion)
-    window.print();
-  }, []);
-
-  const printFull = useCallback(() => {
-    // Force-expand all sections, then print once React has re-rendered
-    setExpandAll(true);
-    setTimeout(() => window.print(), 350);
-  }, []);
+  const exportPdfReport = useCallback(async (detail: "primary" | "full") => {
+    if (!report) return;
+    setExportingPdf(detail);
+    try {
+      const goalBenchmarkCentsForPdf =
+        goalBenchmark.trim() !== "" && !isNaN(parseFloat(goalBenchmark)) && parseFloat(goalBenchmark) > 0
+          ? Math.round(parseFloat(goalBenchmark) * 100)
+          : null;
+      const deltasByEmployeeId = Object.fromEntries((report.deltas ?? []).map((d) => [d.employeeId, d]));
+      const blob = await pdf(
+        <PerformanceSummaryPDF
+          from={from}
+          to={to}
+          benchmarkCents={report.benchmark}
+          goalBenchmarkCents={goalBenchmarkCentsForPdf}
+          summaries={report.employees}
+          deltasByEmployeeId={deltasByEmployeeId}
+          includeShiftDetail={detail === "full"}
+        />
+      ).toBlob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `performance-summary-${detail}-${from}-to-${to}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExportingPdf(null);
+    }
+  }, [report, from, to, goalBenchmark]);
 
   const deltaMap = new Map((report?.deltas ?? []).map((d) => [d.employeeId, d]));
 
@@ -841,16 +887,18 @@ export default function PerformanceSummaryPage() {
 
                     {/* Print group */}
                     <button
-                      onClick={printPrimary}
+                      onClick={() => exportPdfReport("primary")}
+                      disabled={exportingPdf !== null}
                       className="px-3 py-2 rounded-lg border border-zinc-600 bg-zinc-700/60 hover:bg-zinc-700 text-xs text-zinc-200 transition-colors whitespace-nowrap"
                     >
-                      Print Primary
+                      {exportingPdf === "primary" ? "Exporting..." : "Export PDF"}
                     </button>
                     <button
-                      onClick={printFull}
+                      onClick={() => exportPdfReport("full")}
+                      disabled={exportingPdf !== null}
                       className="px-3 py-2 rounded-lg border border-zinc-600 bg-zinc-700/60 hover:bg-zinc-700 text-xs text-zinc-200 transition-colors whitespace-nowrap"
                     >
-                      Print Full
+                      {exportingPdf === "full" ? "Exporting..." : "Export PDF (Full)"}
                     </button>
                   </div>
                 </div>

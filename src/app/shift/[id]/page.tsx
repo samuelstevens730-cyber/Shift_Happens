@@ -231,7 +231,7 @@ export default function ShiftPage() {
   const [salesContextErr, setSalesContextErr] = useState<string | null>(null);
   const [closeCheckpointPriorX, setCloseCheckpointPriorX] = useState("");
   const [closeCheckpointZ, setCloseCheckpointZ] = useState("");
-  const [closeCheckpointTxnCount, setCloseCheckpointTxnCount] = useState("");
+
   const [closeCheckpointConfirm, setCloseCheckpointConfirm] = useState(false);
   const [closeCheckpointNeedsConfirm, setCloseCheckpointNeedsConfirm] = useState(false);
   const [closeCheckpointVarianceCents, setCloseCheckpointVarianceCents] = useState<number | null>(null);
@@ -740,14 +740,6 @@ export default function ShiftPage() {
       setCloseCheckpointErr("Enter valid non-negative sales amounts.");
       return;
     }
-    // Zero-contamination guard: blank / 0 → null (not captured)
-    const ccTxnCount =
-      closeCheckpointTxnCount !== "" &&
-      /^\d+$/.test(closeCheckpointTxnCount.trim()) &&
-      Number(closeCheckpointTxnCount) > 0
-        ? Number(closeCheckpointTxnCount)
-        : null;
-
     setCloseCheckpointSaving(true);
     try {
       const res = await fetch("/api/sales/close-checkpoint", {
@@ -761,7 +753,6 @@ export default function ShiftPage() {
           salesPriorXCents: effectivePriorXCents,
           salesZReportCents: zCents,
           salesConfirmed: closeCheckpointNeedsConfirm ? closeCheckpointConfirm : false,
-          closeTransactionCount: ccTxnCount,
         }),
       });
       const json = await res.json();
@@ -1035,14 +1026,6 @@ export default function ShiftPage() {
                   value={closeCheckpointZ}
                   onChange={e => setCloseCheckpointZ(e.target.value)}
                   placeholder="0.00"
-                />
-                <label className="text-sm">Transaction count <span className="text-slate-400">(# of sales rung — optional)</span></label>
-                <input
-                  className="w-full border border-cyan-400/30 bg-slate-900/50 text-slate-100 rounded p-2"
-                  inputMode="numeric"
-                  value={closeCheckpointTxnCount}
-                  onChange={e => setCloseCheckpointTxnCount(e.target.value)}
-                  placeholder="e.g. 42"
                 />
               </div>
 
@@ -2105,12 +2088,30 @@ function ClockOutModal({
                 <div className="text-xs text-slate-500">
                   Only needed if opener X report was not entered earlier.
                 </div>
+                <label className="text-sm">Transaction count <span className="text-gray-500">(# of sales rung - required)</span></label>
+                <input
+                  className="w-full border rounded p-2"
+                  inputMode="numeric"
+                  value={closeTransactionCount}
+                  onChange={e => setCloseTransactionCount(e.target.value)}
+                  placeholder="e.g. 42"
+                />
               </>
             )}
             {(shiftType === "close" || shiftType === "double") && isRolloverNight && (
-              <div className="text-xs border rounded p-2 text-blue-700 border-blue-300">
-                10pm Z/Prior-X is entered from the shift page. At clock out, you will only enter the midnight X report next.
-              </div>
+              <>
+                <div className="text-xs border rounded p-2 text-blue-700 border-blue-300">
+                  10pm Z/Prior-X is entered from the shift page. At clock out, enter transaction count for the full close period.
+                </div>
+                <label className="text-sm">Transaction count <span className="text-gray-500">(# of sales rung - required)</span></label>
+                <input
+                  className="w-full border rounded p-2"
+                  inputMode="numeric"
+                  value={closeTransactionCount}
+                  onChange={e => setCloseTransactionCount(e.target.value)}
+                  placeholder="e.g. 42"
+                />
+              </>
             )}
           </div>
         )}
@@ -2178,6 +2179,23 @@ function ClockOutModal({
               if (!authToken) {
                 setErr(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
                 return;
+              }
+
+              if (!isOther && salesTrackingEnabled) {
+                if (shiftType === "open") {
+                  const openTxn = openTransactionCount.trim();
+                  if (!(openTxn !== "" && /^\d+$/.test(openTxn) && Number(openTxn) > 0)) {
+                    setErr("Transaction count is required before clock-out for open shifts.");
+                    return;
+                  }
+                }
+                if (shiftType === "close" || shiftType === "double") {
+                  const closeTxn = closeTransactionCount.trim();
+                  if (!(closeTxn !== "" && /^\d+$/.test(closeTxn) && Number(closeTxn) > 0)) {
+                    setErr("Transaction count is required before clock-out for close/double shifts.");
+                    return;
+                  }
+                }
               }
 
               setSaving(true);

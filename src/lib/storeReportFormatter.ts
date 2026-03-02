@@ -1,24 +1,57 @@
-/**
- * storeReportFormatter.ts
- *
- * Formats StorePeriodSummary data into a plain-text executive report suitable
- * for manual pasting into an LLM (Claude, ChatGPT, etc.) for deeper analysis.
- *
- * Output format matches the user-defined wireframe.
- */
+import type { PerformerMetric, StorePeriodSummary } from "@/lib/storeReportAnalyzer";
 
-import { StorePeriodSummary } from "@/lib/storeReportAnalyzer";
-
-function d(cents: number): string {
+function dollarsFromCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
-function pct(value: number): string {
-  return `${value}%`;
+function formatMetric(metric: PerformerMetric | null, valueFormatter: (value: number) => string): string {
+  if (!metric) return "N/A";
+  return `${metric.employeeName} - ${valueFormatter(metric.value)} (${metric.shifts} shifts)`;
 }
 
-function hrs(hours: number): string {
-  return hours.toFixed(1);
+function formatDelta(delta: number | null, money = false): string {
+  if (delta == null) return "N/A vs prev";
+  const sign = delta > 0 ? "+" : delta < 0 ? "-" : "";
+  const value = Math.abs(delta);
+  return money
+    ? `${sign}${dollarsFromCents(value)} vs prev`
+    : `${sign}${value.toFixed(1)} vs prev`;
+}
+
+function formatDayOfWeekTable(summary: StorePeriodSummary): string[] {
+  const lines: string[] = [];
+  lines.push("Day-of-Week Averages:");
+  lines.push("  Day | Avg Sales | Avg Txn | Avg Basket | Avg Labor | Avg RPLH | Samples");
+  for (const row of summary.dayOfWeekAverages) {
+    if (row.sampleDays === 0) continue;
+    lines.push(
+      `  ${row.day.slice(0, 3)} | ` +
+        `${row.avgSalesCents != null ? dollarsFromCents(row.avgSalesCents) : "N/A"} | ` +
+        `${row.avgTransactions != null ? row.avgTransactions.toFixed(1) : "N/A"} | ` +
+        `${row.avgBasketSizeCents != null ? dollarsFromCents(row.avgBasketSizeCents) : "N/A"} | ` +
+        `${row.avgLaborHours != null ? `${row.avgLaborHours.toFixed(1)}h` : "N/A"} | ` +
+        `${row.avgRplhCents != null ? dollarsFromCents(row.avgRplhCents) : "N/A"} | ` +
+        `${row.sampleDays}`
+    );
+  }
+  return lines;
+}
+
+function formatShiftTypeTable(summary: StorePeriodSummary): string[] {
+  const lines: string[] = [];
+  lines.push("Shift-Type Breakdown:");
+  lines.push("  Type | Avg Sales | Avg Txn | Avg Basket | Avg RPLH | n");
+  for (const row of summary.shiftTypeBreakdown) {
+    lines.push(
+      `  ${row.shiftType} | ` +
+        `${row.avgSalesCents != null ? dollarsFromCents(row.avgSalesCents) : "N/A"} | ` +
+        `${row.avgTransactions != null ? row.avgTransactions.toFixed(1) : "N/A"} | ` +
+        `${row.avgBasketCents != null ? dollarsFromCents(row.avgBasketCents) : "N/A"} | ` +
+        `${row.avgRplhCents != null ? dollarsFromCents(row.avgRplhCents) : "N/A"} | ` +
+        `${row.sampleSize}`
+    );
+  }
+  return lines;
 }
 
 export function formatStoreReport(
@@ -28,130 +61,251 @@ export function formatStoreReport(
 ): string {
   const lines: string[] = [];
 
-  lines.push("=== EXECUTIVE STORE REPORT: CROSS-STORE VARIANCE ===");
-  lines.push(`Period: ${periodFrom} \u2013 ${periodTo}`);
+  lines.push("=== EXECUTIVE STORE REPORT ===");
+  lines.push(`Period: ${periodFrom} - ${periodTo}`);
 
-  for (const s of summaries) {
+  for (const summary of summaries) {
     lines.push("");
-    lines.push("-".repeat(60));
-    lines.push(`STORE: ${s.storeName}`);
+    lines.push("-".repeat(72));
+    lines.push(`STORE: ${summary.storeName}`);
+    lines.push(`Window: ${summary.periodFrom} - ${summary.periodTo}`);
     lines.push("");
 
-    // Block A — Top-Line Velocity & Efficiency
-    lines.push("Top-Line Health:");
+    lines.push("Top-Line Velocity:");
     lines.push(
-      `  Gross Sales: ${s.grossSalesCents != null ? d(s.grossSalesCents) : "N/A"}`
+      `  Gross Sales (Raw / Adj): ` +
+        `${summary.grossSalesCents != null ? dollarsFromCents(summary.grossSalesCents) : "N/A"} / ` +
+        `${summary.adjustedGrossSalesCents != null ? dollarsFromCents(summary.adjustedGrossSalesCents) : "N/A"} ` +
+        `(${formatDelta(summary.previousDeltas.grossSalesCents, true)} raw, ${formatDelta(
+          summary.previousDeltas.adjustedGrossSalesCents,
+          true
+        )} adj)`
     );
-    const txnStr =
-      s.totalTransactions != null ? s.totalTransactions.toString() : "N/A";
-    const basketStr =
-      s.avgBasketSizeCents != null ? d(s.avgBasketSizeCents) : "N/A";
-    lines.push(`  Total Transactions: ${txnStr} | Avg Basket Size: ${basketStr}`);
-    const laborStr = hrs(s.totalLaborHours);
-    const rplhStr = s.rplhCents != null ? d(s.rplhCents) : "N/A";
-    lines.push(`  Total Labor Hours: ${laborStr} | RPLH: ${rplhStr}`);
-
+    lines.push(
+      `  Transactions: ${summary.totalTransactions ?? "N/A"} | ` +
+        `Avg Basket (Raw / Adj): ` +
+        `${summary.avgBasketSizeCents != null ? dollarsFromCents(summary.avgBasketSizeCents) : "N/A"} / ` +
+        `${summary.adjustedAvgBasketSizeCents != null ? dollarsFromCents(summary.adjustedAvgBasketSizeCents) : "N/A"} ` +
+        `(${formatDelta(summary.previousDeltas.avgBasketSizeCents, true)})`
+    );
+    lines.push(
+      `  Labor Hours: ${summary.totalLaborHours.toFixed(1)}h | ` +
+        `RPLH (Raw / Adj): ` +
+        `${summary.rplhCents != null ? dollarsFromCents(summary.rplhCents) : "N/A"} / ` +
+        `${summary.adjustedRplhCents != null ? dollarsFromCents(summary.adjustedRplhCents) : "N/A"} ` +
+        `(${formatDelta(summary.previousDeltas.rplhCents, true)})`
+    );
+    lines.push(`  Transactions Delta: ${formatDelta(summary.previousDeltas.totalTransactions)}`);
+    lines.push(`  Normalization Factor: ${summary.storeScalingFactor.toFixed(1)}x`);
     lines.push("");
 
-    // Block B — Risk & Cash Flow
-    lines.push("Risk & Cash Flow:");
-    if (s.cashPct != null && s.cardPct != null) {
-      lines.push(
-        `  Payment Split: ${pct(s.cashPct)} Cash / ${pct(s.cardPct)} Card` +
-        (s.safeCloseoutDayCount > 0
-          ? ` (${s.safeCloseoutDayCount} days with safe closeout)`
-          : "")
-      );
-    } else {
-      lines.push("  Payment Split: N/A \u2014 no safe closeout data for this period");
-    }
-    if (s.depositVarianceCents != null) {
-      const sign =
-        s.depositVarianceCents > 0 ? "+" :
-        s.depositVarianceCents < 0 ? "-" : "";
-      lines.push(
-        `  Deposit Variance (Shrink): ${sign}${d(Math.abs(s.depositVarianceCents))}`
-      );
-    } else {
-      lines.push("  Deposit Variance: N/A \u2014 no safe closeout data for this period");
-    }
-
+    lines.push("Risk and Cash Flow:");
+    lines.push(
+      `  Payment Split: ${
+        summary.cashPct != null && summary.cardPct != null
+          ? `${summary.cashPct}% cash / ${summary.cardPct}% card`
+          : "N/A"
+      }`
+    );
+    lines.push(
+      `  Deposit Variance: ${
+        summary.depositVarianceCents != null
+          ? `${summary.depositVarianceCents < 0 ? "-" : summary.depositVarianceCents > 0 ? "+" : ""}${dollarsFromCents(
+              Math.abs(summary.depositVarianceCents)
+            )}`
+          : "N/A"
+      }`
+    );
+    lines.push(`  Safe Closeout Days: ${summary.safeCloseoutDayCount}`);
+    lines.push(
+      `  Variance Days: ${summary.cashRisk.varianceDays}` +
+        (summary.cashRisk.varianceRatePct != null ? ` (${summary.cashRisk.varianceRatePct}%)` : "")
+    );
+    lines.push(
+      `  Total Variance: ${
+        summary.cashRisk.totalVarianceCents != null
+          ? `${summary.cashRisk.totalVarianceCents < 0 ? "-" : summary.cashRisk.totalVarianceCents > 0 ? "+" : ""}${dollarsFromCents(
+              Math.abs(summary.cashRisk.totalVarianceCents)
+            )}`
+          : "N/A"
+      }`
+    );
+    lines.push(
+      `  Avg Variance/Day: ${
+        summary.cashRisk.avgVariancePerDayCents != null
+          ? `${summary.cashRisk.avgVariancePerDayCents < 0 ? "-" : summary.cashRisk.avgVariancePerDayCents > 0 ? "+" : ""}${dollarsFromCents(
+              Math.abs(summary.cashRisk.avgVariancePerDayCents)
+            )}`
+          : "N/A"
+      }`
+    );
+    lines.push(
+      `  Largest Single-Day Variance: ${
+        summary.cashRisk.largestSingleDayVarianceCents != null
+          ? `${summary.cashRisk.largestSingleDayVarianceCents < 0 ? "-" : summary.cashRisk.largestSingleDayVarianceCents > 0 ? "+" : ""}${dollarsFromCents(
+              Math.abs(summary.cashRisk.largestSingleDayVarianceCents)
+            )}`
+          : "N/A"
+      }`
+    );
     lines.push("");
 
-    // Block C — Environmental Context
-    lines.push("Environmental Context:");
-    if (s.weatherTrend != null) {
-      lines.push(`  General Trend: ${s.weatherTrend}`);
-      if (s.dominantWeatherCondition) {
-        lines.push(`  Dominant Condition: ${s.dominantWeatherCondition}`);
+    lines.push("Weather Summary:");
+    lines.push(`  Trend: ${summary.weatherTrend ?? "N/A"}`);
+    lines.push(
+      `  Dominant Condition Mix: ${
+        summary.weatherSummary.conditionMix.length > 0
+          ? summary.weatherSummary.conditionMix
+              .slice(0, 4)
+              .map((entry) => `${entry.condition} ${entry.pct}%`)
+              .join(", ")
+          : "N/A"
+      }`
+    );
+    lines.push(
+      `  Temperature Min/Avg/Max: ${
+        summary.weatherSummary.tempMinF != null &&
+        summary.weatherSummary.tempAvgF != null &&
+        summary.weatherSummary.tempMaxF != null
+          ? `${summary.weatherSummary.tempMinF}F / ${summary.weatherSummary.tempAvgF}F / ${summary.weatherSummary.tempMaxF}F`
+          : "N/A"
+      }`
+    );
+    if (summary.weatherSummary.outlierFlags.length > 0) {
+      lines.push("  Outlier Flags:");
+      for (const flag of summary.weatherSummary.outlierFlags) {
+        lines.push(`    - ${flag}`);
       }
-      if (s.weatherDays.length > 0) {
-        lines.push("  Weather Variance:");
-        for (const day of s.weatherDays) {
-          const startLabel = day.startDesc ?? day.startCondition;
-          const start =
-            startLabel != null
-              ? day.startTempF != null
-                ? `${startLabel} (${day.startTempF}\u00b0F)`
-                : startLabel
-              : "Unknown";
-          const endLabel = day.endDesc ?? day.endCondition;
-          const end =
-            endLabel != null
-              ? day.endTempF != null
-                ? `${endLabel} (${day.endTempF}\u00b0F)`
-                : endLabel
-              : null;
-          lines.push(
-            `    - ${day.date}: ${start}${end ? ` -> ${end}` : ""}`
-          );
-        }
-      }
-    } else {
-      lines.push("  Weather data: N/A \u2014 no shifts with weather captured in this period");
     }
-
+    if (summary.weatherSummary.weatherImpactHint) {
+      lines.push(`  Weather Impact Hint: ${summary.weatherSummary.weatherImpactHint}`);
+    }
     lines.push("");
 
-    // Velocity Map
-    lines.push("Velocity Map (Averages):");
-    if (s.bestDay != null) {
-      const txnNote =
-        s.bestDay.avgTransactions != null
-          ? `, ${s.bestDay.avgTransactions} transactions`
-          : "";
-      lines.push(
-        `  Best Day: ${s.bestDay.label} (${d(s.bestDay.avgSalesCents)} avg sales${txnNote})`
-      );
+    lines.push("Distribution and Volatility:");
+    lines.push(
+      `  Std Dev Daily Sales: ${
+        summary.volatility.stdDevDailySalesCents != null
+          ? dollarsFromCents(summary.volatility.stdDevDailySalesCents)
+          : "N/A"
+      }`
+    );
+    lines.push(
+      `  Coefficient of Variation: ${
+        summary.volatility.coefficientOfVariationPct != null
+          ? `${summary.volatility.coefficientOfVariationPct}%`
+          : "N/A"
+      }`
+    );
+    lines.push(
+      `  Outlier Counts: ${summary.volatility.belowOneSigmaDays} below -1 sigma / ` +
+        `${summary.volatility.aboveOneSigmaDays} above +1 sigma`
+    );
+    lines.push(
+      `  Largest 1-Day Swing Up: ${
+        summary.volatility.largestUpSwingCents != null
+          ? dollarsFromCents(summary.volatility.largestUpSwingCents)
+          : "N/A"
+      }`
+    );
+    lines.push(
+      `  Largest 1-Day Swing Down: ${
+        summary.volatility.largestDownSwingCents != null
+          ? dollarsFromCents(summary.volatility.largestDownSwingCents)
+          : "N/A"
+      }`
+    );
+    lines.push("");
+
+    lines.push("Velocity Map:");
+    lines.push(
+      `  Best Day: ${
+        summary.bestDay ? `${summary.bestDay.label} (${dollarsFromCents(summary.bestDay.avgSalesCents)})` : "N/A"
+      }`
+    );
+    lines.push(
+      `  Worst Day: ${
+        summary.worstDay ? `${summary.worstDay.label} (${dollarsFromCents(summary.worstDay.avgSalesCents)})` : "N/A"
+      }`
+    );
+    lines.push(
+      `  Best Shift Type: ${
+        summary.bestShiftType
+          ? `${summary.bestShiftType.label} (${dollarsFromCents(summary.bestShiftType.avgSalesCents)})`
+          : "N/A"
+      }`
+    );
+    lines.push("");
+
+    lines.push("Daily Trend (last 7 days):");
+    if (summary.dailyTrend.length === 0) {
+      lines.push("  N/A");
+    } else {
+      for (const point of summary.dailyTrend.slice(-7)) {
+        lines.push(
+          `  ${point.date}: sales raw/adj ${dollarsFromCents(point.salesCents)} / ${dollarsFromCents(point.adjustedSalesCents)}, ` +
+            `roll7 raw/adj ${dollarsFromCents(point.rolling7SalesCents)} / ${dollarsFromCents(point.adjustedRolling7SalesCents)}, ` +
+            `labor ${point.laborHours.toFixed(1)}h, ` +
+            `txn ${point.transactions ?? "N/A"}, ` +
+            `basket raw/adj ${point.basketSizeCents != null ? dollarsFromCents(point.basketSizeCents) : "N/A"} / ` +
+            `${point.adjustedBasketSizeCents != null ? dollarsFromCents(point.adjustedBasketSizeCents) : "N/A"}`
+        );
+      }
     }
-    if (s.worstDay != null && s.worstDay.label !== s.bestDay?.label) {
-      const txnNote =
-        s.worstDay.avgTransactions != null
-          ? `, ${s.worstDay.avgTransactions} transactions`
-          : "";
-      lines.push(
-        `  Worst Day: ${s.worstDay.label} (${d(s.worstDay.avgSalesCents)} avg sales${txnNote})`
-      );
-    }
-    if (s.bestShiftType != null) {
-      const txnNote =
-        s.bestShiftType.avgTransactions != null
-          ? `, ${s.bestShiftType.avgTransactions} transactions`
-          : "";
-      lines.push(
-        `  Best Shift Type: ${s.bestShiftType.label} (${d(s.bestShiftType.avgSalesCents)} avg sales${txnNote})`
-      );
-    }
-    if (s.bestDay == null && s.worstDay == null && s.bestShiftType == null) {
-      lines.push("  Velocity data: N/A \u2014 no complete sales records in this period");
-    }
+    lines.push("");
+
+    lines.push(...formatDayOfWeekTable(summary));
+    lines.push("");
+    lines.push(...formatShiftTypeTable(summary));
+    lines.push("");
+
+    lines.push("Data Integrity:");
+    lines.push(`  Expected Days: ${summary.dataIntegrity.expectedDays}`);
+    lines.push(`  Missing Sales Days: ${summary.dataIntegrity.missingSalesDays}`);
+    lines.push(`  Days Missing Txn Count: ${summary.dataIntegrity.missingTransactionDays}`);
+    lines.push(`  Days Missing Labor: ${summary.dataIntegrity.missingLaborDays}`);
+    lines.push(`  Rollover Adjustments Applied: ${summary.dataIntegrity.rolloverAdjustedDays}`);
+    lines.push(
+      `  Late Closeouts / Overrides / Audit Flags: ${summary.dataIntegrity.lateCloseouts ?? "N/A"} / ` +
+        `${summary.dataIntegrity.manualOverrides ?? "N/A"} / ${summary.dataIntegrity.auditFlagsTriggered ?? "N/A"}`
+    );
+    lines.push("");
+
+    lines.push("Top Performers:");
+    lines.push(
+      `  Volume - Sales: ${formatMetric(summary.topPerformers.volume.totalSales, (value) => dollarsFromCents(value))}`
+    );
+    lines.push(
+      `  Volume - Transactions: ${formatMetric(summary.topPerformers.volume.totalTransactions, (value) => `${Math.round(
+        value
+      )} txns`)}`
+    );
+    lines.push(
+      `  Volume - Labor Hours: ${formatMetric(summary.topPerformers.volume.totalLaborHours, (value) => `${value.toFixed(
+        1
+      )}h`)}`
+    );
+    lines.push(
+      `  Efficiency - RPLH: ${formatMetric(summary.topPerformers.efficiency.rplh, (value) => `${dollarsFromCents(
+        value
+      )}/hr`)}`
+    );
+    lines.push(
+      `  Efficiency - Txn/Labor Hour: ${formatMetric(
+        summary.topPerformers.efficiency.transactionsPerLaborHour,
+        (value) => `${value.toFixed(1)} txn/hr`
+      )}`
+    );
+    lines.push(
+      `  Efficiency - Basket: ${formatMetric(summary.topPerformers.efficiency.basketSize, (value) =>
+        dollarsFromCents(value)
+      )}`
+    );
   }
 
   lines.push("");
-  lines.push("-".repeat(60));
-  lines.push(
-    `Generated: ${new Date().toLocaleString("en-US", { timeZone: "America/Chicago" })} CST`
-  );
+  lines.push("-".repeat(72));
+  lines.push(`Generated: ${new Date().toLocaleString("en-US", { timeZone: "America/Chicago" })} CST`);
 
   return lines.join("\n");
 }

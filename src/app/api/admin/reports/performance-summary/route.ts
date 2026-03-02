@@ -90,6 +90,12 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "'from' must be on or before 'to'.", code: "invalid_range" }, { status: 400 });
     }
 
+    const fromUtc = new Date(`${from}T00:00:00.000Z`);
+    const toUtc = new Date(`${to}T00:00:00.000Z`);
+    const periodDays = Math.floor((toUtc.getTime() - fromUtc.getTime()) / 86_400_000) + 1;
+    const previousFrom = cstDateKey(addDays(fromUtc, -periodDays));
+    const previousTo = cstDateKey(addDays(fromUtc, -1));
+
     const storeIdParam = p.get("storeId") ?? "all";
     if (storeIdParam !== "all" && !managerStoreIds.includes(storeIdParam)) {
       return NextResponse.json({ error: "Store not in scope.", code: "forbidden_store" }, { status: 403 });
@@ -121,13 +127,15 @@ export async function GET(req: Request) {
         ? Math.round(parseFloat(goalBenchmarkCentsParam))
         : null;
 
+    type ShiftRowWithSchedule = RawShiftRow & { schedule_shift_id: string | null };
+
     // ── Data fetch ─────────────────────────────────────────────────────────────
     // Build shift query (optionally filtered to a single employee)
     let shiftsQuery = supabaseServer
       .from("shifts")
-      .select("id,store_id,profile_id,shift_type,planned_start_at,started_at,ended_at,last_action,start_weather_condition,start_weather_desc,start_temp_f,end_weather_condition,end_weather_desc,end_temp_f")
+      .select("id,store_id,profile_id,shift_type,planned_start_at,started_at,ended_at,last_action,schedule_shift_id,start_weather_condition,start_weather_desc,start_temp_f,end_weather_condition,end_weather_desc,end_temp_f")
       .in("store_id", activeStoreIds)
-      .gte("started_at", `${from}T00:00:00.000Z`)
+      .gte("started_at", `${previousFrom}T00:00:00.000Z`)
       .lte("started_at", `${to}T23:59:59.999Z`)
       .neq("last_action", "removed");
 
@@ -145,14 +153,14 @@ export async function GET(req: Request) {
       !benchmarkEmployeeIds.includes(employeeIdParam);
 
     const [shiftsRes, salesRes, storesRes, profilesRes] = await Promise.all([
-      shiftsQuery.returns<RawShiftRow[]>(),
+      shiftsQuery.returns<ShiftRowWithSchedule[]>(),
       supabaseServer
         .from("daily_sales_records")
         .select(
           "id,store_id,business_date,open_shift_id,close_shift_id,open_x_report_cents,close_sales_cents,z_report_cents,rollover_from_previous_cents,closer_rollover_cents,is_rollover_night,open_transaction_count,close_transaction_count,mid_x_report_cents"
         )
         .in("store_id", activeStoreIds)
-        .gte("business_date", from)
+        .gte("business_date", previousFrom)
         .lte("business_date", to)
         .returns<SalesRecordRow[]>(),
       supabaseServer
@@ -172,33 +180,151 @@ export async function GET(req: Request) {
       }
     }
 
-    let allShifts: RawShiftRow[] = shiftsRes.data ?? [];
+    let allShifts: ShiftRowWithSchedule[] = shiftsRes.data ?? [];
 
     // Fetch benchmark-employee shifts separately if filtered to a single employee
     if (needBenchmarkFetch) {
       const benchmarkShiftsRes = await supabaseServer
         .from("shifts")
-        .select("id,store_id,profile_id,shift_type,planned_start_at,started_at,ended_at,last_action,start_weather_condition,start_weather_desc,start_temp_f,end_weather_condition,end_weather_desc,end_temp_f")
+        .select("id,store_id,profile_id,shift_type,planned_start_at,started_at,ended_at,last_action,schedule_shift_id,start_weather_condition,start_weather_desc,start_temp_f,end_weather_condition,end_weather_desc,end_temp_f")
         .in("store_id", activeStoreIds)
         .in("profile_id", benchmarkEmployeeIds)
-        .gte("started_at", `${from}T00:00:00.000Z`)
+        .gte("started_at", `${previousFrom}T00:00:00.000Z`)
         .lte("started_at", `${to}T23:59:59.999Z`)
         .neq("last_action", "removed")
-        .returns<RawShiftRow[]>();
+        .returns<ShiftRowWithSchedule[]>();
 
       if (!benchmarkShiftsRes.error) {
         allShifts = [...allShifts, ...(benchmarkShiftsRes.data ?? [])];
       }
     }
 
+
+    const scheduledShiftIds = Array.from(
+      new Set(allShifts.map((s) => s.schedule_shift_id).filter((v): v is string => Boolean(v)))
+    );
+
+    let effectiveShifts: RawShiftRow[] = allShifts.map((s) => ({
+      id: s.id,
+      store_id: s.store_id,
+      profile_id: s.profile_id,
+      shift_type: s.shift_type,
+      planned_start_at: s.planned_start_at,
+      started_at: s.started_at,
+      ended_at: s.ended_at,
+      last_action: s.last_action,
+      start_weather_condition: s.start_weather_condition,
+      start_weather_desc: s.start_weather_desc,
+      start_temp_f: s.start_temp_f,
+      end_weather_condition: s.end_weather_condition,
+      end_weather_desc: s.end_weather_desc,
+      end_temp_f: s.end_temp_f,
+    }));
+
+    if (scheduledShiftIds.length > 0) {
+      const scheduledRes = await supabaseServer
+        .from("schedule_shifts")
+        .select("id,shift_type,shift_mode")
+        .in("id", scheduledShiftIds)
+        .returns<Array<{ id: string; shift_type: string | null; shift_mode: string | null }>>();
+
+      if (!scheduledRes.error) {
+        const isScheduledDoubleById = new Map<string, boolean>(
+          (scheduledRes.data ?? []).map((row) => [
+            row.id,
+            row.shift_mode === "double" || row.shift_type === "double",
+          ])
+        );
+
+        effectiveShifts = allShifts.map((s) => {
+          const forceDouble =
+            s.shift_type !== "double" &&
+            s.schedule_shift_id != null &&
+            isScheduledDoubleById.get(s.schedule_shift_id) === true;
+
+          return {
+            id: s.id,
+            store_id: s.store_id,
+            profile_id: s.profile_id,
+            shift_type: forceDouble ? "double" : s.shift_type,
+            planned_start_at: s.planned_start_at,
+            started_at: s.started_at,
+            ended_at: s.ended_at,
+            last_action: s.last_action,
+            start_weather_condition: s.start_weather_condition,
+            start_weather_desc: s.start_weather_desc,
+            start_temp_f: s.start_temp_f,
+            end_weather_condition: s.end_weather_condition,
+            end_weather_desc: s.end_weather_desc,
+            end_temp_f: s.end_temp_f,
+          };
+        });
+      }
+    }
+
     // ── Run analyzer ───────────────────────────────────────────────────────────
+    const allSalesRecords = salesRes.data ?? [];
+
+    // Historical fallback: some legacy double shifts were saved as OPEN only.
+    // If a sales record is linked to the open shift and has PM totals but no close_shift_id,
+    // and there is no same-day close/double shift for that employee+store, treat as double.
+    const salesByOpenShiftId = new Map(
+      allSalesRecords
+        .filter((record) => Boolean(record.open_shift_id))
+        .map((record) => [record.open_shift_id as string, record])
+    );
+    const hasCloseLikeByProfileStoreDay = new Set(
+      effectiveShifts
+        .filter((shift) => shift.shift_type === "close" || shift.shift_type === "double")
+        .map((shift) => `${shift.profile_id}|${shift.store_id}|${cstDateKey(new Date(shift.planned_start_at))}`)
+    );
+
+    effectiveShifts = effectiveShifts.map((shift) => {
+      if (shift.shift_type !== "open") return shift;
+      const linkedSales = salesByOpenShiftId.get(shift.id);
+      if (!linkedSales) return shift;
+      const hasPmTotals = linkedSales.close_sales_cents != null || linkedSales.z_report_cents != null;
+      if (linkedSales.close_shift_id != null || !hasPmTotals) return shift;
+
+      const key = `${shift.profile_id}|${shift.store_id}|${cstDateKey(new Date(shift.planned_start_at))}`;
+      if (hasCloseLikeByProfileStoreDay.has(key)) return shift;
+
+      return { ...shift, shift_type: "double" as const };
+    });
+
+    const shiftsCurrentPeriod = effectiveShifts.filter((shift) => {
+      const businessDate = cstDateKey(new Date(shift.planned_start_at));
+      return businessDate >= from && businessDate <= to;
+    });
+    const shiftsPreviousPeriod = effectiveShifts.filter((shift) => {
+      const businessDate = cstDateKey(new Date(shift.planned_start_at));
+      return businessDate >= previousFrom && businessDate <= previousTo;
+    });
+
+    const salesCurrentPeriod = allSalesRecords.filter(
+      (record) => record.business_date >= from && record.business_date <= to
+    );
+    const salesPreviousPeriod = allSalesRecords.filter(
+      (record) => record.business_date >= previousFrom && record.business_date <= previousTo
+    );
+
     const { summaries, benchmarkCents, storeFactors } = analyzeEmployeeSales(
-      allShifts,
-      salesRes.data ?? [],
+      shiftsCurrentPeriod,
+      salesCurrentPeriod,
       storesRes.data ?? [],
       profilesRes.data ?? [],
       from,
       to,
+      { benchmarkEmployeeIds: benchmarkEmployeeIds.length > 0 ? benchmarkEmployeeIds : undefined }
+    );
+
+    const { summaries: previousSummaries } = analyzeEmployeeSales(
+      shiftsPreviousPeriod,
+      salesPreviousPeriod,
+      storesRes.data ?? [],
+      profilesRes.data ?? [],
+      previousFrom,
+      previousTo,
       { benchmarkEmployeeIds: benchmarkEmployeeIds.length > 0 ? benchmarkEmployeeIds : undefined }
     );
 
@@ -207,7 +333,7 @@ export async function GET(req: Request) {
       ? summaries.filter((s) => s.employeeId === employeeIdParam)
       : summaries;
 
-    if (outputSummaries.length === 0 && allShifts.length === 0) {
+    if (outputSummaries.length === 0 && effectiveShifts.length === 0) {
       return NextResponse.json(
         { error: "No shifts found for the selected range and filters.", code: "no_data" },
         { status: 404 }
@@ -218,65 +344,16 @@ export async function GET(req: Request) {
     let deltas: ReturnType<typeof computePeriodDelta>[] | undefined;
 
     if (includeDelta && outputSummaries.length > 0) {
-      const employeeIds = outputSummaries.map((s) => s.employeeId);
-
-      // Determine which snapshot type to compare against
-      // Quarterly compares against previous quarterly; others compare same type
-      const deltaReportType = reportType;
-      const storeIdForSnapshot = storeIdParam !== "all" ? storeIdParam : null;
-
-      // Fetch the most recent prior snapshot per employee
-      const previousSnapshotsRes = await supabaseServer
-        .from("performance_snapshots")
-        .select("employee_id,snapshot,period_from,period_to")
-        .in("employee_id", employeeIds)
-        .eq("report_type", deltaReportType)
-        .lt("period_to", from)
-        .is("store_id", storeIdForSnapshot === null ? null : undefined)
-        .order("period_to", { ascending: false })
-        .returns<Array<{ employee_id: string; snapshot: EmployeePeriodSummary; period_from: string; period_to: string }>>();
-
-      if (!previousSnapshotsRes.error) {
-        // Deduplicate: keep only the most recent per employee
-        const mostRecentByEmployee = new Map<string, EmployeePeriodSummary>();
-        for (const row of previousSnapshotsRes.data ?? []) {
-          if (!mostRecentByEmployee.has(row.employee_id)) {
-            mostRecentByEmployee.set(row.employee_id, row.snapshot);
-          }
-        }
-
-        // Handle per-store snapshots differently (use .eq instead of .is)
-        if (storeIdForSnapshot !== null) {
-          const perStoreRes = await supabaseServer
-            .from("performance_snapshots")
-            .select("employee_id,snapshot,period_from,period_to")
-            .in("employee_id", employeeIds)
-            .eq("report_type", deltaReportType)
-            .eq("store_id", storeIdForSnapshot)
-            .lt("period_to", from)
-            .order("period_to", { ascending: false })
-            .returns<Array<{ employee_id: string; snapshot: EmployeePeriodSummary; period_from: string; period_to: string }>>();
-
-          if (!perStoreRes.error) {
-            for (const row of perStoreRes.data ?? []) {
-              if (!mostRecentByEmployee.has(row.employee_id)) {
-                mostRecentByEmployee.set(row.employee_id, row.snapshot);
-              }
-            }
-          }
-        }
-
-        deltas = [];
-        for (const current of outputSummaries) {
-          const previous = mostRecentByEmployee.get(current.employeeId);
-          if (previous) {
-            deltas.push(computePeriodDelta(current, previous));
-          }
+      const previousByEmployee = new Map(previousSummaries.map((s) => [s.employeeId, s]));
+      deltas = [];
+      for (const current of outputSummaries) {
+        const previous = previousByEmployee.get(current.employeeId);
+        if (previous) {
+          deltas.push(computePeriodDelta(current, previous));
         }
       }
     }
 
-    // ── Save snapshots ─────────────────────────────────────────────────────────
     if (saveSnapshot && outputSummaries.length > 0) {
       const storeIdForSnapshot = storeIdParam !== "all" ? storeIdParam : null;
       const snapshotRows = outputSummaries.map((s) => ({

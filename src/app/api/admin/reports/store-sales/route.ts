@@ -13,6 +13,7 @@ import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
 import { supabaseServer } from "@/lib/supabaseServer";
 import {
   analyzeStoreData,
+  type StoreReportProfileRow,
   type StoreReportShiftRow,
   type StoreReportSalesRow,
   type StoreReportSafeCloseoutRow,
@@ -22,6 +23,14 @@ import { formatStoreReport } from "@/lib/storeReportFormatter";
 
 function isDateOnly(value: string | null): value is string {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+}
+
+function toUtcDateOnly(value: string): Date {
+  return new Date(`${value}T00:00:00.000Z`);
+}
+
+function formatDateOnly(date: Date): string {
+  return date.toISOString().slice(0, 10);
 }
 
 export async function GET(req: Request) {
@@ -70,6 +79,11 @@ export async function GET(req: Request) {
     if (from > to) {
       return NextResponse.json({ error: "from must be ≤ to." }, { status: 400 });
     }
+    const fromDate = toUtcDateOnly(from);
+    const toDate = toUtcDateOnly(to);
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const periodDays = Math.floor((toDate.getTime() - fromDate.getTime()) / msPerDay) + 1;
+    const previousFrom = formatDateOnly(new Date(fromDate.getTime() - periodDays * msPerDay));
 
     const activeStoreIds =
       storeIdParam !== "all" && managerStoreIds.includes(storeIdParam)
@@ -85,7 +99,7 @@ export async function GET(req: Request) {
           "start_weather_condition,start_weather_desc,start_temp_f,end_weather_condition,end_weather_desc,end_temp_f"
         )
         .in("store_id", activeStoreIds)
-        .gte("started_at", `${from}T00:00:00.000Z`)
+        .gte("started_at", `${previousFrom}T00:00:00.000Z`)
         .lte("started_at", `${to}T23:59:59.999Z`)
         .neq("last_action", "removed")
         .returns<StoreReportShiftRow[]>(),
@@ -93,11 +107,11 @@ export async function GET(req: Request) {
       supabaseServer
         .from("daily_sales_records")
         .select(
-          "store_id,business_date,open_x_report_cents,close_sales_cents,z_report_cents," +
-          "rollover_from_previous_cents,open_transaction_count,close_transaction_count"
+          "store_id,business_date,open_shift_id,close_shift_id,open_x_report_cents,close_sales_cents,z_report_cents," +
+          "rollover_from_previous_cents,closer_rollover_cents,is_rollover_night,open_transaction_count,close_transaction_count"
         )
         .in("store_id", activeStoreIds)
-        .gte("business_date", from)
+        .gte("business_date", previousFrom)
         .lte("business_date", to)
         .returns<StoreReportSalesRow[]>(),
 
@@ -108,7 +122,7 @@ export async function GET(req: Request) {
           "expected_deposit_cents,actual_deposit_cents,variance_cents"
         )
         .in("store_id", activeStoreIds)
-        .gte("business_date", from)
+        .gte("business_date", previousFrom)
         .lte("business_date", to)
         .neq("status", "draft")
         .returns<StoreReportSafeCloseoutRow[]>(),
@@ -125,14 +139,33 @@ export async function GET(req: Request) {
     if (closeoutsRes.error) return NextResponse.json({ error: closeoutsRes.error.message }, { status: 500 });
     if (storesRes.error)    return NextResponse.json({ error: storesRes.error.message },    { status: 500 });
 
+    const profileIds = Array.from(
+      new Set((shiftsRes.data ?? []).map((shift) => shift.profile_id).filter(Boolean))
+    );
+
+    let profiles: StoreReportProfileRow[] = [];
+    if (profileIds.length > 0) {
+      const profilesRes = await supabaseServer
+        .from("profiles")
+        .select("id,name")
+        .in("id", profileIds)
+        .returns<StoreReportProfileRow[]>();
+      if (profilesRes.error) {
+        return NextResponse.json({ error: profilesRes.error.message }, { status: 500 });
+      }
+      profiles = profilesRes.data ?? [];
+    }
+
     // ── Analyze ───────────────────────────────────────────────────────────────
     const summaries = analyzeStoreData(
       shiftsRes.data  ?? [],
       salesRes.data   ?? [],
       closeoutsRes.data ?? [],
       storesRes.data  ?? [],
+      profiles,
       from,
       to,
+      previousFrom,
     );
 
     if (format === "text") {
