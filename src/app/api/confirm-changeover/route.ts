@@ -139,35 +139,37 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    // Optionally persist mid-day X report total and AM transaction count to
-    // daily_sales_records so the analytics layer can compute AM/PM splits.
+    // Mid-shift submission policy: for doubles, all analytics fields are required.
     const hasMidX =
       typeof body.midXReportCents === "number" &&
       Number.isFinite(body.midXReportCents) &&
       body.midXReportCents >= 0;
-    // Zero-contamination guard: treat 0 as "not captured" (same as null).
     const openTxnCount =
       typeof body.openTransactionCount === "number" &&
       Number.isInteger(body.openTransactionCount) &&
       body.openTransactionCount > 0
         ? body.openTransactionCount
         : null;
+    if (!hasMidX || openTxnCount == null) {
+      return NextResponse.json(
+        { error: "Mid-shift X report and transaction count are required for double shifts." },
+        { status: 400 }
+      );
+    }
 
-    if (hasMidX || openTxnCount != null) {
-      const businessDate = getCstDateKey(shift.planned_start_at);
-      if (businessDate) {
-        const patch: Record<string, unknown> = {
-          store_id: shift.store_id,
-          business_date: businessDate,
-        };
-        if (hasMidX) patch.mid_x_report_cents = Math.round(body.midXReportCents as number);
-        if (openTxnCount != null) patch.open_transaction_count = openTxnCount;
+    const businessDate = getCstDateKey(shift.planned_start_at);
+    if (businessDate) {
+      const patch: Record<string, unknown> = {
+        store_id: shift.store_id,
+        business_date: businessDate,
+        mid_x_report_cents: Math.round(body.midXReportCents as number),
+        open_transaction_count: openTxnCount,
+      };
 
-        const { error: dsr } = await supabaseServer
-          .from("daily_sales_records")
-          .upsert(patch, { onConflict: "store_id,business_date" });
-        if (dsr) return NextResponse.json({ error: dsr.message }, { status: 500 });
-      }
+      const { error: dsr } = await supabaseServer
+        .from("daily_sales_records")
+        .upsert(patch, { onConflict: "store_id,business_date" });
+      if (dsr) return NextResponse.json({ error: dsr.message }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true });

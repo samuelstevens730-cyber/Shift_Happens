@@ -509,9 +509,17 @@ function ChangeoverPanel({
 
       <button
         className="rounded bg-black text-white px-3 py-2 disabled:opacity-50"
-        disabled={saving || !Number.isFinite(cents)}
+        disabled={saving || !Number.isFinite(cents) || !Number.isFinite(xReportCents) || parsedTxnCount == null}
         onClick={async () => {
           setErr(null);
+          if (!Number.isFinite(xReportCents)) {
+            setErr("X report total is required.");
+            return;
+          }
+          if (parsedTxnCount == null) {
+            setErr("Transaction count is required.");
+            return;
+          }
           setSaving(true);
           try {
             const authToken = await resolveAuthToken();

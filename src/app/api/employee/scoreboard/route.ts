@@ -9,6 +9,8 @@ import type { EmployeePublicScoreboardResponse } from "@/types/employeePublicSco
 import type { AvatarOptions } from "@/components/UserAvatar";
 
 const MIN_SHIFTS_FOR_RANKING = 8;
+const DRAWER_VARIANCE_TOLERANCE_CENTS = 150; // $1.50 allowed per segment
+const DRAWER_EXCESS_ZERO_SCORE_CENTS = 2000; // >= $20 avg excess yields 0/20
 
 function isDateOnly(value: string | null): value is string {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
@@ -99,10 +101,12 @@ type EmployeeStats = {
   shiftsWorked: number;
   rawSalesValues: number[];
   adjustedSalesValues: number[];
+  expectedChangeoverCounts: number;
+  completedChangeoverCounts: number;
   attendanceScheduled: number;
   attendanceWorked: number;
   lateMinutes: number[];
-  drawerAbsDelta: number[];
+  drawerExcessValues: number[];
   closeoutAbsVariance: number[];
   cleaningCompleted: number;
   cleaningSkipped: number;
@@ -261,8 +265,8 @@ export async function GET(req: Request) {
         supabaseServer
           .from("shift_drawer_counts")
           .select("shift_id,count_type,drawer_cents")
-          .in("count_type", ["start", "end"])
-          .returns<Array<{ shift_id: string; count_type: "start" | "end"; drawer_cents: number }>>(),
+          .in("count_type", ["start", "end", "changeover"])
+          .returns<Array<{ shift_id: string; count_type: "start" | "end" | "changeover"; drawer_cents: number }>>(),
         supabaseServer
           .from("safe_closeouts")
           .select("shift_id,profile_id,variance_cents")
@@ -416,10 +420,12 @@ export async function GET(req: Request) {
         shiftsWorked: 0,
         rawSalesValues: [],
         adjustedSalesValues: [],
+        expectedChangeoverCounts: 0,
+        completedChangeoverCounts: 0,
         attendanceScheduled: 0,
         attendanceWorked: 0,
         lateMinutes: [],
-        drawerAbsDelta: [],
+        drawerExcessValues: [],
         closeoutAbsVariance: [],
         cleaningCompleted: 0,
         cleaningSkipped: 0,
@@ -432,27 +438,54 @@ export async function GET(req: Request) {
     for (const row of rawShiftSalesRows) {
       const stats = ensureStats(row.profileId);
       stats.shiftsWorked += 1;
+      if (row.shiftType === "double") {
+        stats.expectedChangeoverCounts += 1;
+      }
       if (row.salesCents != null) {
         stats.rawSalesValues.push(row.salesCents);
         stats.adjustedSalesValues.push(Math.round(row.salesCents * (storeFactor.get(row.storeId) ?? 1)));
       }
     }
 
-    // Drawer start->end delta.
-    const countsByShiftId = new Map<string, { start: number | null; end: number | null }>();
+    // Drawer variance by shift segments:
+    // - non-double: start -> end
+    // - double: start -> changeover and changeover -> end
+    // Tolerance: first $1.50 per segment is ignored.
+    const countsByShiftId = new Map<
+      string,
+      { start: number | null; end: number | null; changeover: number | null }
+    >();
     for (const row of drawerCountsRes.data ?? []) {
-      const cur = countsByShiftId.get(row.shift_id) ?? { start: null, end: null };
+      const cur = countsByShiftId.get(row.shift_id) ?? { start: null, end: null, changeover: null };
       if (row.count_type === "start") cur.start = row.drawer_cents;
       if (row.count_type === "end") cur.end = row.drawer_cents;
+      if (row.count_type === "changeover") cur.changeover = row.drawer_cents;
       countsByShiftId.set(row.shift_id, cur);
     }
     const shiftById = new Map((rawShiftSalesRows ?? []).map((row) => [row.shiftId, row]));
+    const toExcess = (from: number, to: number): number =>
+      Math.max(0, Math.abs(to - from) - DRAWER_VARIANCE_TOLERANCE_CENTS);
     for (const [shiftId, count] of countsByShiftId.entries()) {
-      if (count.start == null || count.end == null) continue;
       const shift = shiftById.get(shiftId);
       if (!shift) continue;
       const stats = ensureStats(shift.profileId);
-      stats.drawerAbsDelta.push(Math.abs(count.end - count.start));
+      if (shift.shiftType === "double" && count.changeover != null) {
+        stats.completedChangeoverCounts += 1;
+      }
+
+      if (shift.shiftType === "double") {
+        if (count.start != null && count.changeover != null) {
+          stats.drawerExcessValues.push(toExcess(count.start, count.changeover));
+        }
+        if (count.changeover != null && count.end != null) {
+          stats.drawerExcessValues.push(toExcess(count.changeover, count.end));
+        }
+        continue;
+      }
+
+      if (count.start != null && count.end != null) {
+        stats.drawerExcessValues.push(toExcess(count.start, count.end));
+      }
     }
 
     // Safe closeout variance.
@@ -588,12 +621,22 @@ export async function GET(req: Request) {
       const punctualityPoints =
         avgPunctualityScore == null ? null : 15 * avgPunctualityScore;
 
-      const avgDrawerDelta =
-        stats.drawerAbsDelta.length > 0
-          ? stats.drawerAbsDelta.reduce((sum, v) => sum + v, 0) / stats.drawerAbsDelta.length
+      const avgDrawerExcess =
+        stats.drawerExcessValues.length > 0
+          ? stats.drawerExcessValues.reduce((sum, v) => sum + v, 0) / stats.drawerExcessValues.length
+          : null;
+      const drawerAccuracyBase =
+        avgDrawerExcess == null
+          ? null
+          : 20 * clamp(1 - avgDrawerExcess / DRAWER_EXCESS_ZERO_SCORE_CENTS, 0, 1);
+      const changeoverCompletionRate =
+        stats.expectedChangeoverCounts > 0
+          ? stats.completedChangeoverCounts / stats.expectedChangeoverCounts
           : null;
       const accuracyPoints =
-        avgDrawerDelta == null ? null : 20 * clamp(1 - avgDrawerDelta / 2000, 0, 1);
+        changeoverCompletionRate == null
+          ? drawerAccuracyBase
+          : (drawerAccuracyBase ?? 20) * clamp(changeoverCompletionRate, 0, 1);
 
       const avgCloseoutVariance =
         stats.closeoutAbsVariance.length > 0
@@ -645,7 +688,16 @@ export async function GET(req: Request) {
           "Drawer Accuracy",
           20,
           accuracyPoints,
-          avgDrawerDelta == null ? "No start/end drawer pairs" : `Avg delta ${round(avgDrawerDelta / 100, 2)}`
+          `${avgDrawerExcess == null
+            ? "No shift drawer segment data"
+            : `Avg excess ${round(avgDrawerExcess / 100, 2)} over $${round(
+                DRAWER_VARIANCE_TOLERANCE_CENTS / 100,
+                2
+              )} tolerance`}${
+            changeoverCompletionRate == null
+              ? ""
+              : ` | Midshift counts ${stats.completedChangeoverCounts}/${stats.expectedChangeoverCounts}`
+          }`
         ),
         category(
           "cash_handling",
@@ -739,3 +791,4 @@ export async function GET(req: Request) {
     );
   }
 }
+
