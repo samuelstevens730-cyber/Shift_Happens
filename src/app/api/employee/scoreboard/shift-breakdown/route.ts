@@ -3,6 +3,10 @@ import { authenticateShiftRequest } from "@/lib/shiftAuth";
 import { supabaseServer } from "@/lib/supabaseServer";
 import type { ShiftBreakdownResponse, ShiftScoreRow } from "@/types/shiftScoreRow";
 
+const DRAWER_VARIANCE_TOLERANCE_CENTS = 150; // $1.50 allowed per segment
+const DRAWER_EXCESS_ZERO_SCORE_CENTS = 2000; // >= $20 avg excess yields 0/20
+const CHANGEOVER_TARGET_CENTS = 20000; // $200 exact requirement for double midshift count
+
 function isDateOnly(value: string | null): value is string {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
 }
@@ -227,8 +231,10 @@ export async function GET(req: Request) {
         supabaseServer
           .from("shift_drawer_counts")
           .select("shift_id,count_type,drawer_cents")
-          .in("count_type", ["start", "end"])
-          .returns<Array<{ shift_id: string; count_type: "start" | "end"; drawer_cents: number }>>(),
+          .in("count_type", ["start", "end", "changeover"])
+          .returns<
+            Array<{ shift_id: string; count_type: "start" | "end" | "changeover"; drawer_cents: number }>
+          >(),
         supabaseServer
           .from("safe_closeouts")
           .select("shift_id,profile_id,variance_cents")
@@ -348,11 +354,15 @@ export async function GET(req: Request) {
     }
 
     // Drawer counts keyed by shift_id
-    const countsByShiftId = new Map<string, { start: number | null; end: number | null }>();
+    const countsByShiftId = new Map<
+      string,
+      { start: number | null; end: number | null; changeover: number | null }
+    >();
     for (const row of drawerCountsRes.data ?? []) {
-      const cur = countsByShiftId.get(row.shift_id) ?? { start: null, end: null };
+      const cur = countsByShiftId.get(row.shift_id) ?? { start: null, end: null, changeover: null };
       if (row.count_type === "start") cur.start = row.drawer_cents;
       if (row.count_type === "end") cur.end = row.drawer_cents;
+      if (row.count_type === "changeover") cur.changeover = row.drawer_cents;
       countsByShiftId.set(row.shift_id, cur);
     }
 
@@ -409,6 +419,9 @@ export async function GET(req: Request) {
       closeoutVarianceCents: number | null;
       cleaningCompleted: number;
       cleaningTotal: number;
+      drawerStartCents: number | null;
+      drawerEndCents: number | null;
+      drawerChangeoverCents: number | null;
     };
 
     const workedRows = new Map<string, WorkingRow>();
@@ -437,6 +450,9 @@ export async function GET(req: Request) {
         closeoutVarianceCents: closeoutVariance,
         cleaningCompleted: cleaning.completed,
         cleaningTotal: cleaning.total,
+        drawerStartCents: drawerCounts?.start ?? null,
+        drawerEndCents: drawerCounts?.end ?? null,
+        drawerChangeoverCents: drawerCounts?.changeover ?? null,
       });
     }
 
@@ -504,6 +520,10 @@ export async function GET(req: Request) {
     }
 
     // Build final ShiftScoreRow objects for worked shifts
+    const toExcess = (from: number, to: number): number =>
+      Math.max(0, Math.abs(to - from) - DRAWER_VARIANCE_TOLERANCE_CENTS);
+    const pointsFromAvgExcess = (avgExcess: number): number =>
+      round(20 * clamp(1 - avgExcess / DRAWER_EXCESS_ZERO_SCORE_CENTS, 0, 1));
     const workedScoreRows: ShiftScoreRow[] = Array.from(workedRows.values()).map((row) => {
       const storeName = storeNameById.get(row.storeId) ?? "Unknown Store";
 
@@ -517,10 +537,39 @@ export async function GET(req: Request) {
       }
 
       // Drawer accuracy
-      const accuracyPoints =
-        row.drawerAbsDeltaCents != null
-          ? round(20 * clamp(1 - row.drawerAbsDeltaCents / 2000, 0, 1))
-          : null;
+      let accuracyPoints: number | null = null;
+      let drawerAbsDeltaCents = row.drawerAbsDeltaCents;
+      if (row.shiftType === "double") {
+        if (row.drawerChangeoverCents == null || row.drawerChangeoverCents !== CHANGEOVER_TARGET_CENTS) {
+          accuracyPoints = 0;
+          drawerAbsDeltaCents = null;
+        } else {
+          const segmentExcesses: number[] = [];
+          const segmentAbsDeltas: number[] = [];
+          if (row.drawerStartCents != null) {
+            segmentExcesses.push(toExcess(row.drawerStartCents, row.drawerChangeoverCents));
+            segmentAbsDeltas.push(Math.abs(row.drawerChangeoverCents - row.drawerStartCents));
+          }
+          if (row.drawerEndCents != null) {
+            segmentExcesses.push(toExcess(row.drawerChangeoverCents, row.drawerEndCents));
+            segmentAbsDeltas.push(Math.abs(row.drawerEndCents - row.drawerChangeoverCents));
+          }
+          if (segmentExcesses.length === 0) {
+            accuracyPoints = 0;
+            drawerAbsDeltaCents = null;
+          } else {
+            const avgExcess = segmentExcesses.reduce((sum, v) => sum + v, 0) / segmentExcesses.length;
+            accuracyPoints = pointsFromAvgExcess(avgExcess);
+            drawerAbsDeltaCents =
+              segmentAbsDeltas.length > 0
+                ? Math.round(segmentAbsDeltas.reduce((sum, v) => sum + v, 0) / segmentAbsDeltas.length)
+                : null;
+          }
+        }
+      } else if (row.drawerStartCents != null && row.drawerEndCents != null) {
+        accuracyPoints = pointsFromAvgExcess(toExcess(row.drawerStartCents, row.drawerEndCents));
+        drawerAbsDeltaCents = Math.abs(row.drawerEndCents - row.drawerStartCents);
+      }
 
       // Cash handling
       const cashHandlingPoints =
@@ -556,7 +605,7 @@ export async function GET(req: Request) {
         scheduledStartMin: row.scheduledStartMin,
         actualStartMin: row.actualStartMin,
         effectiveLateMinutes: row.effectiveLateMinutes,
-        drawerAbsDeltaCents: row.drawerAbsDeltaCents,
+        drawerAbsDeltaCents,
         closeoutVarianceCents: row.closeoutVarianceCents,
         cleaningCompleted: row.cleaningCompleted,
         cleaningTotal: row.cleaningTotal,

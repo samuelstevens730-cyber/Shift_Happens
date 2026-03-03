@@ -11,6 +11,7 @@ import type { AvatarOptions } from "@/components/UserAvatar";
 const MIN_SHIFTS_FOR_RANKING = 8;
 const DRAWER_VARIANCE_TOLERANCE_CENTS = 150; // $1.50 allowed per segment
 const DRAWER_EXCESS_ZERO_SCORE_CENTS = 2000; // >= $20 avg excess yields 0/20
+const CHANGEOVER_TARGET_CENTS = 20000; // $200 exact requirement for double midshift count
 
 function isDateOnly(value: string | null): value is string {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
@@ -107,6 +108,8 @@ type EmployeeStats = {
   attendanceWorked: number;
   lateMinutes: number[];
   drawerExcessValues: number[];
+  accuracyShiftPoints: number[];
+  accuracyHardFailCount: number;
   closeoutAbsVariance: number[];
   cleaningCompleted: number;
   cleaningSkipped: number;
@@ -450,6 +453,8 @@ export async function GET(req: Request) {
         attendanceWorked: 0,
         lateMinutes: [],
         drawerExcessValues: [],
+        accuracyShiftPoints: [],
+        accuracyHardFailCount: 0,
         closeoutAbsVariance: [],
         cleaningCompleted: 0,
         cleaningSkipped: 0,
@@ -487,28 +492,53 @@ export async function GET(req: Request) {
       countsByShiftId.set(row.shift_id, cur);
     }
     const shiftById = new Map((rawShiftSalesRows ?? []).map((row) => [row.shiftId, row]));
+    const pointsFromAvgExcess = (avgExcess: number): number =>
+      20 * clamp(1 - avgExcess / DRAWER_EXCESS_ZERO_SCORE_CENTS, 0, 1);
     const toExcess = (from: number, to: number): number =>
       Math.max(0, Math.abs(to - from) - DRAWER_VARIANCE_TOLERANCE_CENTS);
-    for (const [shiftId, count] of countsByShiftId.entries()) {
-      const shift = shiftById.get(shiftId);
-      if (!shift) continue;
+    for (const shift of rawShiftSalesRows) {
       const stats = ensureStats(shift.profileId);
-      if (shift.shiftType === "double" && count.changeover != null) {
-        stats.completedChangeoverCounts += 1;
-      }
+      const count = countsByShiftId.get(shift.shiftId) ?? {
+        start: null,
+        end: null,
+        changeover: null,
+      };
 
       if (shift.shiftType === "double") {
+        if (count.changeover === CHANGEOVER_TARGET_CENTS) {
+          stats.completedChangeoverCounts += 1;
+        } else {
+          stats.accuracyShiftPoints.push(0);
+          stats.accuracyHardFailCount += 1;
+          continue;
+        }
+
+        const shiftExcesses: number[] = [];
         if (count.start != null && count.changeover != null) {
-          stats.drawerExcessValues.push(toExcess(count.start, count.changeover));
+          const excess = toExcess(count.start, count.changeover);
+          shiftExcesses.push(excess);
+          stats.drawerExcessValues.push(excess);
         }
         if (count.changeover != null && count.end != null) {
-          stats.drawerExcessValues.push(toExcess(count.changeover, count.end));
+          const excess = toExcess(count.changeover, count.end);
+          shiftExcesses.push(excess);
+          stats.drawerExcessValues.push(excess);
         }
+        if (shiftExcesses.length === 0) {
+          stats.accuracyShiftPoints.push(0);
+          stats.accuracyHardFailCount += 1;
+          continue;
+        }
+        const avgShiftExcess =
+          shiftExcesses.reduce((sum, v) => sum + v, 0) / shiftExcesses.length;
+        stats.accuracyShiftPoints.push(pointsFromAvgExcess(avgShiftExcess));
         continue;
       }
 
       if (count.start != null && count.end != null) {
-        stats.drawerExcessValues.push(toExcess(count.start, count.end));
+        const excess = toExcess(count.start, count.end);
+        stats.drawerExcessValues.push(excess);
+        stats.accuracyShiftPoints.push(pointsFromAvgExcess(excess));
       }
     }
 
@@ -649,18 +679,10 @@ export async function GET(req: Request) {
         stats.drawerExcessValues.length > 0
           ? stats.drawerExcessValues.reduce((sum, v) => sum + v, 0) / stats.drawerExcessValues.length
           : null;
-      const drawerAccuracyBase =
-        avgDrawerExcess == null
-          ? null
-          : 20 * clamp(1 - avgDrawerExcess / DRAWER_EXCESS_ZERO_SCORE_CENTS, 0, 1);
-      const changeoverCompletionRate =
-        stats.expectedChangeoverCounts > 0
-          ? stats.completedChangeoverCounts / stats.expectedChangeoverCounts
-          : null;
       const accuracyPoints =
-        changeoverCompletionRate == null
-          ? drawerAccuracyBase
-          : (drawerAccuracyBase ?? 20) * clamp(changeoverCompletionRate, 0, 1);
+        stats.accuracyShiftPoints.length > 0
+          ? stats.accuracyShiftPoints.reduce((sum, v) => sum + v, 0) / stats.accuracyShiftPoints.length
+          : null;
 
       const avgCloseoutVariance =
         stats.closeoutAbsVariance.length > 0
@@ -718,9 +740,9 @@ export async function GET(req: Request) {
                 DRAWER_VARIANCE_TOLERANCE_CENTS / 100,
                 2
               )} tolerance`}${
-            changeoverCompletionRate == null
-              ? ""
-              : ` | Midshift counts ${stats.completedChangeoverCounts}/${stats.expectedChangeoverCounts}`
+            stats.expectedChangeoverCounts > 0
+              ? ` | Midshift=$200 exact ${stats.completedChangeoverCounts}/${stats.expectedChangeoverCounts} (fails: ${stats.accuracyHardFailCount})`
+              : ""
           }`
         ),
         category(
