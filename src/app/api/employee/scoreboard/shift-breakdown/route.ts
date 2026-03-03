@@ -88,31 +88,55 @@ type ScheduledAttendanceUnit = {
 };
 
 function buildAttendanceUnits(rows: ScheduledShiftRow[]): ScheduledAttendanceUnit[] {
-  const units = new Map<string, ScheduledAttendanceUnit>();
+  const rowsByScheduleDay = new Map<string, ScheduledShiftRow[]>();
   for (const row of rows) {
-    const isDouble = row.shift_mode === "double" || row.shift_type === "double";
-    const key = isDouble
-      ? `${row.schedule_id}|${row.store_id}|${row.profile_id}|${row.shift_date}|double`
-      : row.id;
-    const existing = units.get(key);
-    if (!existing) {
-      units.set(key, {
-        id: key,
+    const key = `${row.schedule_id}|${row.store_id}|${row.profile_id}|${row.shift_date}`;
+    const bucket = rowsByScheduleDay.get(key) ?? [];
+    bucket.push(row);
+    rowsByScheduleDay.set(key, bucket);
+  }
+
+  const units: ScheduledAttendanceUnit[] = [];
+  for (const [baseKey, group] of rowsByScheduleDay.entries()) {
+    const hasExplicitDouble = group.some(
+      (r) => r.shift_mode === "double" || r.shift_type === "double"
+    );
+    const hasOpen = group.some((r) => r.shift_type === "open");
+    const hasClose = group.some((r) => r.shift_type === "close");
+    const shouldCollapseToDouble = hasExplicitDouble || (hasOpen && hasClose);
+
+    if (shouldCollapseToDouble) {
+      const first = group[0];
+      const scheduledStart = group.reduce(
+        (min, r) => (r.scheduled_start < min ? r.scheduled_start : min),
+        first.scheduled_start
+      );
+      units.push({
+        id: `${baseKey}|double`,
+        profileId: first.profile_id,
+        storeId: first.store_id,
+        shiftDate: first.shift_date,
+        scheduledStart,
+        scheduleShiftIds: group.map((r) => r.id),
+        isDouble: true,
+      });
+      continue;
+    }
+
+    for (const row of group) {
+      units.push({
+        id: row.id,
         profileId: row.profile_id,
         storeId: row.store_id,
         shiftDate: row.shift_date,
         scheduledStart: row.scheduled_start,
         scheduleShiftIds: [row.id],
-        isDouble,
+        isDouble: false,
       });
-      continue;
-    }
-    existing.scheduleShiftIds.push(row.id);
-    if (row.scheduled_start < existing.scheduledStart) {
-      existing.scheduledStart = row.scheduled_start;
     }
   }
-  return Array.from(units.values());
+
+  return units;
 }
 
 export async function GET(req: Request) {
