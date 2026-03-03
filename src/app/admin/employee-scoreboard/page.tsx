@@ -51,6 +51,7 @@ export default function AdminEmployeeScoreboardPage() {
   const [storeId, setStoreId] = useState("all");
   const [from, setFrom] = useState(() => cstDateKey(addDays(new Date(), -29)));
   const [to, setTo] = useState(() => cstDateKey(new Date()));
+  const [expandedProfileId, setExpandedProfileId] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -74,6 +75,9 @@ export default function AdminEmployeeScoreboardPage() {
         if (!res.ok) throw new Error(json?.error || "Failed to load employee scoreboard.");
         if (!alive) return;
         setData(json as EmployeeScoreboardResponse);
+        setExpandedProfileId((prev) =>
+          (json as EmployeeScoreboardResponse).rows.some((row) => row.profileId === prev) ? prev : null
+        );
       } catch (e: unknown) {
         if (!alive) return;
         setError(e instanceof Error ? e.message : "Failed to load employee scoreboard.");
@@ -188,44 +192,82 @@ export default function AdminEmployeeScoreboardPage() {
                   <th className="py-2 pr-3">Accuracy /20</th>
                   <th className="py-2 pr-3">Cash /10</th>
                   <th className="py-2 pr-3">Tasks /10</th>
+                  <th className="py-2 pr-3">My Stats</th>
                 </tr>
               </thead>
               <tbody>
-                {(data?.rows ?? []).map((row, index) => (
-                  <tr key={row.profileId} className="border-b border-white/5 align-top">
-                    <td className="py-2 pr-3">{index + 1}</td>
-                    <td className="py-2 pr-3">
-                      <Link
-                        href={`/dashboard/scoreboard/shifts?source=admin&profileId=${row.profileId}&from=${from}&to=${to}&storeId=${storeId}`}
-                        className="font-medium underline-offset-2 hover:underline"
-                      >
-                        {row.employeeName ?? "Unknown"}
-                      </Link>
-                      {!row.ranked && (
-                        <div className="text-xs text-amber-300">
-                          Provisional (needs {data?.minShiftsForRanking ?? 8}+ shifts)
-                        </div>
-                      )}
-                    </td>
-                    <td className="py-2 pr-3">
-                      <span className={`inline-flex rounded-full px-2 py-0.5 font-semibold ${gradeTone(row.grade)}`}>
-                        {row.grade}
-                      </span>
-                    </td>
-                    <td className="py-2 pr-3 font-semibold">{row.score.toFixed(1)}</td>
-                    <td className="py-2 pr-3">{row.shiftsWorked}</td>
-                    <td className="py-2 pr-3">{money(row.rawAvgSalesPerShiftCents)}</td>
-                    <td className="py-2 pr-3">{money(row.adjustedAvgSalesPerShiftCents)}</td>
-                    <td className="py-2 pr-3">{toCategoryPoints(row, "sales").toFixed(1)}</td>
-                    <td className="py-2 pr-3">{toCategoryPoints(row, "reliability").toFixed(1)}</td>
-                    <td className="py-2 pr-3">{toCategoryPoints(row, "accuracy").toFixed(1)}</td>
-                    <td className="py-2 pr-3">{toCategoryPoints(row, "cash").toFixed(1)}</td>
-                    <td className="py-2 pr-3">{toCategoryPoints(row, "tasks").toFixed(1)}</td>
-                  </tr>
-                ))}
+                {(data?.rows ?? []).flatMap((row, index) => {
+                  const rows = [
+                    <tr key={`${row.profileId}-summary`} className="border-b border-white/5 align-top">
+                      <td className="py-2 pr-3">{index + 1}</td>
+                      <td className="py-2 pr-3">
+                        <Link
+                          href={`/dashboard/scoreboard/shifts?source=admin&profileId=${row.profileId}&from=${from}&to=${to}&storeId=${storeId}`}
+                          className="font-medium underline-offset-2 hover:underline"
+                        >
+                          {row.employeeName ?? "Unknown"}
+                        </Link>
+                        {!row.ranked && (
+                          <div className="text-xs text-amber-300">
+                            Provisional (needs {data?.minShiftsForRanking ?? 8}+ shifts)
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2 pr-3">
+                        <span className={`inline-flex rounded-full px-2 py-0.5 font-semibold ${gradeTone(row.grade)}`}>
+                          {row.grade}
+                        </span>
+                      </td>
+                      <td className="py-2 pr-3 font-semibold">{row.score.toFixed(1)}</td>
+                      <td className="py-2 pr-3">{row.shiftsWorked}</td>
+                      <td className="py-2 pr-3">{money(row.rawAvgSalesPerShiftCents)}</td>
+                      <td className="py-2 pr-3">{money(row.adjustedAvgSalesPerShiftCents)}</td>
+                      <td className="py-2 pr-3">{toCategoryPoints(row, "sales").toFixed(1)}</td>
+                      <td className="py-2 pr-3">{toCategoryPoints(row, "reliability").toFixed(1)}</td>
+                      <td className="py-2 pr-3">{toCategoryPoints(row, "accuracy").toFixed(1)}</td>
+                      <td className="py-2 pr-3">{toCategoryPoints(row, "cash").toFixed(1)}</td>
+                      <td className="py-2 pr-3">{toCategoryPoints(row, "tasks").toFixed(1)}</td>
+                      <td className="py-2 pr-3">
+                        <button
+                          className="btn-secondary px-2 py-1 text-xs"
+                          onClick={() =>
+                            setExpandedProfileId((prev) => (prev === row.profileId ? null : row.profileId))
+                          }
+                        >
+                          {expandedProfileId === row.profileId ? "Hide" : "View"}
+                        </button>
+                      </td>
+                    </tr>,
+                  ];
+
+                  if (expandedProfileId === row.profileId) {
+                    rows.push(
+                      <tr key={`${row.profileId}-details`} className="border-b border-white/5 bg-white/[0.02]">
+                        <td colSpan={13} className="py-3 px-3">
+                          <div className="mb-2 text-sm font-semibold">My Stats (Manager View)</div>
+                          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                            {row.categories.map((cat) => (
+                              <div key={cat.key} className="rounded border border-white/10 p-2 text-xs">
+                                <div className="font-medium">{cat.label}</div>
+                                <div className="mt-1">
+                                  Score:{" "}
+                                  <b>
+                                    {cat.available ? `${(cat.points ?? 0).toFixed(1)} / ${cat.maxPoints}` : "N/A"}
+                                  </b>
+                                </div>
+                                <div className="text-zinc-400 mt-1">{cat.detail}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return rows;
+                })}
                 {(data?.rows ?? []).length === 0 && (
                   <tr>
-                    <td colSpan={12} className="py-6 text-center muted">
+                    <td colSpan={13} className="py-6 text-center muted">
                       No score rows found for selected filters.
                     </td>
                   </tr>
