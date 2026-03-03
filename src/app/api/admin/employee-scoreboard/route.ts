@@ -275,10 +275,15 @@ export async function GET(req: Request) {
           >(),
         supabaseServer
           .from("shift_drawer_counts")
-          .select("shift_id,count_type,drawer_cents")
+          .select("shift_id,count_type,drawer_cents,change_count")
           .in("count_type", ["start", "end", "changeover"])
           .returns<
-            Array<{ shift_id: string; count_type: "start" | "end" | "changeover"; drawer_cents: number }>
+            Array<{
+              shift_id: string;
+              count_type: "start" | "end" | "changeover";
+              drawer_cents: number;
+              change_count: number | null;
+            }>
           >(),
         supabaseServer
           .from("safe_closeouts")
@@ -494,13 +499,36 @@ export async function GET(req: Request) {
     // Tolerance: first $1.50 per segment is ignored.
     const countsByShiftId = new Map<
       string,
-      { start: number | null; end: number | null; changeover: number | null }
+      {
+        start: number | null;
+        end: number | null;
+        changeover: number | null;
+        startChange: number | null;
+        endChange: number | null;
+        changeoverChange: number | null;
+      }
     >();
     for (const row of drawerCountsRes.data ?? []) {
-      const cur = countsByShiftId.get(row.shift_id) ?? { start: null, end: null, changeover: null };
-      if (row.count_type === "start") cur.start = row.drawer_cents;
-      if (row.count_type === "end") cur.end = row.drawer_cents;
-      if (row.count_type === "changeover") cur.changeover = row.drawer_cents;
+      const cur = countsByShiftId.get(row.shift_id) ?? {
+        start: null,
+        end: null,
+        changeover: null,
+        startChange: null,
+        endChange: null,
+        changeoverChange: null,
+      };
+      if (row.count_type === "start") {
+        cur.start = row.drawer_cents;
+        cur.startChange = row.change_count;
+      }
+      if (row.count_type === "end") {
+        cur.end = row.drawer_cents;
+        cur.endChange = row.change_count;
+      }
+      if (row.count_type === "changeover") {
+        cur.changeover = row.drawer_cents;
+        cur.changeoverChange = row.change_count;
+      }
       countsByShiftId.set(row.shift_id, cur);
     }
     const shiftById = new Map((rawShiftSalesRows ?? []).map((row) => [row.shiftId, row]));
@@ -514,11 +542,27 @@ export async function GET(req: Request) {
         start: null,
         end: null,
         changeover: null,
+        startChange: null,
+        endChange: null,
+        changeoverChange: null,
       };
 
       const requiresChangeover = requiredChangeoverShiftIds.has(shift.shiftId) || shift.shiftType === "double";
       if (requiresChangeover) {
-        if (count.changeover === CHANGEOVER_TARGET_CENTS) {
+        // Temporary compatibility: some flows do not persist midshift change_count yet.
+        // Enforce strict 3x change_count only when all three values exist; otherwise
+        // fall back to required midshift drawer count at $200.
+        const hasAllChangeCounts =
+          count.startChange != null &&
+          count.changeoverChange != null &&
+          count.endChange != null;
+        const changeCountOk =
+          hasAllChangeCounts
+            ? count.startChange === CHANGEOVER_TARGET_CENTS &&
+              count.changeoverChange === CHANGEOVER_TARGET_CENTS &&
+              count.endChange === CHANGEOVER_TARGET_CENTS
+            : count.changeover === CHANGEOVER_TARGET_CENTS;
+        if (changeCountOk) {
           stats.completedChangeoverCounts += 1;
         } else {
           stats.accuracyShiftPoints.push(0);
@@ -741,7 +785,7 @@ export async function GET(req: Request) {
                 2
               )} tolerance`}${
             stats.expectedChangeoverCounts > 0
-              ? ` | Midshift=$200 exact ${stats.completedChangeoverCounts}/${stats.expectedChangeoverCounts} (fails: ${stats.accuracyHardFailCount})`
+              ? ` | Midshift drawer=$200 exact ${stats.completedChangeoverCounts}/${stats.expectedChangeoverCounts} (fails: ${stats.accuracyHardFailCount})`
               : ""
           }`
         ),

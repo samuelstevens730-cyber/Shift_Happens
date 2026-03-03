@@ -230,10 +230,15 @@ export async function GET(req: Request) {
           >(),
         supabaseServer
           .from("shift_drawer_counts")
-          .select("shift_id,count_type,drawer_cents")
+          .select("shift_id,count_type,drawer_cents,change_count")
           .in("count_type", ["start", "end", "changeover"])
           .returns<
-            Array<{ shift_id: string; count_type: "start" | "end" | "changeover"; drawer_cents: number }>
+            Array<{
+              shift_id: string;
+              count_type: "start" | "end" | "changeover";
+              drawer_cents: number;
+              change_count: number | null;
+            }>
           >(),
         supabaseServer
           .from("safe_closeouts")
@@ -356,13 +361,36 @@ export async function GET(req: Request) {
     // Drawer counts keyed by shift_id
     const countsByShiftId = new Map<
       string,
-      { start: number | null; end: number | null; changeover: number | null }
+      {
+        start: number | null;
+        end: number | null;
+        changeover: number | null;
+        startChange: number | null;
+        endChange: number | null;
+        changeoverChange: number | null;
+      }
     >();
     for (const row of drawerCountsRes.data ?? []) {
-      const cur = countsByShiftId.get(row.shift_id) ?? { start: null, end: null, changeover: null };
-      if (row.count_type === "start") cur.start = row.drawer_cents;
-      if (row.count_type === "end") cur.end = row.drawer_cents;
-      if (row.count_type === "changeover") cur.changeover = row.drawer_cents;
+      const cur = countsByShiftId.get(row.shift_id) ?? {
+        start: null,
+        end: null,
+        changeover: null,
+        startChange: null,
+        endChange: null,
+        changeoverChange: null,
+      };
+      if (row.count_type === "start") {
+        cur.start = row.drawer_cents;
+        cur.startChange = row.change_count;
+      }
+      if (row.count_type === "end") {
+        cur.end = row.drawer_cents;
+        cur.endChange = row.change_count;
+      }
+      if (row.count_type === "changeover") {
+        cur.changeover = row.drawer_cents;
+        cur.changeoverChange = row.change_count;
+      }
       countsByShiftId.set(row.shift_id, cur);
     }
 
@@ -422,6 +450,9 @@ export async function GET(req: Request) {
       drawerStartCents: number | null;
       drawerEndCents: number | null;
       drawerChangeoverCents: number | null;
+      startChangeCountCents: number | null;
+      endChangeCountCents: number | null;
+      changeoverChangeCountCents: number | null;
     };
 
     const workedRows = new Map<string, WorkingRow>();
@@ -453,6 +484,9 @@ export async function GET(req: Request) {
         drawerStartCents: drawerCounts?.start ?? null,
         drawerEndCents: drawerCounts?.end ?? null,
         drawerChangeoverCents: drawerCounts?.changeover ?? null,
+        startChangeCountCents: drawerCounts?.startChange ?? null,
+        endChangeCountCents: drawerCounts?.endChange ?? null,
+        changeoverChangeCountCents: drawerCounts?.changeoverChange ?? null,
       });
     }
 
@@ -540,19 +574,30 @@ export async function GET(req: Request) {
       let accuracyPoints: number | null = null;
       let drawerAbsDeltaCents = row.drawerAbsDeltaCents;
       if (row.shiftType === "double") {
-        if (row.drawerChangeoverCents == null || row.drawerChangeoverCents !== CHANGEOVER_TARGET_CENTS) {
+        const changeoverDrawer = row.drawerChangeoverCents;
+        const hasAllChangeCounts =
+          row.startChangeCountCents != null &&
+          row.changeoverChangeCountCents != null &&
+          row.endChangeCountCents != null;
+        const changeCountOk =
+          hasAllChangeCounts
+            ? row.startChangeCountCents === CHANGEOVER_TARGET_CENTS &&
+              row.changeoverChangeCountCents === CHANGEOVER_TARGET_CENTS &&
+              row.endChangeCountCents === CHANGEOVER_TARGET_CENTS
+            : changeoverDrawer === CHANGEOVER_TARGET_CENTS;
+        if (!changeCountOk || changeoverDrawer == null) {
           accuracyPoints = 0;
           drawerAbsDeltaCents = null;
         } else {
           const segmentExcesses: number[] = [];
           const segmentAbsDeltas: number[] = [];
           if (row.drawerStartCents != null) {
-            segmentExcesses.push(toExcess(row.drawerStartCents, row.drawerChangeoverCents));
-            segmentAbsDeltas.push(Math.abs(row.drawerChangeoverCents - row.drawerStartCents));
+            segmentExcesses.push(toExcess(row.drawerStartCents, changeoverDrawer));
+            segmentAbsDeltas.push(Math.abs(changeoverDrawer - row.drawerStartCents));
           }
           if (row.drawerEndCents != null) {
-            segmentExcesses.push(toExcess(row.drawerChangeoverCents, row.drawerEndCents));
-            segmentAbsDeltas.push(Math.abs(row.drawerEndCents - row.drawerChangeoverCents));
+            segmentExcesses.push(toExcess(changeoverDrawer, row.drawerEndCents));
+            segmentAbsDeltas.push(Math.abs(row.drawerEndCents - changeoverDrawer));
           }
           if (segmentExcesses.length === 0) {
             accuracyPoints = 0;

@@ -14,6 +14,7 @@
  * - note?: string | null - Optional note about the drawer count
  * - midXReportCents?: number | null - Net X report total at changeover (enables AM/PM split)
  * - openTransactionCount?: number | null - Transactions rung in the AM half (zero = not captured)
+ * - changeCountCents?: number | null - Change drawer count at changeover (target $200)
  *
  * Returns:
  * - Success: { ok: true }
@@ -44,6 +45,8 @@ type Body = {
   midXReportCents?: number | null;
   /** Transactions rung in the AM half. 0 is treated as null (not captured). */
   openTransactionCount?: number | null;
+  /** Change drawer count at changeover in cents. */
+  changeCountCents?: number | null;
 };
 
 function getCstDateKey(value: string): string | null {
@@ -123,6 +126,12 @@ export async function POST(req: Request) {
           shift_id: body.shiftId,
           count_type: "changeover",
           drawer_cents: body.drawerCents,
+          change_count:
+            typeof body.changeCountCents === "number" &&
+            Number.isFinite(body.changeCountCents) &&
+            body.changeCountCents >= 0
+              ? Math.round(body.changeCountCents)
+              : null,
           confirmed: Boolean(body.confirmed),
           notified_manager: Boolean(body.notifiedManager),
           note: body.note ?? null,
@@ -150,9 +159,13 @@ export async function POST(req: Request) {
       body.openTransactionCount > 0
         ? body.openTransactionCount
         : null;
-    if (!hasMidX || openTxnCount == null) {
+    const hasChangeCount =
+      typeof body.changeCountCents === "number" &&
+      Number.isFinite(body.changeCountCents) &&
+      body.changeCountCents >= 0;
+    if (!hasMidX || openTxnCount == null || !hasChangeCount) {
       return NextResponse.json(
-        { error: "Mid-shift X report and transaction count are required for double shifts." },
+        { error: "Mid-shift X report, transaction count, and change count are required for double shifts." },
         { status: 400 }
       );
     }
