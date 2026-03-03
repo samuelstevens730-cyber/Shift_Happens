@@ -431,13 +431,61 @@ export async function GET(req: Request) {
     for (const row of rawShiftSalesRows) {
       const stats = ensureStats(row.profileId);
       stats.shiftsWorked += 1;
-      if (row.shiftType === "double") {
-        stats.expectedChangeoverCounts += 1;
-      }
       if (row.salesCents != null) {
         stats.rawSalesValues.push(row.salesCents);
         stats.adjustedSalesValues.push(applyScalingFactor(row.salesCents, row.storeId, storeFactor));
       }
+    }
+
+    // Attendance units (for attendance/punctuality) and changeover requirements.
+    const publishedScheduleIds = new Set(
+      (schedulesRes.data ?? []).filter((s) => s.status === "published").map((s) => s.id)
+    );
+    const publishedScheduled = (scheduledShiftsRes.data ?? []).filter((s) => publishedScheduleIds.has(s.schedule_id));
+    const attendanceUnits = buildAttendanceUnits(publishedScheduled);
+    const workedByScheduleShiftId = new Map<
+      string,
+      { profileId: string; startedAt: string; storeId: string; shiftId: string; businessDate: string }
+    >();
+    for (const shift of rawShiftSalesRows) {
+      if (!shift.scheduleShiftId) continue;
+      workedByScheduleShiftId.set(shift.scheduleShiftId, {
+        profileId: shift.profileId,
+        startedAt: shift.startedAt,
+        storeId: shift.storeId,
+        shiftId: shift.shiftId,
+        businessDate: shift.businessDate,
+      });
+    }
+    const requiredChangeoverShiftIds = new Set<string>();
+    for (const attendanceUnit of attendanceUnits) {
+      if (!attendanceUnit.isDouble) continue;
+      const stats = ensureStats(attendanceUnit.profileId);
+      stats.expectedChangeoverCounts += 1;
+
+      let worked:
+        | { profileId: string; startedAt: string; storeId: string; shiftId: string; businessDate: string }
+        | undefined = attendanceUnit.scheduleShiftIds
+          .map((id) => workedByScheduleShiftId.get(id))
+          .find((row) => Boolean(row));
+      if (!worked) {
+        const fallback = rawShiftSalesRows.find(
+          (row) =>
+            row.profileId === attendanceUnit.profileId &&
+            row.storeId === attendanceUnit.storeId &&
+            row.businessDate === attendanceUnit.shiftDate
+        );
+        if (fallback) {
+          worked = {
+            profileId: fallback.profileId,
+            startedAt: fallback.startedAt,
+            storeId: fallback.storeId,
+            shiftId: fallback.shiftId,
+            businessDate: fallback.businessDate,
+          };
+        }
+      }
+      if (worked) requiredChangeoverShiftIds.add(worked.shiftId);
     }
 
     // Drawer variance by shift segments:
@@ -468,7 +516,8 @@ export async function GET(req: Request) {
         changeover: null,
       };
 
-      if (shift.shiftType === "double") {
+      const requiresChangeover = requiredChangeoverShiftIds.has(shift.shiftId) || shift.shiftType === "double";
+      if (requiresChangeover) {
         if (count.changeover === CHANGEOVER_TARGET_CENTS) {
           stats.completedChangeoverCounts += 1;
         } else {
@@ -525,23 +574,6 @@ export async function GET(req: Request) {
     }
 
     // Attendance and punctuality from published schedules.
-    const publishedScheduleIds = new Set(
-      (schedulesRes.data ?? []).filter((s) => s.status === "published").map((s) => s.id)
-    );
-    const publishedScheduled = (scheduledShiftsRes.data ?? []).filter((s) => publishedScheduleIds.has(s.schedule_id));
-    const attendanceUnits = buildAttendanceUnits(publishedScheduled);
-    const workedByScheduleShiftId = new Map<
-      string,
-      { profileId: string; startedAt: string; storeId: string }
-    >();
-    for (const shift of rawShiftSalesRows) {
-      if (!shift.scheduleShiftId) continue;
-      workedByScheduleShiftId.set(shift.scheduleShiftId, {
-        profileId: shift.profileId,
-        startedAt: shift.startedAt,
-        storeId: shift.storeId,
-      });
-    }
     for (const attendanceUnit of attendanceUnits) {
       const stats = ensureStats(attendanceUnit.profileId);
       stats.attendanceScheduled += 1;
@@ -550,6 +582,8 @@ export async function GET(req: Request) {
             profileId: string;
             startedAt: string;
             storeId: string;
+            shiftId: string;
+            businessDate: string;
           }
         | undefined = attendanceUnit.scheduleShiftIds
           .map((id) => workedByScheduleShiftId.get(id))
@@ -566,6 +600,8 @@ export async function GET(req: Request) {
             profileId: fallback.profileId,
             startedAt: fallback.startedAt,
             storeId: fallback.storeId,
+            shiftId: fallback.shiftId,
+            businessDate: fallback.businessDate,
           };
         }
       }
