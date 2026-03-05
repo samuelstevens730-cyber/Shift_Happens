@@ -9,6 +9,9 @@ import type {
 } from "@/types/employeeScore";
 
 const MIN_SHIFTS_FOR_RANKING = 8;
+const DRAWER_VARIANCE_TOLERANCE_CENTS = 150; // $1.50 allowed per segment
+const DRAWER_EXCESS_ZERO_SCORE_CENTS = 2000; // >= $20 avg excess yields 0/20
+const CHANGEOVER_TARGET_CENTS = 20000; // $200 exact requirement for double midshift count
 
 function isDateOnly(value: string | null): value is string {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
@@ -99,10 +102,14 @@ type EmployeeStats = {
   shiftsWorked: number;
   rawSalesValues: number[];
   adjustedSalesValues: number[];
+  expectedChangeoverCounts: number;
+  completedChangeoverCounts: number;
   attendanceScheduled: number;
   attendanceWorked: number;
   lateMinutes: number[];
-  drawerAbsDelta: number[];
+  drawerExcessValues: number[];
+  accuracyShiftPoints: number[];
+  accuracyHardFailCount: number;
   closeoutAbsVariance: number[];
   cleaningCompleted: number;
   cleaningSkipped: number;
@@ -130,31 +137,55 @@ type ScheduledAttendanceUnit = {
 };
 
 function buildAttendanceUnits(rows: ScheduledShiftRow[]): ScheduledAttendanceUnit[] {
-  const units = new Map<string, ScheduledAttendanceUnit>();
+  const rowsByScheduleDay = new Map<string, ScheduledShiftRow[]>();
   for (const row of rows) {
-    const isDouble = row.shift_mode === "double" || row.shift_type === "double";
-    const key = isDouble
-      ? `${row.schedule_id}|${row.store_id}|${row.profile_id}|${row.shift_date}|double`
-      : row.id;
-    const existing = units.get(key);
-    if (!existing) {
-      units.set(key, {
-        id: key,
+    const key = `${row.schedule_id}|${row.store_id}|${row.profile_id}|${row.shift_date}`;
+    const bucket = rowsByScheduleDay.get(key) ?? [];
+    bucket.push(row);
+    rowsByScheduleDay.set(key, bucket);
+  }
+
+  const units: ScheduledAttendanceUnit[] = [];
+  for (const [baseKey, group] of rowsByScheduleDay.entries()) {
+    const hasExplicitDouble = group.some(
+      (r) => r.shift_mode === "double" || r.shift_type === "double"
+    );
+    const hasOpen = group.some((r) => r.shift_type === "open");
+    const hasClose = group.some((r) => r.shift_type === "close");
+    const shouldCollapseToDouble = hasExplicitDouble || (hasOpen && hasClose);
+
+    if (shouldCollapseToDouble) {
+      const first = group[0];
+      const scheduledStart = group.reduce(
+        (min, r) => (r.scheduled_start < min ? r.scheduled_start : min),
+        first.scheduled_start
+      );
+      units.push({
+        id: `${baseKey}|double`,
+        profileId: first.profile_id,
+        storeId: first.store_id,
+        shiftDate: first.shift_date,
+        scheduledStart,
+        scheduleShiftIds: group.map((r) => r.id),
+        isDouble: true,
+      });
+      continue;
+    }
+
+    for (const row of group) {
+      units.push({
+        id: row.id,
         profileId: row.profile_id,
         storeId: row.store_id,
         shiftDate: row.shift_date,
         scheduledStart: row.scheduled_start,
         scheduleShiftIds: [row.id],
-        isDouble,
+        isDouble: false,
       });
-      continue;
-    }
-    existing.scheduleShiftIds.push(row.id);
-    if (row.scheduled_start < existing.scheduledStart) {
-      existing.scheduledStart = row.scheduled_start;
     }
   }
-  return Array.from(units.values());
+
+  return units;
 }
 
 export async function GET(req: Request) {
@@ -244,9 +275,16 @@ export async function GET(req: Request) {
           >(),
         supabaseServer
           .from("shift_drawer_counts")
-          .select("shift_id,count_type,drawer_cents")
-          .in("count_type", ["start", "end"])
-          .returns<Array<{ shift_id: string; count_type: "start" | "end"; drawer_cents: number }>>(),
+          .select("shift_id,count_type,drawer_cents,change_count")
+          .in("count_type", ["start", "end", "changeover"])
+          .returns<
+            Array<{
+              shift_id: string;
+              count_type: "start" | "end" | "changeover";
+              drawer_cents: number;
+              change_count: number | null;
+            }>
+          >(),
         supabaseServer
           .from("safe_closeouts")
           .select("shift_id,profile_id,variance_cents")
@@ -378,10 +416,14 @@ export async function GET(req: Request) {
         shiftsWorked: 0,
         rawSalesValues: [],
         adjustedSalesValues: [],
+        expectedChangeoverCounts: 0,
+        completedChangeoverCounts: 0,
         attendanceScheduled: 0,
         attendanceWorked: 0,
         lateMinutes: [],
-        drawerAbsDelta: [],
+        drawerExcessValues: [],
+        accuracyShiftPoints: [],
+        accuracyHardFailCount: 0,
         closeoutAbsVariance: [],
         cleaningCompleted: 0,
         cleaningSkipped: 0,
@@ -400,21 +442,161 @@ export async function GET(req: Request) {
       }
     }
 
-    // Drawer start->end delta.
-    const countsByShiftId = new Map<string, { start: number | null; end: number | null }>();
+    // Attendance units (for attendance/punctuality) and changeover requirements.
+    const publishedScheduleIds = new Set(
+      (schedulesRes.data ?? []).filter((s) => s.status === "published").map((s) => s.id)
+    );
+    const publishedScheduled = (scheduledShiftsRes.data ?? []).filter((s) => publishedScheduleIds.has(s.schedule_id));
+    const attendanceUnits = buildAttendanceUnits(publishedScheduled);
+    const workedByScheduleShiftId = new Map<
+      string,
+      { profileId: string; startedAt: string; storeId: string; shiftId: string; businessDate: string }
+    >();
+    for (const shift of rawShiftSalesRows) {
+      if (!shift.scheduleShiftId) continue;
+      workedByScheduleShiftId.set(shift.scheduleShiftId, {
+        profileId: shift.profileId,
+        startedAt: shift.startedAt,
+        storeId: shift.storeId,
+        shiftId: shift.shiftId,
+        businessDate: shift.businessDate,
+      });
+    }
+    const requiredChangeoverShiftIds = new Set<string>();
+    for (const attendanceUnit of attendanceUnits) {
+      if (!attendanceUnit.isDouble) continue;
+      const stats = ensureStats(attendanceUnit.profileId);
+      stats.expectedChangeoverCounts += 1;
+
+      let worked:
+        | { profileId: string; startedAt: string; storeId: string; shiftId: string; businessDate: string }
+        | undefined = attendanceUnit.scheduleShiftIds
+          .map((id) => workedByScheduleShiftId.get(id))
+          .find((row) => Boolean(row));
+      if (!worked) {
+        const fallback = rawShiftSalesRows.find(
+          (row) =>
+            row.profileId === attendanceUnit.profileId &&
+            row.storeId === attendanceUnit.storeId &&
+            row.businessDate === attendanceUnit.shiftDate
+        );
+        if (fallback) {
+          worked = {
+            profileId: fallback.profileId,
+            startedAt: fallback.startedAt,
+            storeId: fallback.storeId,
+            shiftId: fallback.shiftId,
+            businessDate: fallback.businessDate,
+          };
+        }
+      }
+      if (worked) requiredChangeoverShiftIds.add(worked.shiftId);
+    }
+
+    // Drawer variance by shift segments:
+    // - non-double: start -> end
+    // - double: start -> changeover and changeover -> end
+    // Tolerance: first $1.50 per segment is ignored.
+    const countsByShiftId = new Map<
+      string,
+      {
+        start: number | null;
+        end: number | null;
+        changeover: number | null;
+        startChange: number | null;
+        endChange: number | null;
+        changeoverChange: number | null;
+      }
+    >();
     for (const row of drawerCountsRes.data ?? []) {
-      const cur = countsByShiftId.get(row.shift_id) ?? { start: null, end: null };
-      if (row.count_type === "start") cur.start = row.drawer_cents;
-      if (row.count_type === "end") cur.end = row.drawer_cents;
+      const cur = countsByShiftId.get(row.shift_id) ?? {
+        start: null,
+        end: null,
+        changeover: null,
+        startChange: null,
+        endChange: null,
+        changeoverChange: null,
+      };
+      if (row.count_type === "start") {
+        cur.start = row.drawer_cents;
+        cur.startChange = row.change_count;
+      }
+      if (row.count_type === "end") {
+        cur.end = row.drawer_cents;
+        cur.endChange = row.change_count;
+      }
+      if (row.count_type === "changeover") {
+        cur.changeover = row.drawer_cents;
+        cur.changeoverChange = row.change_count;
+      }
       countsByShiftId.set(row.shift_id, cur);
     }
     const shiftById = new Map((rawShiftSalesRows ?? []).map((row) => [row.shiftId, row]));
-    for (const [shiftId, count] of countsByShiftId.entries()) {
-      if (count.start == null || count.end == null) continue;
-      const shift = shiftById.get(shiftId);
-      if (!shift) continue;
+    const pointsFromAvgExcess = (avgExcess: number): number =>
+      20 * clamp(1 - avgExcess / DRAWER_EXCESS_ZERO_SCORE_CENTS, 0, 1);
+    const toExcess = (from: number, to: number): number =>
+      Math.max(0, Math.abs(to - from) - DRAWER_VARIANCE_TOLERANCE_CENTS);
+    for (const shift of rawShiftSalesRows) {
       const stats = ensureStats(shift.profileId);
-      stats.drawerAbsDelta.push(Math.abs(count.end - count.start));
+      const count = countsByShiftId.get(shift.shiftId) ?? {
+        start: null,
+        end: null,
+        changeover: null,
+        startChange: null,
+        endChange: null,
+        changeoverChange: null,
+      };
+
+      const requiresChangeover = requiredChangeoverShiftIds.has(shift.shiftId) || shift.shiftType === "double";
+      if (requiresChangeover) {
+        // Temporary compatibility: some flows do not persist midshift change_count yet.
+        // Enforce strict 3x change_count only when all three values exist; otherwise
+        // fall back to required midshift drawer count at $200.
+        const hasAllChangeCounts =
+          count.startChange != null &&
+          count.changeoverChange != null &&
+          count.endChange != null;
+        const changeCountOk =
+          hasAllChangeCounts
+            ? count.startChange === CHANGEOVER_TARGET_CENTS &&
+              count.changeoverChange === CHANGEOVER_TARGET_CENTS &&
+              count.endChange === CHANGEOVER_TARGET_CENTS
+            : count.changeover === CHANGEOVER_TARGET_CENTS;
+        if (changeCountOk) {
+          stats.completedChangeoverCounts += 1;
+        } else {
+          stats.accuracyShiftPoints.push(0);
+          stats.accuracyHardFailCount += 1;
+          continue;
+        }
+
+        const shiftExcesses: number[] = [];
+        if (count.start != null && count.changeover != null) {
+          const excess = toExcess(count.start, count.changeover);
+          shiftExcesses.push(excess);
+          stats.drawerExcessValues.push(excess);
+        }
+        if (count.changeover != null && count.end != null) {
+          const excess = toExcess(count.changeover, count.end);
+          shiftExcesses.push(excess);
+          stats.drawerExcessValues.push(excess);
+        }
+        if (shiftExcesses.length === 0) {
+          stats.accuracyShiftPoints.push(0);
+          stats.accuracyHardFailCount += 1;
+          continue;
+        }
+        const avgShiftExcess =
+          shiftExcesses.reduce((sum, v) => sum + v, 0) / shiftExcesses.length;
+        stats.accuracyShiftPoints.push(pointsFromAvgExcess(avgShiftExcess));
+        continue;
+      }
+
+      if (count.start != null && count.end != null) {
+        const excess = toExcess(count.start, count.end);
+        stats.drawerExcessValues.push(excess);
+        stats.accuracyShiftPoints.push(pointsFromAvgExcess(excess));
+      }
     }
 
     // Safe closeout variance.
@@ -436,23 +618,6 @@ export async function GET(req: Request) {
     }
 
     // Attendance and punctuality from published schedules.
-    const publishedScheduleIds = new Set(
-      (schedulesRes.data ?? []).filter((s) => s.status === "published").map((s) => s.id)
-    );
-    const publishedScheduled = (scheduledShiftsRes.data ?? []).filter((s) => publishedScheduleIds.has(s.schedule_id));
-    const attendanceUnits = buildAttendanceUnits(publishedScheduled);
-    const workedByScheduleShiftId = new Map<
-      string,
-      { profileId: string; startedAt: string; storeId: string }
-    >();
-    for (const shift of rawShiftSalesRows) {
-      if (!shift.scheduleShiftId) continue;
-      workedByScheduleShiftId.set(shift.scheduleShiftId, {
-        profileId: shift.profileId,
-        startedAt: shift.startedAt,
-        storeId: shift.storeId,
-      });
-    }
     for (const attendanceUnit of attendanceUnits) {
       const stats = ensureStats(attendanceUnit.profileId);
       stats.attendanceScheduled += 1;
@@ -461,6 +626,8 @@ export async function GET(req: Request) {
             profileId: string;
             startedAt: string;
             storeId: string;
+            shiftId: string;
+            businessDate: string;
           }
         | undefined = attendanceUnit.scheduleShiftIds
           .map((id) => workedByScheduleShiftId.get(id))
@@ -477,6 +644,8 @@ export async function GET(req: Request) {
             profileId: fallback.profileId,
             startedAt: fallback.startedAt,
             storeId: fallback.storeId,
+            shiftId: fallback.shiftId,
+            businessDate: fallback.businessDate,
           };
         }
       }
@@ -550,12 +719,14 @@ export async function GET(req: Request) {
       const punctualityPoints =
         avgPunctualityScore == null ? null : 15 * avgPunctualityScore;
 
-      const avgDrawerDelta =
-        stats.drawerAbsDelta.length > 0
-          ? stats.drawerAbsDelta.reduce((sum, v) => sum + v, 0) / stats.drawerAbsDelta.length
+      const avgDrawerExcess =
+        stats.drawerExcessValues.length > 0
+          ? stats.drawerExcessValues.reduce((sum, v) => sum + v, 0) / stats.drawerExcessValues.length
           : null;
       const accuracyPoints =
-        avgDrawerDelta == null ? null : 20 * clamp(1 - avgDrawerDelta / 2000, 0, 1);
+        stats.accuracyShiftPoints.length > 0
+          ? stats.accuracyShiftPoints.reduce((sum, v) => sum + v, 0) / stats.accuracyShiftPoints.length
+          : null;
 
       const avgCloseoutVariance =
         stats.closeoutAbsVariance.length > 0
@@ -607,7 +778,16 @@ export async function GET(req: Request) {
           "Drawer Accuracy",
           20,
           accuracyPoints,
-          avgDrawerDelta == null ? "No start/end drawer pairs" : `Avg delta ${round(avgDrawerDelta / 100, 2)}`
+          `${avgDrawerExcess == null
+            ? "No shift drawer segment data"
+            : `Avg excess ${round(avgDrawerExcess / 100, 2)} over $${round(
+                DRAWER_VARIANCE_TOLERANCE_CENTS / 100,
+                2
+              )} tolerance`}${
+            stats.expectedChangeoverCounts > 0
+              ? ` | Midshift drawer=$200 exact ${stats.completedChangeoverCounts}/${stats.expectedChangeoverCounts} (fails: ${stats.accuracyHardFailCount})`
+              : ""
+          }`
         ),
         category(
           "cash_handling",

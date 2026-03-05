@@ -2,7 +2,7 @@
 
 A workforce management and time tracking application built for retail environments, specifically designed for smoke shop operations with drawer accountability, shift management, sales tracking, and employee performance features.
 
-## Project Overview
+## What It Does
 
 Shift Happens is a comprehensive time clock and shift management system that handles:
 
@@ -48,54 +48,47 @@ Shift Happens is a comprehensive time clock and shift management system that han
 
 Managers and admins authenticate via Supabase Auth. Employees authenticate via PIN (stored in `employee_pins`) which issues a short-lived JWT.
 
-## Setup Instructions
+## Authentication Model
+
+- Managers: Supabase auth (email/password + Bearer token)
+- Employees: PIN-based auth issuing JWT; employee API calls use `Authorization: Bearer <token>`
+
+## Setup
 
 ### Prerequisites
-
-- Node.js 18+
-- npm or yarn
-- Supabase account
-
-### 1. Clone the Repository
 
 ```bash
 git clone <repository-url>
 cd Shift_Happens
 ```
+- Node.js 18+
+- npm
+- Supabase project
 
-### 2. Install Dependencies
+### Install
 
 ```bash
 npm install
 ```
 
-### 3. Environment Variables
-
-Create a `.env.local` file in the root directory:
+### Environment Variables (`.env.local`)
 
 ```env
-# Supabase Configuration
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 
-# JWT secret for employee PIN auth (any long random string)
-JWT_SECRET=your-long-random-secret
-
-# Cron job authentication (shared between GitHub Actions and Vercel)
 CRON_SECRET=your-long-random-secret
 
 # Weather API (optional — used to record weather at shift time)
 WEATHER_API_KEY=your-openweathermap-api-key
 ```
 
-**Where to find Supabase values:**
-- Go to your Supabase project dashboard
-- Navigate to Settings → API
-- Copy the Project URL and anon/public key for the `NEXT_PUBLIC_` variables
-- Copy the service_role key for `SUPABASE_SERVICE_ROLE_KEY` (keep this secret!)
+### Run
 
-### 4. Database Setup
+```bash
+npm run dev
+```
 
 Run all numbered migration files in order in your Supabase SQL Editor:
 
@@ -111,21 +104,23 @@ All files are numbered sequentially. Run them in order from `01` through `74`. N
 > **Note**: `00_consolidated.sql` exists but only contains the initial schema and is not a substitute for running all migrations.
 
 ### 5. Configure Supabase Authentication
-
-1. Go to Supabase Dashboard → Authentication → URL Configuration
-2. Set your Site URL: `http://localhost:3000` (dev) or your production URL
-3. Add Redirect URLs:
-   - `http://localhost:3000/**`
-   - `https://your-domain.vercel.app/**`
-   - `https://your-domain.vercel.app/auth/reset`
-
-### 6. Run Development Server
+### Validate
 
 ```bash
-npm run dev
+npx tsc --noEmit
+npm run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+## Database / Migrations
+
+SQL migrations live in:
+
+- `src/app/sql/`
+- `supabase/migrations/` (if present in your environment)
+
+Apply migrations in numeric order. Do not edit already-deployed migrations; add forward migrations.
+
+## Current App Surface
 
 ### 7. Run Tests
 

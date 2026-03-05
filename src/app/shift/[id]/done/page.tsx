@@ -444,6 +444,7 @@ function ChangeoverPanel({
   onDone: () => void;
 }) {
   const [drawer, setDrawer] = useState("200");
+  const [changeDrawer, setChangeDrawer] = useState("200");
   const [xReport, setXReport] = useState("");
   const [txnCount, setTxnCount] = useState("");
   const [confirm, setConfirm] = useState(false);
@@ -457,6 +458,7 @@ function ChangeoverPanel({
   }
 
   const cents = Math.round(Number(drawer) * 100);
+  const changeCents = Math.round(Number(changeDrawer) * 100);
   const xReportCents = xReport !== "" && Number.isFinite(Number(xReport)) && Number(xReport) >= 0
     ? Math.round(Number(xReport) * 100)
     : null;
@@ -480,6 +482,14 @@ function ChangeoverPanel({
 
       <label className="text-sm">Drawer count ($)</label>
       <input className="w-full border rounded p-2" inputMode="decimal" value={drawer} onChange={e => setDrawer(e.target.value)} />
+
+      <label className="text-sm">Change count ($)</label>
+      <input
+        className="w-full border rounded p-2"
+        inputMode="decimal"
+        value={changeDrawer}
+        onChange={e => setChangeDrawer(e.target.value)}
+      />
 
       <label className="text-sm">Transaction count <span className="text-gray-500">(# of sales rung — AM half)</span></label>
       <input
@@ -509,9 +519,21 @@ function ChangeoverPanel({
 
       <button
         className="rounded bg-black text-white px-3 py-2 disabled:opacity-50"
-        disabled={saving || !Number.isFinite(cents)}
+        disabled={saving || !Number.isFinite(cents) || !Number.isFinite(changeCents) || !Number.isFinite(xReportCents) || parsedTxnCount == null}
         onClick={async () => {
           setErr(null);
+          if (!Number.isFinite(xReportCents)) {
+            setErr("X report total is required.");
+            return;
+          }
+          if (!Number.isFinite(changeCents) || changeCents < 0) {
+            setErr("Change count is required.");
+            return;
+          }
+          if (parsedTxnCount == null) {
+            setErr("Transaction count is required.");
+            return;
+          }
           setSaving(true);
           try {
             const authToken = await resolveAuthToken();
@@ -528,6 +550,7 @@ function ChangeoverPanel({
                 note: note || null,
                 midXReportCents: xReportCents,
                 openTransactionCount: parsedTxnCount,
+                changeCountCents: changeCents,
               }),
             });
             const json = await res.json();

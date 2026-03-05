@@ -122,6 +122,7 @@ function AdminShiftBreakdownPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<ShiftBreakdownResponse | null>(null);
+  const [scoreboardScore, setScoreboardScore] = useState<number | null>(null);
 
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
@@ -149,6 +150,7 @@ function AdminShiftBreakdownPage() {
       try {
         setLoading(true);
         setError(null);
+        setScoreboardScore(null);
         const {
           data: { session },
         } = await supabase.auth.getSession();
@@ -169,6 +171,22 @@ function AdminShiftBreakdownPage() {
         if (!res.ok) throw new Error(json?.error || "Failed to load shift breakdown.");
         if (!alive) return;
         setData(json as ShiftBreakdownResponse);
+
+        // Pull canonical score from scoreboard API so headline matches main board.
+        try {
+          const scoreRes = await fetch(`/api/admin/employee-scoreboard?from=${from}&to=${to}&storeId=${storeId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (scoreRes.ok) {
+            const scoreJson = await scoreRes.json();
+            const row = Array.isArray(scoreJson?.rows)
+              ? scoreJson.rows.find((r: { profileId?: string; score?: number }) => r.profileId === profileId)
+              : null;
+            if (alive) setScoreboardScore(typeof row?.score === "number" ? row.score : null);
+          }
+        } catch {
+          // Keep breakdown usable if secondary score request fails.
+        }
       } catch (e: unknown) {
         if (!alive) return;
         setError(e instanceof Error ? e.message : "Failed to load shift breakdown.");
@@ -256,14 +274,20 @@ function AdminShiftBreakdownPage() {
                     Absent: <b className="text-red-400">{absentCount}</b>
                   </div>
                 )}
+                {scoreboardScore != null && (
+                  <div>
+                    Scoreboard Score:{" "}
+                    <b className={scoreTone(scoreboardScore)}>{scoreboardScore.toFixed(1)}</b>
+                  </div>
+                )}
                 {avgScore != null && (
                   <div>
-                    Avg Shift Score:{" "}
+                    Shift Detail Avg:{" "}
                     <b className={scoreTone(avgScore)}>{avgScore.toFixed(1)}</b>
                   </div>
                 )}
                 <div className="muted text-xs self-center">
-                  Sales columns are informational only
+                  Shift rows are diagnostics; scoreboard score comes from the same scoreboard logic/API.
                 </div>
               </div>
             </div>
@@ -394,7 +418,7 @@ function AdminShiftBreakdownPage() {
             <div className="card card-pad text-xs text-zinc-500 space-y-1">
               <div className="font-medium text-zinc-400">Notes</div>
               <div>
-                <b>Score</b>: Composite of attendance, punctuality, drawer accuracy, cash handling, and tasks — normalized 0–100 over available metrics. Sales are excluded (percentile-based across all employees).
+                <b>Scoreboard Score</b>: Pulled directly from scoreboard API. <b>Shift Score</b> rows are per-shift diagnostics.
               </div>
               <div>
                 <b>Punctuality</b>: 5-minute grace period applied. Quadratic decay — 10+ minutes late = 0 pts.

@@ -14,6 +14,7 @@
  * - note?: string | null - Optional note about the drawer count
  * - midXReportCents?: number | null - Net X report total at changeover (enables AM/PM split)
  * - openTransactionCount?: number | null - Transactions rung in the AM half (zero = not captured)
+ * - changeCountCents?: number | null - Change drawer count at changeover (target $200)
  *
  * Returns:
  * - Success: { ok: true }
@@ -44,6 +45,8 @@ type Body = {
   midXReportCents?: number | null;
   /** Transactions rung in the AM half. 0 is treated as null (not captured). */
   openTransactionCount?: number | null;
+  /** Change drawer count at changeover in cents. */
+  changeCountCents?: number | null;
 };
 
 function getCstDateKey(value: string): string | null {
@@ -123,6 +126,12 @@ export async function POST(req: Request) {
           shift_id: body.shiftId,
           count_type: "changeover",
           drawer_cents: body.drawerCents,
+          change_count:
+            typeof body.changeCountCents === "number" &&
+            Number.isFinite(body.changeCountCents) &&
+            body.changeCountCents >= 0
+              ? Math.round(body.changeCountCents)
+              : null,
           confirmed: Boolean(body.confirmed),
           notified_manager: Boolean(body.notifiedManager),
           note: body.note ?? null,
@@ -139,35 +148,41 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: true });
     }
 
-    // Optionally persist mid-day X report total and AM transaction count to
-    // daily_sales_records so the analytics layer can compute AM/PM splits.
+    // Mid-shift submission policy: for doubles, all analytics fields are required.
     const hasMidX =
       typeof body.midXReportCents === "number" &&
       Number.isFinite(body.midXReportCents) &&
       body.midXReportCents >= 0;
-    // Zero-contamination guard: treat 0 as "not captured" (same as null).
     const openTxnCount =
       typeof body.openTransactionCount === "number" &&
       Number.isInteger(body.openTransactionCount) &&
       body.openTransactionCount > 0
         ? body.openTransactionCount
         : null;
+    const hasChangeCount =
+      typeof body.changeCountCents === "number" &&
+      Number.isFinite(body.changeCountCents) &&
+      body.changeCountCents >= 0;
+    if (!hasMidX || openTxnCount == null || !hasChangeCount) {
+      return NextResponse.json(
+        { error: "Mid-shift X report, transaction count, and change count are required for double shifts." },
+        { status: 400 }
+      );
+    }
 
-    if (hasMidX || openTxnCount != null) {
-      const businessDate = getCstDateKey(shift.planned_start_at);
-      if (businessDate) {
-        const patch: Record<string, unknown> = {
-          store_id: shift.store_id,
-          business_date: businessDate,
-        };
-        if (hasMidX) patch.mid_x_report_cents = Math.round(body.midXReportCents as number);
-        if (openTxnCount != null) patch.open_transaction_count = openTxnCount;
+    const businessDate = getCstDateKey(shift.planned_start_at);
+    if (businessDate) {
+      const patch: Record<string, unknown> = {
+        store_id: shift.store_id,
+        business_date: businessDate,
+        mid_x_report_cents: Math.round(body.midXReportCents as number),
+        open_transaction_count: openTxnCount,
+      };
 
-        const { error: dsr } = await supabaseServer
-          .from("daily_sales_records")
-          .upsert(patch, { onConflict: "store_id,business_date" });
-        if (dsr) return NextResponse.json({ error: dsr.message }, { status: 500 });
-      }
+      const { error: dsr } = await supabaseServer
+        .from("daily_sales_records")
+        .upsert(patch, { onConflict: "store_id,business_date" });
+      if (dsr) return NextResponse.json({ error: dsr.message }, { status: 500 });
     }
 
     return NextResponse.json({ ok: true });

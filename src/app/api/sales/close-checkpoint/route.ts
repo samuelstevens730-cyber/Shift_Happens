@@ -7,8 +7,7 @@ type Body = {
   salesZReportCents?: number;
   salesPriorXCents?: number;
   salesConfirmed?: boolean;
-  // closeTransactionCount intentionally omitted — transactions are captured
-  // at midnight clock-out (end-shift), not at the 10 PM Z-report checkpoint.
+  closeTransactionCount?: number;
 };
 
 type ShiftRow = {
@@ -141,8 +140,6 @@ export async function POST(req: Request) {
           // balance formula (open_x + close_sales = z) resolves correctly.
           ...(shift.shift_type === "double" ? { open_x_report_cents: priorXReportCents } : {}),
           ...(closeTxnCount != null ? { close_transaction_count: closeTxnCount } : {}),
-          // close_transaction_count is NOT written here — it's captured at
-          // midnight clock-out (end-shift) where the closer knows the full count.
         },
         { onConflict: "store_id,business_date" }
       )
