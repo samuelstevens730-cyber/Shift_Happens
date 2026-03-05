@@ -437,7 +437,7 @@ The workflow in `.github/workflows/cron-requests.yml` calls:
 
 ## License
 
-Proprietary - No Cap Smoke Shop
+Proprietary - Samuel Stevens
 
 ---
 
