@@ -13,6 +13,7 @@ Shift Happens is a comprehensive time clock and shift management system that han
 - **Scheduling**: Visual weekly scheduler with draft and publish workflow; employees can view their upcoming schedule
 - **Employee Requests**: Shift swap, time-off, and timesheet correction requests with full manager approval/denial workflow
 - **Employee Scoreboard**: 7-category performance scoring with store-normalized sales comparison and public rankings
+- **Google Reviews Tracker**: Employees upload 5-star review screenshots, managers approve/reject submissions, monthly leaderboards support per-store and all-store views with CSV export, and orphaned drafts are auto-cleaned by a scheduled GitHub Actions job
 - **Task Management**: Assign tasks and messages to employees for their next shift
 - **Shift Checklists**: Configurable per-store checklists for opening, closing, and double shifts
 - **Cleaning Tasks**: Recurring store cleaning schedules with per-shift complete/skip tracking

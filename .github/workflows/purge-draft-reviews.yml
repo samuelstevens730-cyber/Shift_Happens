@@ -1,0 +1,16 @@
+name: Cron - Purge Draft Reviews
+
+on:
+  schedule:
+    # 9 AM UTC = 3 AM CST / 4 AM CDT. One-hour DST drift is acceptable for cleanup.
+    - cron: "0 9 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  purge_draft_reviews:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call purge-draft-reviews
+        run: |
+          curl -sS -X POST "${{ secrets.CRON_BASE_URL }}/api/cron/purge-draft-reviews" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}"

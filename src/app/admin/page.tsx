@@ -220,6 +220,17 @@ export default function AdminIndex() {
             </p>
           </Link>
 
+          {/* Reviews - monthly Google review tracker and approvals */}
+          <Link href="/admin/reviews" className="tile">
+            <div className="flex items-center gap-2">
+              <span className="tile-dot" />
+              <div className="text-lg font-medium">Reviews</div>
+            </div>
+            <p className="mt-2 text-sm muted">
+              Approve submissions and view the monthly leaderboard.
+            </p>
+          </Link>
+
           {/* Manual Shift Closures - review employee-ended shifts */}
           <Link href="/admin/shifts?review=manual" className="tile">
             <div className="flex items-center gap-2">

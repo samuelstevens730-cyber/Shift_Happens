@@ -18,7 +18,7 @@ import { supabase } from "@/lib/supabaseClient";
 import { createEmployeeSupabase } from "@/lib/employeeSupabase";
 import PinGate from "@/components/PinGate";
 import ExpandableCard from "@/components/ExpandableCard";
-import { Clock, Calendar, FileText, Shield, X, Timer } from "lucide-react";
+import { Clock, Calendar, FileText, Shield, Star, X, Timer } from "lucide-react";
 
 // Storage keys (match PinGate.tsx)
 const PIN_TOKEN_KEY = "sh_pin_token";
@@ -806,6 +806,29 @@ function HomePageInner() {
               <div className="flex flex-col items-center justify-center gap-3">
                 <Shield className="w-10 h-10 md:w-12 md:h-12 text-pink-400" strokeWidth={1.5} />
                 <span className="bento-card-title">ADMIN</span>
+              </div>
+            </div>
+          )}
+
+          {/* REVIEWS */}
+          {showRequests ? (
+            <Link href="/reviews" className="bento-card">
+              <div className="flex flex-col items-center justify-center gap-3">
+                <Star className="w-10 h-10 md:w-12 md:h-12 text-yellow-300" strokeWidth={1.5} />
+                <span className="bento-card-title">REVIEWS</span>
+                <span className="text-[10px] text-white/60 text-center px-3">
+                  Log a Google review or check the leaderboard.
+                </span>
+              </div>
+            </Link>
+          ) : (
+            <div className="bento-card bento-card-disabled">
+              <div className="flex flex-col items-center justify-center gap-3">
+                <Star className="w-10 h-10 md:w-12 md:h-12 text-yellow-300" strokeWidth={1.5} />
+                <span className="bento-card-title">REVIEWS</span>
+                <span className="text-[10px] text-white/60 text-center px-3">
+                  Log a Google review or check the leaderboard.
+                </span>
               </div>
             </div>
           )}

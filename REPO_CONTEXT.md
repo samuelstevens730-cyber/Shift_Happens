@@ -33,6 +33,7 @@ Workforce management application for two retail stores (**LV1**, **LV2**).
 | `shift_sales_counts` | Per-shift x/z/rollover report entries (raw inputs from employees) |
 | `daily_sales_records` | Per-store, per-date sales aggregation. **Primary source for all performance reporting.** Key columns: `open_x_report_cents`, `close_sales_cents`, `z_report_cents`, `rollover_from_previous_cents`, `closer_rollover_cents`, `opener_rollover_cents`, `is_rollover_night`, `open_transaction_count`, `close_transaction_count` |
 | `safe_closeouts` | Accounting-only closeout records. Z-report aligned (does NOT include rollover carry). Columns: `cash_sales_cents`, `card_sales_cents`, `variance_cents`, denomination JSONB, status (draft/pass/warn/fail/locked), photo links |
+| `google_reviews` | Per-employee Google review submissions. Status lifecycle: draft → pending → approved/rejected. Includes screenshot storage path, submitter metadata, review metadata, and manager review fields |
 | `schedules` | Pay-period schedule containers (draft/published/archived) |
 | `schedule_shifts` | Individual planned shifts within a schedule |
 | `shift_templates` | Weekly shift patterns per store and day-of-week |
@@ -68,6 +69,7 @@ Workforce management application for two retail stores (**LV1**, **LV2**).
 | `/shifts` | Timecard — all past shifts with hours |
 | `/dashboard/requests` | Swap, time-off, advance requests |
 | `/dashboard/scoreboard` | Employee performance ranking |
+| `/reviews` | Google Reviews tracker with monthly leaderboard and screenshot submission |
 
 ### Admin Pages
 
@@ -87,6 +89,7 @@ Workforce management application for two retail stores (**LV1**, **LV2**).
 | `/admin/employee-scoreboard` | Weighted employee ranking (manager view) |
 | `/admin/reports/performance-summary` | Employee performance report (period analysis, benchmarks) |
 | `/admin/reports/store-sales` | Store executive report (cross-store sales, RPLH, weather) |
+| `/admin/reviews` | Reviews approval queue, full history table, CSV export, and manager direct submit |
 | `/admin/users` | Employee profile and store assignment management |
 | `/admin/assignments` | Assign tasks and messages for next shift |
 | `/admin/settings` | Store config, checklists, feature flags |
@@ -118,6 +121,10 @@ src/app/api/
 ├── me/avatar/            GET/PATCH  Avatar management
 ├── requests/             Swap, time-off, timesheet request CRUD + lifecycle
 ├── employee/scoreboard/  GET   Employee scorecard
+├── reviews/              GET   Reviews scoreboard + my submissions (dual auth)
+├── reviews/upload-url/   POST  Create draft + signed upload URL
+├── reviews/finalize/     POST  Finalize draft to pending with month/ownership checks
+├── cron/purge-draft-reviews/ POST  Purge stale review drafts (CRON_SECRET)
 └── admin/
     ├── dashboard/        GET   KPIs, open shifts, action items, sales history
     ├── shifts/           GET/POST/PATCH/DELETE  Shift management
@@ -133,6 +140,9 @@ src/app/api/
     ├── reports/
     │   ├── performance-summary/  GET  Employee performance report
     │   └── store-sales/          GET  Store executive report
+    ├── reviews/          GET  Reviews list + filters
+    ├── reviews/[id]/     PATCH/DELETE  Approve/reject/delete review
+    ├── reviews/export/   GET  Reviews CSV export
     └── backfill-weather/ POST  Retroactive weather fill
 ```
 
@@ -428,6 +438,7 @@ These rules must never be broken.
 - All time comparisons and clock-window checks use **America/Chicago (CST)** via `Intl`
 - `new Date()` or `.toISOString()` without timezone conversion must not be used for business-date decisions
 - Pay period and business date boundaries are CST midnight, not UTC midnight
+- Review month cutoff: `review_date` must be within the current CST calendar month (server-enforced on `/api/reviews/finalize`), with no grace period
 
 ### Sales Formulas
 - **Performance reporting** always uses `daily_sales_records` with rollover math (AM + PM + carry-out)
