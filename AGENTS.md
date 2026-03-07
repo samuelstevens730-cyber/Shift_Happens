@@ -164,3 +164,30 @@ These are additional mandatory guardrails layered on top of sections 3-7.
 ### Public Endpoint Data Minimization
 - Public health/status routes must not expose environment/config internals.
 - Return minimal operational response only (e.g., `{ ok: true }`).
+
+## 9. Documentation Update Policy
+When a change significantly affects architecture, data models, or core workflows:
+
+1. Update `README.md` if user-facing behavior changes.
+2. Update `REPO_CONTEXT.md` if architecture, modules, or flows change.
+3. Update `AGENTS.md` if development rules or workflows change.
+
+Documentation updates must occur in the same commit as the code change.
+
+## 10. Pre-Change Reading Order
+Before making changes:
+
+1. Read `AGENTS.md` for rules and constraints.
+2. Read `REPO_CONTEXT.md` to understand system architecture.
+3. Consult `README.md` only if setup, usage, or project overview is needed.
+
+## 11. Documentation Consistency Check
+Before finishing a task, verify:
+
+- Does the change alter architecture?
+- Does it introduce new modules?
+- Does it change domain objects or flows?
+
+If yes, update `REPO_CONTEXT.md`.
+
+If it changes setup, usage, or features, update `README.md`.
