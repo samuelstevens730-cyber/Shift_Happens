@@ -1568,6 +1568,7 @@ function ChangeoverPanel({
   onDone: () => void;
 }) {
   const [drawer, setDrawer] = useState("200");
+  const [changeDrawer, setChangeDrawer] = useState("200");
   const [xReport, setXReport] = useState("");
   const [txnCount, setTxnCount] = useState("");
   const [confirm, setConfirm] = useState(false);
@@ -1577,12 +1578,15 @@ function ChangeoverPanel({
   const [saving, setSaving] = useState(false);
 
   const cents = Math.round(Number(drawer) * 100);
+  const changeCents = Math.round(Number(changeDrawer) * 100);
   const xReportCents = xReport !== "" && Number.isFinite(Number(xReport)) && Number(xReport) >= 0
     ? Math.round(Number(xReport) * 100)
     : null;
   const parsedTxnCount = txnCount !== "" && /^\d+$/.test(txnCount.trim()) && Number(txnCount) > 0
     ? Number(txnCount)
     : null;
+  const hasValidChange = Number.isFinite(changeCents) && changeCents >= 0;
+  const changeNot200 = hasValidChange && changeCents !== 20000;
   const msg = Number.isFinite(cents) ? thresholdMessage(cents, expectedCents) : null;
   const outOfThreshold = shouldShowVarianceControls(cents, expectedCents);
 
@@ -1618,6 +1622,20 @@ function ChangeoverPanel({
         value={drawer}
         onChange={e => setDrawer(e.target.value)}
       />
+
+      <label className="text-sm">Change drawer count ($)</label>
+      <input
+        className="w-full border rounded p-2"
+        inputMode="decimal"
+        value={changeDrawer}
+        onChange={e => setChangeDrawer(e.target.value)}
+      />
+
+      {changeNot200 && (
+        <div className="text-sm border rounded p-2 text-amber-700 border-amber-300">
+          Change drawer should be exactly $200.00.
+        </div>
+      )}
 
       <label className="text-sm">Transaction count <span className="text-gray-500">(# of sales rung — AM half)</span></label>
       <input
@@ -1656,7 +1674,7 @@ function ChangeoverPanel({
 
       <button
         className="rounded bg-black text-white px-3 py-2 disabled:opacity-50"
-        disabled={saving || !Number.isFinite(cents) || (outOfThreshold && !confirm)}
+        disabled={saving || !Number.isFinite(cents) || !hasValidChange || (outOfThreshold && !confirm)}
         onClick={async () => {
           setErr(null);
           setSaving(true);
@@ -1675,6 +1693,7 @@ function ChangeoverPanel({
                 note: note || null,
                 midXReportCents: xReportCents,
                 openTransactionCount: parsedTxnCount,
+                changeCountCents: changeCents,
               }),
             });
             const json = await res.json();

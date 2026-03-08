@@ -74,15 +74,13 @@ create policy "google_reviews_manager_all"
     store_id = any (
       select sm.store_id
       from public.store_managers sm
-      join public.app_users au on au.id = sm.user_id
-      where au.auth_user_id = auth.uid()
+      where sm.user_id = auth.uid()
     )
   )
   with check (
     store_id = any (
       select sm.store_id
       from public.store_managers sm
-      join public.app_users au on au.id = sm.user_id
-      where au.auth_user_id = auth.uid()
+      where sm.user_id = auth.uid()
     )
   );
