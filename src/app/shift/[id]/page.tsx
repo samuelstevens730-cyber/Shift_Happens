@@ -1568,6 +1568,7 @@ function ChangeoverPanel({
   onDone: () => void;
 }) {
   const [drawer, setDrawer] = useState("200");
+  const [changeDrawer, setChangeDrawer] = useState("200");
   const [xReport, setXReport] = useState("");
   const [txnCount, setTxnCount] = useState("");
   const [confirm, setConfirm] = useState(false);
@@ -1577,6 +1578,7 @@ function ChangeoverPanel({
   const [saving, setSaving] = useState(false);
 
   const cents = Math.round(Number(drawer) * 100);
+  const changeCents = Math.round(Number(changeDrawer) * 100);
   const xReportCents = xReport !== "" && Number.isFinite(Number(xReport)) && Number(xReport) >= 0
     ? Math.round(Number(xReport) * 100)
     : null;
@@ -1585,6 +1587,7 @@ function ChangeoverPanel({
     : null;
   const msg = Number.isFinite(cents) ? thresholdMessage(cents, expectedCents) : null;
   const outOfThreshold = shouldShowVarianceControls(cents, expectedCents);
+  const changeNot200 = Number.isFinite(changeCents) && changeCents !== 20000;
 
   // If you go back into normal range, wipe the extra acknowledgements.
   useEffect(() => {
@@ -1619,6 +1622,20 @@ function ChangeoverPanel({
         onChange={e => setDrawer(e.target.value)}
       />
 
+      <label className="text-sm">Change drawer count ($)</label>
+      <input
+        className="w-full border rounded p-2"
+        inputMode="decimal"
+        value={changeDrawer}
+        onChange={e => setChangeDrawer(e.target.value)}
+      />
+
+      {changeNot200 && (
+        <div className="text-sm border rounded p-2 text-amber-700 border-amber-300">
+          Change drawer should be exactly $200.00.
+        </div>
+      )}
+
       <label className="text-sm">Transaction count <span className="text-gray-500">(# of sales rung — AM half)</span></label>
       <input
         className="w-full border rounded p-2"
@@ -1636,17 +1653,17 @@ function ChangeoverPanel({
 
       {/* Variance confirmation - only shown when drawer is out of threshold */}
       {outOfThreshold && (
-        <>
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={confirm} onChange={e => setConfirm(e.target.checked)} />
-            I confirm this count is correct (required when outside threshold)
-          </label>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={confirm} onChange={e => setConfirm(e.target.checked)} />
+          I confirm this count is correct (required when outside threshold)
+        </label>
+      )}
 
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={notify} onChange={e => setNotify(e.target.checked)} />
-            I notified manager (optional)
-          </label>
-        </>
+      {(outOfThreshold || changeNot200) && (
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={notify} onChange={e => setNotify(e.target.checked)} />
+          I notified manager (required if change drawer is not $200)
+        </label>
       )}
 
       <label className="text-sm">Note (optional)</label>
@@ -1670,8 +1687,9 @@ function ChangeoverPanel({
                 qrToken,
                 shiftId,
                 drawerCents: cents,
+                changeDrawerCents: Number.isFinite(changeCents) ? changeCents : null,
                 confirmed: outOfThreshold ? confirm : false,
-                notifiedManager: outOfThreshold ? notify : false,
+                notifiedManager: (outOfThreshold || changeNot200) ? notify : false,
                 note: note || null,
                 midXReportCents: xReportCents,
                 openTransactionCount: parsedTxnCount,

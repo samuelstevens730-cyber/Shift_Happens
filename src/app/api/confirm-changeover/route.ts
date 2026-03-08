@@ -37,6 +37,7 @@ type Body = {
   qrToken?: string;
   shiftId: string;
   drawerCents: number;
+  changeDrawerCents?: number | null;
   confirmed?: boolean;
   notifiedManager?: boolean;
   note?: string | null;
@@ -123,6 +124,7 @@ export async function POST(req: Request) {
           shift_id: body.shiftId,
           count_type: "changeover",
           drawer_cents: body.drawerCents,
+          change_count: body.changeDrawerCents ?? null,
           confirmed: Boolean(body.confirmed),
           notified_manager: Boolean(body.notifiedManager),
           note: body.note ?? null,
