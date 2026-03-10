@@ -222,9 +222,10 @@ type AuthContext = {
 3. Auth validated via `authenticateShiftRequest`
 4. Clock window validated via `clockWindows.ts` + `clock_windows` table (CST)
 5. Matching `schedule_shifts` record found (if scheduled) or flagged as unscheduled
-6. `shifts` row inserted; `shift_drawer_counts` start record written
-7. Start time rounded to 30-minute boundary for payroll
-8. `fetchCurrentWeather()` called (fire-and-forget) — updates `start_weather_condition`, `start_temp_f` on shift
+6. Shift type defaults from the scheduled row for that date (double if open+close coverage), with user override allowed at clock-in and during active shift
+7. `shifts` row inserted; `shift_drawer_counts` start record written
+8. Start time rounded to 30-minute boundary for payroll
+9. `fetchCurrentWeather()` called (fire-and-forget) — updates `start_weather_condition`, `start_temp_f` on shift
 
 ### Active Shift (`/shift/[id]`)
 

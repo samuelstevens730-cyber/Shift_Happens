@@ -184,12 +184,16 @@ export async function POST(req: Request) {
     let bestWithinWindowScore: number | null = null;
     let nearestSchedule: { id: string; shift_type: ShiftType; score: number } | null = null;
     let doubleSchedule: { id: string; shift_type: ShiftType } | null = null;
+    let openScheduleId: string | null = null;
+    let closeScheduleId: string | null = null;
     if (plannedMinutes != null && scheduledRows?.length) {
       for (const row of scheduledRows) {
         const scheduledType = resolveScheduledShiftType(
           row.shift_type as ShiftType,
           row.shift_mode ?? null
         );
+        if (!openScheduleId && scheduledType === "open") openScheduleId = row.id;
+        if (!closeScheduleId && scheduledType === "close") closeScheduleId = row.id;
         if (!doubleSchedule && scheduledType === "double") {
           doubleSchedule = { id: row.id, shift_type: "double" };
         }
@@ -214,12 +218,24 @@ export async function POST(req: Request) {
         shift_type: resolveScheduledShiftType(first.shift_type as ShiftType, first.shift_mode ?? null),
         score: 0,
       };
-      const foundDouble = scheduledRows.find(
-        (row) => resolveScheduledShiftType(row.shift_type as ShiftType, row.shift_mode ?? null) === "double"
-      );
+      const foundDouble = scheduledRows.find((row) => {
+        const resolved = resolveScheduledShiftType(row.shift_type as ShiftType, row.shift_mode ?? null);
+        if (!openScheduleId && resolved === "open") openScheduleId = row.id;
+        if (!closeScheduleId && resolved === "close") closeScheduleId = row.id;
+        return resolved === "double";
+      });
       if (foundDouble) {
         doubleSchedule = { id: foundDouble.id, shift_type: "double" };
       }
+    }
+
+    // If the same employee has both open and close scheduled on the same date,
+    // treat that day as a double even if legacy rows are stored as open/close.
+    if (!doubleSchedule && openScheduleId && closeScheduleId) {
+      doubleSchedule = {
+        id: matchedSchedule?.id ?? nearestSchedule?.id ?? openScheduleId,
+        shift_type: "double",
+      };
     }
 
     const isWithinScheduledWindow = Boolean(matchedSchedule);
@@ -240,15 +256,21 @@ export async function POST(req: Request) {
     // If ANY published scheduled row for today resolves to a double, the employee
     // is working a double — period. This takes priority over matchedSchedule so that
     // stale or partially-saved open rows can't downgrade a double to an open shift.
-    let resolvedShiftType: ShiftType = doubleSchedule
+    const scheduledDefaultType: ShiftType = doubleSchedule
       ? "double"
       : (matchedSchedule?.shift_type ?? nearestSchedule?.shift_type ?? "other");
+    let resolvedShiftType: ShiftType = scheduledDefaultType;
 
     const resolvedScheduleId =
       matchedSchedule?.id ??
       doubleSchedule?.id ??
       nearestSchedule?.id ??
       null;
+
+    // Allow a manual override at clock-in. If omitted, the scheduled default is used.
+    if (body.shiftTypeHint && ALLOWED_SHIFT_TYPES.includes(body.shiftTypeHint)) {
+      resolvedShiftType = body.shiftTypeHint;
+    }
 
     if (!hasScheduledShift) {
       if (plannedCst) {
@@ -277,8 +299,6 @@ export async function POST(req: Request) {
         } else if (body.shiftTypeHint && ALLOWED_SHIFT_TYPES.includes(body.shiftTypeHint)) {
           resolvedShiftType = body.shiftTypeHint;
         }
-      } else if (body.shiftTypeHint && ALLOWED_SHIFT_TYPES.includes(body.shiftTypeHint)) {
-        resolvedShiftType = body.shiftTypeHint;
       }
     }
 

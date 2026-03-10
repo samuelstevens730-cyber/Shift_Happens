@@ -246,10 +246,54 @@ export default function ClockPageClient() {
   }, [tokenStore, stores, storeId]);
 
   useEffect(() => {
+    let alive = true;
     const storeName = tokenStore?.name ?? stores.find(s => s.id === storeId)?.name ?? null;
-    if (!plannedStartLocal) return;
-    setShiftKind(inferShiftKind(plannedStartLocal, storeName));
-  }, [plannedStartLocal, tokenStore, stores, storeId]);
+    const fallback = inferShiftKind(plannedStartLocal, storeName);
+
+    const run = async () => {
+      if (!plannedStartLocal) return;
+      const planned = toCstDateFromLocalInput(plannedStartLocal);
+      const resolvedStoreId = tokenStore?.id ?? storeId;
+      const authToken = managerSession ? managerAccessToken : pinToken;
+
+      if (!planned || !resolvedStoreId || !profileId || !authToken) {
+        if (alive) setShiftKind(fallback);
+        return;
+      }
+
+      try {
+        const roundedPlanned = roundTo30Minutes(planned);
+        const params = new URLSearchParams({
+          storeId: resolvedStoreId,
+          profileId,
+          plannedStartAt: roundedPlanned.toISOString(),
+        });
+        const res = await fetch(`/api/start-shift/default-type?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        const json = await res.json();
+        if (!res.ok) throw new Error(json?.error || "Failed to resolve default shift type.");
+        const nextType = json?.shiftType as ShiftKind | undefined;
+        if (alive) setShiftKind(nextType ?? fallback);
+      } catch {
+        if (alive) setShiftKind(fallback);
+      }
+    };
+
+    void run();
+    return () => {
+      alive = false;
+    };
+  }, [
+    plannedStartLocal,
+    tokenStore,
+    stores,
+    storeId,
+    profileId,
+    managerSession,
+    managerAccessToken,
+    pinToken,
+  ]);
 
   const plannedStartRoundedLabel = useMemo(() => {
     if (!plannedStartLocal) return "";
@@ -752,7 +796,23 @@ export default function ClockPageClient() {
             )}
           </div>
 
-          <div className="text-xs muted">Shift type: {shiftKind.toUpperCase()}</div>
+          <div className="space-y-2">
+            <label className="text-sm muted">Shift type</label>
+            <select
+              className="select"
+              value={shiftKind}
+              onChange={e => setShiftKind(e.target.value as ShiftKind)}
+              disabled={submitting}
+            >
+              <option value="open">Open</option>
+              <option value="close">Close</option>
+              <option value="double">Double</option>
+              <option value="other">Other</option>
+            </select>
+            <div className="text-xs muted">
+              Defaults to today&apos;s scheduled shift when available. You can change it before clock-in.
+            </div>
+          </div>
 
         <div className="space-y-2">
           <label className="text-sm muted">Planned start time</label>

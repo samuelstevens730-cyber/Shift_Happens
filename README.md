@@ -255,6 +255,7 @@ src/
 7. Accesses shift detail page with checklist, cleaning tasks, and assignments
 
 **Clock windows**: When a published schedule exists, clock-in is gated to a configurable window around the scheduled start time. A fallback is available if no schedule is published.
+**Shift type defaulting**: Clock-in defaults to the scheduled shift type for that day (including double-shift detection) and can be overridden at clock-in or updated during the active shift.
 
 ### Drawer Variance Tracking
 

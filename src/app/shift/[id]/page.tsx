@@ -220,6 +220,9 @@ export default function ShiftPage() {
   const [showClockOut, setShowClockOut] = useState(false);
   const [showReuseBanner, setShowReuseBanner] = useState(reused);
   const [profileId, setProfileId] = useState<string | null>(null);
+  const [shiftTypeDraft, setShiftTypeDraft] = useState<ShiftType | null>(null);
+  const [shiftTypeSaving, setShiftTypeSaving] = useState(false);
+  const [shiftTypeErr, setShiftTypeErr] = useState<string | null>(null);
   const [cleaningTasks, setCleaningTasks] = useState<CleaningTaskRow[]>([]);
   const [cleaningLoading, setCleaningLoading] = useState(false);
   const [cleaningErr, setCleaningErr] = useState<string | null>(null);
@@ -481,6 +484,11 @@ export default function ShiftPage() {
     if (!state?.shift?.id) return;
     void loadCleaningTasks();
   }, [state?.shift?.id, loadCleaningTasks]);
+
+  useEffect(() => {
+    if (!state?.shift?.shift_type) return;
+    setShiftTypeDraft(state.shift.shift_type);
+  }, [state?.shift?.shift_type]);
 
   useEffect(() => {
     if (!authBootstrapped || !state?.shift?.id) return;
@@ -818,9 +826,68 @@ export default function ShiftPage() {
           </div>
         )}
 
-        <div className="text-sm text-gray-600">
-          Store: <b>{state.store.name}</b> · Employee: <b>{state.employee || "Unknown"}</b> · Type:{" "}
-          <b>{state.shift.shift_type}</b>
+        <div className="space-y-2 rounded border border-slate-300 bg-white p-3">
+          <div className="text-sm text-gray-600">
+            Store: <b>{state.store.name}</b> · Employee: <b>{state.employee || "Unknown"}</b>
+          </div>
+          <div className="flex items-center gap-2">
+            <label className="text-sm text-gray-600">Shift Type</label>
+            <select
+              className="border rounded p-1.5 text-sm"
+              value={shiftTypeDraft ?? state.shift.shift_type}
+              onChange={(e) => {
+                setShiftTypeDraft(e.target.value as ShiftType);
+                setShiftTypeErr(null);
+              }}
+              disabled={shiftTypeSaving}
+            >
+              <option value="open">Open</option>
+              <option value="close">Close</option>
+              <option value="double">Double</option>
+              <option value="other">Other</option>
+            </select>
+            <button
+              className="rounded bg-black px-2.5 py-1 text-xs text-white disabled:opacity-50"
+              disabled={
+                shiftTypeSaving ||
+                !shiftTypeDraft ||
+                shiftTypeDraft === state.shift.shift_type
+              }
+              onClick={async () => {
+                if (!shiftTypeDraft || shiftTypeDraft === state.shift.shift_type) return;
+                setShiftTypeErr(null);
+                setShiftTypeSaving(true);
+                try {
+                  const authToken = await resolveAuthToken();
+                  if (!authToken) throw new Error("Session expired. Please refresh.");
+                  const res = await fetch(`/api/shift/${shiftId}/shift-type`, {
+                    method: "PATCH",
+                    headers: {
+                      "Content-Type": "application/json",
+                      Authorization: `Bearer ${authToken}`,
+                    },
+                    body: JSON.stringify({ shiftType: shiftTypeDraft }),
+                  });
+                  const json = await res.json();
+                  if (!res.ok) throw new Error(json?.error || "Failed to update shift type.");
+                  await reloadShift();
+                } catch (e: unknown) {
+                  setShiftTypeErr(
+                    e instanceof Error ? e.message : "Failed to update shift type."
+                  );
+                } finally {
+                  setShiftTypeSaving(false);
+                }
+              }}
+            >
+              {shiftTypeSaving ? "Saving..." : "Save"}
+            </button>
+          </div>
+          {shiftTypeErr && (
+            <div className="text-xs rounded border border-amber-300 bg-amber-50 p-2 text-amber-700">
+              {shiftTypeErr}
+            </div>
+          )}
         </div>
         {requiresStartDrawerCapture && (
           <StartDrawerCapturePanel
