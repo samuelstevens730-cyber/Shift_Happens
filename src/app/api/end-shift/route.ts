@@ -38,6 +38,7 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { isOutOfThreshold, ShiftType } from "@/lib/kioskRules";
 import { authenticateShiftRequest } from "@/lib/shiftAuth";
+import { actualCoverageFromTimes, collapseScheduledCoverage } from "@/lib/shiftOverride";
 import { fetchCurrentWeather } from "@/lib/weatherClient";
 
 type Body = {
@@ -65,6 +66,8 @@ type ScheduleShiftRow = {
   shift_date: string;
   scheduled_start: string;
   scheduled_end: string;
+  shift_type: string | null;
+  shift_mode: string | null;
 };
 
 type SalesDailyRecordRow = {
@@ -75,22 +78,11 @@ type SalesDailyRecordRow = {
   mid_x_report_cents?: number | null;
 };
 
-const SCHEDULED_OVERRIDE_GRACE_MINUTES = 15;
-
 function parseClockWindowError(message: string) {
   const token = "CLOCK_WINDOW_VIOLATION:";
   if (!message.includes(token)) return null;
   const label = message.split(token)[1]?.trim() || "Outside allowed clock window";
   return { code: "CLOCK_WINDOW_VIOLATION", windowLabel: label };
-}
-
-function parseTimeToMinutes(timeValue: string): number | null {
-  const parts = timeValue.split(":");
-  if (parts.length < 2) return null;
-  const hour = Number(parts[0]);
-  const minute = Number(parts[1]);
-  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
-  return (hour * 60) + minute;
 }
 
 function getCstDateKey(value: string): string | null {
@@ -608,40 +600,40 @@ export async function POST(req: Request) {
     const endAt = new Date(body.endAt);
     if (Number.isNaN(endAt.getTime())) return NextResponse.json({ error: "Invalid endAt." }, { status: 400 });
 
-    let hasScheduledShift = false;
-    let scheduledDurationHours: number | null = null;
+    let scheduleVarianceRequiresOverride = false;
     if (shift.schedule_shift_id) {
-      const { data: scheduleShift, error: scheduleShiftErr } = await supabaseServer
-        .from("schedule_shifts")
-        .select("shift_date, scheduled_start, scheduled_end")
-        .eq("id", shift.schedule_shift_id)
-        .maybeSingle<ScheduleShiftRow>();
-      if (!scheduleShiftErr && scheduleShift) {
-        hasScheduledShift = true;
-        const scheduledStartMinutes = parseTimeToMinutes(scheduleShift.scheduled_start);
-        const scheduledEndMinutes = parseTimeToMinutes(scheduleShift.scheduled_end);
-        if (scheduledStartMinutes != null && scheduledEndMinutes != null) {
-          const scheduledMinutes = scheduledEndMinutes >= scheduledStartMinutes
-            ? (scheduledEndMinutes - scheduledStartMinutes)
-            : ((24 * 60 - scheduledStartMinutes) + scheduledEndMinutes);
-          scheduledDurationHours = scheduledMinutes / 60;
+      const shiftDate = getCstDateKey(shift.planned_start_at);
+      if (shiftDate) {
+        const { data: scheduledRows, error: scheduleShiftErr } = await supabaseServer
+          .from("schedule_shifts")
+          .select("shift_date, scheduled_start, scheduled_end, shift_type, shift_mode, schedules!inner(status)")
+          .eq("store_id", shift.store_id)
+          .eq("profile_id", shift.profile_id)
+          .eq("shift_date", shiftDate)
+          .eq("schedules.status", "published")
+          .returns<ScheduleShiftRow[]>();
+        if (!scheduleShiftErr && scheduledRows?.length) {
+          const scheduledCoverage = collapseScheduledCoverage(scheduledRows);
+          const actualWindow = scheduledCoverage
+            ? actualCoverageFromTimes(scheduledCoverage.shiftDate, shift.planned_start_at, endAt.toISOString())
+            : null;
+          if (scheduledCoverage && actualWindow) {
+            scheduleVarianceRequiresOverride =
+              actualWindow.startMinutes !== scheduledCoverage.startMinutes ||
+              actualWindow.endMinutes !== scheduledCoverage.endMinutes ||
+              actualWindow.durationMinutes !== scheduledCoverage.durationMinutes;
+          }
         }
       }
     }
 
-    // Clock-window enforcement is temporarily disabled.
-
-    // Override review should be based on scheduled/planned start -> actual clock-out submission time.
     const plannedStartAt = new Date(shift.planned_start_at);
     const durationHours = Number.isNaN(plannedStartAt.getTime())
       ? null
       : (endAt.getTime() - plannedStartAt.getTime()) / (1000 * 60 * 60);
-    const overScheduledDuration = hasScheduledShift
-      && durationHours != null
-      && scheduledDurationHours != null
-      && durationHours > (scheduledDurationHours + (SCHEDULED_OVERRIDE_GRACE_MINUTES / 60));
     const durationRequiresOverride = durationHours != null && durationHours > 13;
-    const requiresOverride = Boolean(shift.requires_override) || durationRequiresOverride || overScheduledDuration;
+    const requiresOverride =
+      Boolean(shift.requires_override) || durationRequiresOverride || scheduleVarianceRequiresOverride;
 
     const updatePayload: Record<string, string | boolean | null> = {
       ended_at: endAt.toISOString(),
@@ -654,8 +646,8 @@ export async function POST(req: Request) {
       updatePayload.shift_source = "scheduled";
     }
 
-    if (overScheduledDuration) {
-      updatePayload.override_note = "Clock-out exceeded scheduled hours";
+    if (scheduleVarianceRequiresOverride) {
+      updatePayload.override_note = "Planned shift times differed from scheduled coverage";
     }
 
     if (body.manualClose) {

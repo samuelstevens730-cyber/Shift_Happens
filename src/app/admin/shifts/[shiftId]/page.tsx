@@ -480,7 +480,7 @@ export default function AdminShiftDetailPage() {
     if (
       action === "clear" &&
       !window.confirm(
-        "Clear the override flag for this shift? This marks the long shift as no longer requiring manager approval."
+        "Clear the review flag for this shift? This marks the scheduled shift variation as no longer requiring manager approval."
       )
     ) {
       return;
@@ -573,9 +573,9 @@ export default function AdminShiftDetailPage() {
             <Badge variant="outline">{data.shift.shiftType.toUpperCase()}</Badge>
             {data.shift.manualClosed ? <Badge variant="secondary">Manual Closed</Badge> : null}
             {data.shift.requiresOverride && !data.shift.overrideAt ? (
-              <Badge variant="destructive">Override Required</Badge>
+              <Badge variant="destructive">Review Required</Badge>
             ) : data.shift.requiresOverride && data.shift.overrideAt ? (
-              <Badge variant="outline" className="border-green-600 text-green-400">Override Approved</Badge>
+              <Badge variant="outline" className="border-green-600 text-green-400">Review Approved</Badge>
             ) : null}
             {data.shift.scheduleShiftId ? <Badge variant="outline">Scheduled</Badge> : <Badge variant="secondary">Unscheduled</Badge>}
           </div>
@@ -659,7 +659,7 @@ export default function AdminShiftDetailPage() {
                         /* ── Approved state ── */
                         <div className="rounded border border-green-700/50 bg-green-950/30 p-3 space-y-1.5">
                           <div className="flex items-center gap-2 text-green-400 font-medium text-sm">
-                            ✓ Override Approved
+                            Approved for payroll
                           </div>
                           <div className="text-xs text-slate-400">
                             {fmtDateTime(data.shift.overrideAt)}
@@ -674,14 +674,14 @@ export default function AdminShiftDetailPage() {
                             onClick={() => void handleOverride("clear")}
                             disabled={overrideSaving}
                           >
-                            {overrideSaving ? "Clearing..." : "Clear Override Flag"}
+                            {overrideSaving ? "Clearing..." : "Clear Review Flag"}
                           </button>
                         </div>
                       ) : (
                         /* ── Needs approval state ── */
                         <div className="rounded border border-amber-700/50 bg-amber-950/30 p-3 space-y-2">
                           <div className="text-amber-400 font-medium text-sm">
-                            ⚠ Override Required — Long or Extended Shift
+                            Scheduled shift variation needs manager review
                           </div>
                           <label className="block text-xs text-slate-300">
                             Approval Note (required):
@@ -690,7 +690,7 @@ export default function AdminShiftDetailPage() {
                               rows={2}
                               value={overrideNote}
                               onChange={(e) => setOverrideNote(e.target.value)}
-                              placeholder="Explain why this long shift is approved…"
+                              placeholder="Explain why this scheduled shift variation is approved..."
                             />
                           </label>
                           <div className="flex gap-2">
@@ -699,7 +699,7 @@ export default function AdminShiftDetailPage() {
                               onClick={() => void handleOverride("approve")}
                               disabled={overrideSaving}
                             >
-                              {overrideSaving ? "Approving..." : "Approve Override"}
+                              {overrideSaving ? "Approving..." : "Approve Review"}
                             </button>
                             <button
                               className="rounded border border-slate-600 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-800 disabled:opacity-60"
@@ -714,7 +714,7 @@ export default function AdminShiftDetailPage() {
                     </div>
                   ) : (
                     <div className="sm:col-span-2 text-xs text-slate-500">
-                      No override required for this shift.
+                      No manager review required for this shift.
                     </div>
                   )}
                   <label>

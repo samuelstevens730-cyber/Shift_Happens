@@ -261,10 +261,13 @@ export async function POST(req: Request) {
       : (matchedSchedule?.shift_type ?? nearestSchedule?.shift_type ?? "other");
     let resolvedShiftType: ShiftType = scheduledDefaultType;
 
+    // Anchor schedule_shift_id to the row nearest the actual clock-in time.
+    // Using an arbitrary "double" row here can point to the PM segment and
+    // later make normal doubles look over-scheduled at clock-out.
     const resolvedScheduleId =
       matchedSchedule?.id ??
-      doubleSchedule?.id ??
       nearestSchedule?.id ??
+      doubleSchedule?.id ??
       null;
 
     // Allow a manual override at clock-in. If omitted, the scheduled default is used.

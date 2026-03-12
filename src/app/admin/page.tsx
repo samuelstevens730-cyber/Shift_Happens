@@ -242,11 +242,11 @@ export default function AdminIndex() {
             </p>
           </Link>
 
-          {/* Long Shift Overrides - approve shifts >13 hours */}
+          {/* Scheduled Shift Variations - approve schedule/time deviations and long shifts */}
           <Link href="/admin/overrides" className="tile">
             <div className="flex items-center gap-2">
               <span className="tile-dot" />
-              <div className="text-lg font-medium">Long Shift Overrides</div>
+              <div className="text-lg font-medium">Scheduled Shift Variations</div>
             </div>
             <p className="mt-2 text-sm muted">
               Approve shifts that exceed 13 hours.

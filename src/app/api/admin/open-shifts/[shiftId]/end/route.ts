@@ -32,6 +32,7 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
+import { actualCoverageFromTimes, collapseScheduledCoverage } from "@/lib/shiftOverride";
 
 type EndBody = { endAt?: string };
 
@@ -39,10 +40,36 @@ type ShiftRow = {
   id: string;
   shift_type: string | null;
   ended_at: string | null;
+  planned_start_at: string | null;
   started_at: string | null;
+  profile_id: string;
   schedule_shift_id: string | null;
   store: { id: string; expected_drawer_cents: number } | null;
 };
+
+type ScheduleShiftRow = {
+  shift_date: string;
+  scheduled_start: string;
+  scheduled_end: string;
+  shift_type: string | null;
+  shift_mode: string | null;
+};
+
+function getCstDateKey(value: string) {
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(dt);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  if (!year || !month || !day) return null;
+  return `${year}-${month}-${day}`;
+}
 
 function parseBody(value: unknown): EndBody {
   if (!value || typeof value !== "object") return {};
@@ -79,7 +106,7 @@ export async function POST(
 
     const { data: shift, error: shiftErr } = await supabaseServer
       .from("shifts")
-      .select("id, shift_type, ended_at, started_at, schedule_shift_id, store:store_id(id, expected_drawer_cents)")
+      .select("id, shift_type, ended_at, planned_start_at, started_at, profile_id, schedule_shift_id, store:store_id(id, expected_drawer_cents)")
       .eq("id", shiftId)
       .maybeSingle()
       .returns<ShiftRow>();
@@ -113,17 +140,45 @@ export async function POST(
       if (countErr) return NextResponse.json({ error: countErr.message }, { status: 500 });
     }
 
-    const startedAt = shift.started_at ? new Date(shift.started_at) : null;
-    const durationHours = startedAt && !Number.isNaN(startedAt.getTime())
-      ? (endAt.getTime() - startedAt.getTime()) / (1000 * 60 * 60)
+    let scheduleVarianceRequiresOverride = false;
+    if (shift.schedule_shift_id && shift.planned_start_at) {
+      const shiftDate = getCstDateKey(shift.planned_start_at);
+      if (shiftDate && shift.store?.id) {
+        const { data: scheduledRows, error: scheduleShiftErr } = await supabaseServer
+          .from("schedule_shifts")
+          .select("shift_date, scheduled_start, scheduled_end, shift_type, shift_mode, schedules!inner(status)")
+          .eq("store_id", shift.store.id)
+          .eq("profile_id", shift.profile_id)
+          .eq("shift_date", shiftDate)
+          .eq("schedules.status", "published")
+          .returns<ScheduleShiftRow[]>();
+        if (!scheduleShiftErr && scheduledRows?.length) {
+          const scheduledCoverage = collapseScheduledCoverage(scheduledRows);
+          const actualWindow = scheduledCoverage
+            ? actualCoverageFromTimes(scheduledCoverage.shiftDate, shift.planned_start_at, endAt.toISOString())
+            : null;
+          if (scheduledCoverage && actualWindow) {
+            scheduleVarianceRequiresOverride =
+              actualWindow.startMinutes !== scheduledCoverage.startMinutes ||
+              actualWindow.endMinutes !== scheduledCoverage.endMinutes ||
+              actualWindow.durationMinutes !== scheduledCoverage.durationMinutes;
+          }
+        }
+      }
+    }
+
+    const plannedStartAt = shift.planned_start_at ? new Date(shift.planned_start_at) : null;
+    const durationHours = plannedStartAt && !Number.isNaN(plannedStartAt.getTime())
+      ? (endAt.getTime() - plannedStartAt.getTime()) / (1000 * 60 * 60)
       : null;
-    const requiresOverride = durationHours != null && durationHours > 13;
+    const requiresOverride = Boolean(scheduleVarianceRequiresOverride) || (durationHours != null && durationHours > 13);
 
     const { data, error } = await supabaseServer
       .from("shifts")
       .update({
         ended_at: endAt.toISOString(),
         requires_override: requiresOverride,
+        ...(scheduleVarianceRequiresOverride ? { override_note: "Planned shift times differed from scheduled coverage" } : {}),
         last_action: "edited",
         last_action_by: user.id,
         ...(shift.schedule_shift_id ? { shift_source: "scheduled" } : {}),

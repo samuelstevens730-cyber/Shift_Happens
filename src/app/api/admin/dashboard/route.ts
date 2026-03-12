@@ -370,7 +370,7 @@ export async function GET(req: Request) {
       id: `people-override-${row.id}`,
       category: "people" as const,
       severity: (row.started_at && row.started_at < staleShiftCutoffIso ? "high" : "medium") as "high" | "medium",
-      title: row.ended_at ? "Completed shift requires override approval" : "Open shift requires override approval",
+      title: row.ended_at ? "Completed shift has a scheduled shift variation" : "Open shift has a scheduled shift variation",
       description: row.started_at ? `Started ${row.started_at}` : "Start time missing",
       store_id: row.store_id,
       created_at: row.started_at,
@@ -651,7 +651,7 @@ export async function GET(req: Request) {
       const cleaningRate = cleaningTotal > 0 ? cleaningCompleted / cleaningTotal : 1;
 
       const signals = [
-        { name: "Unapproved long shifts", maxScore: 15, score: clampScore(15 - unapprovedLong * 5, 15) },
+        { name: "Unreviewed shift variations", maxScore: 15, score: clampScore(15 - unapprovedLong * 5, 15) },
         { name: "Stale shifts >13h", maxScore: 10, score: staleShifts > 0 ? 0 : 10 },
         { name: "Manual closes unreviewed", maxScore: 10, score: clampScore(10 - manualUnreviewed * 3, 10) },
         { name: "Drawer variance rate", maxScore: 15, score: clampScore(Math.round(15 * (1 - drawerRate)), 15) },

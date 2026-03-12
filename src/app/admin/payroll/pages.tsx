@@ -364,13 +364,13 @@ function ShiftSlideOver({
             </label>
             {requiresOverride && !overrideApproved && (
               <div className="rounded border border-amber-700/50 bg-amber-950/20 p-3 space-y-2">
-                <div className="text-xs font-semibold text-amber-300">⚠ Override Required</div>
+                <div className="text-xs font-semibold text-amber-300">Scheduled Shift Variation</div>
                 <label className="block text-sm">
-                  <span className="text-slate-400">Override Note (required)</span>
+                  <span className="text-slate-400">Review Note (required)</span>
                   <textarea
                     className="mt-1 w-full rounded border border-amber-700/60 bg-slate-900 px-2 py-1.5 text-sm text-slate-100 placeholder:text-slate-600"
                     rows={2}
-                    placeholder="Reason for approving this override…"
+                    placeholder="Reason for approving this scheduled shift variation..."
                     value={overrideNoteInput}
                     onChange={e => setOverrideNoteInput(e.target.value)}
                   />
@@ -380,13 +380,13 @@ function ShiftSlideOver({
                   disabled={overrideSaving}
                   className="w-full rounded bg-amber-600 px-3 py-2 text-sm font-medium text-white hover:bg-amber-500 disabled:opacity-60"
                 >
-                  {overrideSaving ? "Approving…" : "Approve Override"}
+                  {overrideSaving ? "Approving..." : "Approve Review"}
                 </button>
               </div>
             )}
             {requiresOverride && overrideApproved && (
               <div className="rounded border border-emerald-700/40 bg-emerald-950/20 px-3 py-2 text-xs text-emerald-300">
-                ✓ Override approved
+                Approved for payroll
               </div>
             )}
             <label className="block text-sm">

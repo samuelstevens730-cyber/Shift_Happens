@@ -1,23 +1,5 @@
 /**
- * Long Shift Overrides Page - Approve shifts exceeding maximum duration threshold
- *
- * This administrative page displays shifts that have exceeded the maximum allowed duration
- * (typically 13+ hours) and require manual override approval before being processed for
- * payroll. This prevents payroll errors from forgotten clock-outs or system glitches.
- *
- * Features:
- * - View all shifts requiring duration override approval
- * - Display shift details including store, employee, start/end times, and calculated duration
- * - Require approval note explaining why the long shift is valid
- * - One-click approval with mandatory justification
- * - Automatic list refresh after approval
- *
- * Business Logic:
- * - Shifts over the threshold (e.g., 13 hours) are flagged for review
- * - Approval note is required - empty notes are rejected
- * - Approved shifts are removed from the pending list and become eligible for payroll
- * - This acts as a safeguard against paying for incorrectly long shifts
- * - Common valid reasons include double shifts, overnight coverage, or special events
+ * Scheduled Shift Variations Page - Approve schedule/time deviations and unusually long shifts.
  */
 "use client";
 
@@ -180,7 +162,7 @@ function OverridesContent() {
   return (
     <div className="app-shell">
       <div className="max-w-5xl mx-auto space-y-6">
-        <h1 className="text-2xl font-semibold">Long Shift Overrides</h1>
+        <h1 className="text-2xl font-semibold">Scheduled Shift Variations</h1>
 
         {source === "dashboard" && (
           <div className="banner text-xs border border-cyan-500/40 bg-cyan-500/10 text-cyan-100">
@@ -215,7 +197,7 @@ function OverridesContent() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm">
                 <div>Started: <b>{formatWhen(r.startedAt)}</b></div>
                 <div>Duration: <b>{r.durationHours != null ? `${r.durationHours} hrs` : "--"}</b></div>
-                <div>Status: <b>Requires override</b></div>
+                <div>Status: <b>Needs manager review</b></div>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
@@ -238,7 +220,7 @@ function OverridesContent() {
 
           {!rows.length && (
             <div className="card card-pad text-center text-sm muted">
-              No shifts require override.
+              No scheduled shift variations need review.
             </div>
           )}
         </div>
