@@ -3,12 +3,6 @@ import { supabaseServer } from "@/lib/supabaseServer";
 import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
 
 type StoreRow = { id: string; name: string };
-type ShiftRow = {
-  id: string;
-  store_id: string;
-  planned_start_at: string;
-  profile: { name: string | null } | null;
-};
 type CompletionRow = {
   id: string;
   shift_id: string;
@@ -20,10 +14,24 @@ type CompletionRow = {
     shift_type: "am" | "pm";
     cleaning_task: { name: string; category: string | null } | null;
   } | null;
+  shifts: {
+    id: string;
+    store_id: string;
+    profile: { name: string | null } | null;
+  } | null;
 };
 
 function cstDateKey(date: Date) {
-  return date.toLocaleDateString("en-CA", { timeZone: "America/Chicago" });
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  return year && month && day ? `${year}-${month}-${day}` : "";
 }
 
 function addDays(date: Date, days: number) {
@@ -105,31 +113,16 @@ export async function GET(req: Request) {
       .returns<StoreRow[]>();
     if (storesErr) return NextResponse.json({ error: storesErr.message }, { status: 500 });
 
-    const { data: shifts, error: shiftsErr } = await supabaseServer
-      .from("shifts")
-      .select("id, store_id, planned_start_at, profile:profile_id(name)")
-      .in("store_id", managerStoreIds)
-      .gte("planned_start_at", fromUtcIso)
-      .lt("planned_start_at", toUtcIso)
-      .neq("last_action", "removed")
-      .returns<ShiftRow[]>();
-    if (shiftsErr) return NextResponse.json({ error: shiftsErr.message }, { status: 500 });
-
-    const shiftMap = new Map((shifts ?? []).map((shift) => [shift.id, shift]));
-    const shiftIds = Array.from(shiftMap.keys());
-
-    let completions: CompletionRow[] = [];
-    if (shiftIds.length) {
-      const { data: completionRows, error: completionsErr } = await supabaseServer
-        .from("cleaning_task_completions")
-        .select(
-          "id, shift_id, status, completed_at, skipped_reason, completed_by_profile:completed_by(name), schedule:store_cleaning_schedule_id(shift_type, cleaning_task:cleaning_task_id(name, category))"
-        )
-        .in("shift_id", shiftIds)
-        .returns<CompletionRow[]>();
-      if (completionsErr) return NextResponse.json({ error: completionsErr.message }, { status: 500 });
-      completions = completionRows ?? [];
-    }
+    const { data: completions, error: completionsErr } = await supabaseServer
+      .from("cleaning_task_completions")
+      .select(
+        "id, shift_id, status, completed_at, skipped_reason, completed_by_profile:completed_by(name), schedule:store_cleaning_schedule_id(shift_type, cleaning_task:cleaning_task_id(name, category)), shifts:shift_id!inner(id, store_id, profile:profile_id(name))"
+      )
+      .in("shifts.store_id", managerStoreIds)
+      .gte("completed_at", fromUtcIso)
+      .lt("completed_at", toUtcIso)
+      .returns<CompletionRow[]>();
+    if (completionsErr) return NextResponse.json({ error: completionsErr.message }, { status: 500 });
 
     const rowsByStore = new Map<string, Array<{
       id: string;
@@ -144,8 +137,8 @@ export async function GET(req: Request) {
       skippedReason: string | null;
     }>>();
 
-    for (const row of completions) {
-      const shift = shiftMap.get(row.shift_id);
+    for (const row of completions ?? []) {
+      const shift = row.shifts;
       if (!shift) continue;
       const list = rowsByStore.get(shift.store_id) ?? [];
       list.push({
@@ -177,4 +170,3 @@ export async function GET(req: Request) {
     );
   }
 }
-
