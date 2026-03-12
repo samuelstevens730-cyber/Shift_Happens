@@ -795,12 +795,20 @@ function HomePageInner() {
 
           {/* ADMIN */}
           {showAdmin ? (
-            <Link href="/admin" className="bento-card bento-admin">
-              <div className="flex flex-col items-center justify-center gap-3">
-                <Shield className="w-10 h-10 md:w-12 md:h-12 text-pink-400" strokeWidth={1.5} />
-                <span className="bento-card-title">ADMIN</span>
-              </div>
-            </Link>
+            <div className="space-y-2">
+              <Link href="/admin" className="bento-card bento-admin">
+                <div className="flex flex-col items-center justify-center gap-3">
+                  <Shield className="w-10 h-10 md:w-12 md:h-12 text-pink-400" strokeWidth={1.5} />
+                  <span className="bento-card-title">ADMIN</span>
+                </div>
+              </Link>
+              <Link
+                href="/admin/cleaning/report"
+                className="block rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-center text-xs font-semibold tracking-wide text-cyan-200 hover:bg-cyan-500/15"
+              >
+                QUICK LINK: CLEANING AUDIT
+              </Link>
+            </div>
           ) : (
             <div className="bento-card bento-admin bento-card-disabled">
               <div className="flex flex-col items-center justify-center gap-3">
