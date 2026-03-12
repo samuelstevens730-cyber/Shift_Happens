@@ -41,7 +41,7 @@ Workforce management application for two retail stores (**LV1**, **LV2**).
 | `time_off_requests` + `time_off_blocks` | Time-off request workflow |
 | `timesheet_change_requests` | Timesheet correction requests |
 | `advance_requests` | Pay advance requests |
-| `profiles` | Employee records: `pin_hash`, `pin_fingerprint`, `name`, `avatar_url`, `active` |
+| `profiles` | Employee records: `pin_hash`, `pin_fingerprint`, `employee_code`, `name`, `avatar_url`, `active`, `auth_user_id` |
 | `app_users` | Manager records — linked to `auth.users` via `auth_user_id` |
 | `store_managers` | Manager-to-store assignment (scoping table for all admin auth) |
 | `store_memberships` | Employee-to-store assignment |
@@ -90,7 +90,9 @@ Workforce management application for two retail stores (**LV1**, **LV2**).
 | `/admin/reports/performance-summary` | Employee performance report (period analysis, benchmarks) |
 | `/admin/reports/store-sales` | Store executive report (cross-store sales, RPLH, weather) |
 | `/admin/reviews` | Reviews approval queue, full history table, CSV export, and manager direct submit |
-| `/admin/users` | Employee profile and store assignment management |
+| `/admin/users` | Employee profile/store assignment management plus employee-code visibility/editing |
+| `/admin/cleaning` | Cleaning task library editor plus store/day/shift requirement matrix |
+| `/admin/cleaning/report` | Day-by-day cleaning audit of completed and skipped tasks by store |
 | `/admin/assignments` | Assign tasks and messages for next shift |
 | `/admin/settings` | Store config, checklists, feature flags |
 | `/admin/scheduler` | Schedule builder and publishing |
@@ -136,6 +138,7 @@ src/app/api/
     ├── variances/        GET   Variance review queue; /[id]/review
     ├── overrides/        GET   Long shifts; /[id]/approve
     ├── users/            GET/POST/PATCH  Employee management
+    ├── cleaning/         GET/POST  Cleaning matrix; /tasks for task CRUD; /report for audit data
     ├── settings/         GET/PATCH  Store config
     ├── reports/
     │   ├── performance-summary/  GET  Employee performance report

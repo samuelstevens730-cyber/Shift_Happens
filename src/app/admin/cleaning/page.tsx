@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
@@ -57,6 +58,12 @@ export default function AdminCleaningPage() {
   const [tasks, setTasks] = useState<CleaningTask[]>([]);
   const [requiredSet, setRequiredSet] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
+  const [taskSaving, setTaskSaving] = useState(false);
+  const [taskMessage, setTaskMessage] = useState<string | null>(null);
+  const [newTaskName, setNewTaskName] = useState("");
+  const [newTaskDescription, setNewTaskDescription] = useState("");
+  const [newTaskCategory, setNewTaskCategory] = useState("");
+  const [newTaskSortOrder, setNewTaskSortOrder] = useState("0");
 
   const loadConfig = async (nextStoreId?: string) => {
     setError(null);
@@ -118,6 +125,50 @@ export default function AdminCleaningPage() {
   }, [isAuthed]);
 
   const totalRequired = useMemo(() => requiredSet.size, [requiredSet]);
+  const activeTasks = useMemo(() => tasks.filter((task) => task.is_active), [tasks]);
+
+  const saveTask = async (payload: {
+    taskId?: string;
+    name: string;
+    description?: string | null;
+    category?: string | null;
+    sortOrder?: number;
+    isActive?: boolean;
+  }, method: "POST" | "PATCH") => {
+    setTaskSaving(true);
+    setTaskMessage(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || "";
+      if (!token) {
+        router.replace("/login?next=/admin/cleaning");
+        return false;
+      }
+
+      const res = await fetch("/api/admin/cleaning/tasks", {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      const json = (await res.json()) as { ok?: boolean; error?: string };
+      if (!res.ok || !json.ok) {
+        setTaskMessage(json.error ?? "Failed to save cleaning task.");
+        return false;
+      }
+
+      await loadConfig(storeId || undefined);
+      setTaskMessage(method === "POST" ? "Cleaning task added." : "Cleaning task updated.");
+      return true;
+    } catch (e: unknown) {
+      setTaskMessage(e instanceof Error ? e.message : "Failed to save cleaning task.");
+      return false;
+    } finally {
+      setTaskSaving(false);
+    }
+  };
 
   const toggleCell = (taskId: string, dayOfWeek: number, shiftType: ShiftType) => {
     const key = matrixKey(taskId, dayOfWeek, shiftType);
@@ -179,11 +230,87 @@ export default function AdminCleaningPage() {
     <div className="app-shell">
       <div className="mx-auto max-w-6xl space-y-6">
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-2xl font-semibold">Cleaning Tasks</h1>
-          <div className="text-sm muted">Store/day/shift matrix</div>
+          <div>
+            <h1 className="text-2xl font-semibold">Cleaning Tasks</h1>
+            <div className="text-sm muted">Store/day/shift matrix</div>
+          </div>
+          <Link href="/admin/cleaning/report" className="btn-secondary px-4 py-2 text-sm">
+            Open Cleaning Audit
+          </Link>
         </div>
 
         {error && <div className="banner banner-error text-sm">{error}</div>}
+        {taskMessage && <div className="banner text-sm">{taskMessage}</div>}
+
+        <div className="card card-pad space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-lg font-medium">Manage Cleaning Tasks</div>
+            <div className="text-sm muted">Create, edit, or deactivate tasks</div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_180px_120px_auto]">
+            <input
+              className="input"
+              value={newTaskName}
+              onChange={(e) => setNewTaskName(e.target.value)}
+              placeholder="Task name"
+            />
+            <input
+              className="input"
+              value={newTaskDescription}
+              onChange={(e) => setNewTaskDescription(e.target.value)}
+              placeholder="Description"
+            />
+            <input
+              className="input"
+              value={newTaskCategory}
+              onChange={(e) => setNewTaskCategory(e.target.value)}
+              placeholder="Category"
+            />
+            <input
+              className="input"
+              type="number"
+              value={newTaskSortOrder}
+              onChange={(e) => setNewTaskSortOrder(e.target.value)}
+              placeholder="Sort"
+            />
+            <button
+              className="btn-primary px-4 py-2 disabled:opacity-50"
+              disabled={taskSaving || !newTaskName.trim()}
+              onClick={async () => {
+                const ok = await saveTask(
+                  {
+                    name: newTaskName,
+                    description: newTaskDescription,
+                    category: newTaskCategory,
+                    sortOrder: Number(newTaskSortOrder) || 0,
+                    isActive: true,
+                  },
+                  "POST"
+                );
+                if (!ok) return;
+                setNewTaskName("");
+                setNewTaskDescription("");
+                setNewTaskCategory("");
+                setNewTaskSortOrder("0");
+              }}
+            >
+              {taskSaving ? "Saving..." : "Add Task"}
+            </button>
+          </div>
+
+          <div className="space-y-3">
+            {tasks.map((task) => (
+              <TaskEditorRow
+                key={task.id}
+                task={task}
+                disabled={taskSaving}
+                onSave={(draft) => saveTask(draft, "PATCH")}
+              />
+            ))}
+            {!tasks.length && <div className="text-sm muted">No cleaning tasks created yet.</div>}
+          </div>
+        </div>
 
         <div className="card card-pad space-y-4">
           <div className="flex flex-wrap items-end justify-between gap-3">
@@ -229,7 +356,7 @@ export default function AdminCleaningPage() {
                 </tr>
               </thead>
               <tbody>
-                {tasks.map(task => (
+                {activeTasks.map(task => (
                   <tr key={task.id}>
                     <td className="border border-[var(--cardBorder)] p-2 sticky left-0 bg-[var(--card)] z-10">
                       <div className="font-medium">{task.name}</div>
@@ -246,7 +373,7 @@ export default function AdminCleaningPage() {
                     ))}
                   </tr>
                 ))}
-                {tasks.length === 0 && (
+                {activeTasks.length === 0 && (
                   <tr>
                     <td className="border border-[var(--cardBorder)] p-3 text-sm muted" colSpan={15}>
                       No active cleaning tasks found.
@@ -297,5 +424,76 @@ function FragmentCell({
         <input type="checkbox" checked={checkedPm} onChange={onTogglePm} />
       </td>
     </>
+  );
+}
+
+function TaskEditorRow({
+  task,
+  disabled,
+  onSave,
+}: {
+  task: CleaningTask;
+  disabled: boolean;
+  onSave: (draft: {
+    taskId: string;
+    name: string;
+    description?: string | null;
+    category?: string | null;
+    sortOrder?: number;
+    isActive?: boolean;
+  }) => Promise<boolean>;
+}) {
+  const [name, setName] = useState(task.name);
+  const [description, setDescription] = useState(task.description ?? "");
+  const [category, setCategory] = useState(task.category ?? "");
+  const [sortOrder, setSortOrder] = useState(String(task.sort_order));
+  const [isActive, setIsActive] = useState(task.is_active);
+
+  useEffect(() => {
+    setName(task.name);
+    setDescription(task.description ?? "");
+    setCategory(task.category ?? "");
+    setSortOrder(String(task.sort_order));
+    setIsActive(task.is_active);
+  }, [task]);
+
+  return (
+    <div className="grid gap-3 rounded border border-[var(--cardBorder)] p-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_180px_120px_auto_auto]">
+      <input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Task name" />
+      <input
+        className="input"
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder="Description"
+      />
+      <input className="input" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="Category" />
+      <input
+        className="input"
+        type="number"
+        value={sortOrder}
+        onChange={(e) => setSortOrder(e.target.value)}
+        placeholder="Sort"
+      />
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
+        {isActive ? "Active" : "Inactive"}
+      </label>
+      <button
+        className="btn-secondary px-4 py-2 disabled:opacity-50"
+        disabled={disabled || !name.trim()}
+        onClick={() =>
+          void onSave({
+            taskId: task.id,
+            name,
+            description,
+            category,
+            sortOrder: Number(sortOrder) || 0,
+            isActive,
+          })
+        }
+      >
+        {disabled ? "Saving..." : "Save Task"}
+      </button>
+    </div>
   );
 }

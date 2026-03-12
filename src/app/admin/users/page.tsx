@@ -26,22 +26,28 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
 type Store = { id: string; name: string };
-type UserRow = { id: string; name: string; active: boolean; storeIds: string[] };
+type UserRow = {
+  id: string;
+  name: string;
+  active: boolean;
+  employeeCode: string | null;
+  storeIds: string[];
+};
 
 type UsersResponse = { stores: Store[]; users: UserRow[] } | { error: string };
-type SimpleResponse = { ok: true } | { error: string };
+type SimpleResponse = { ok: true; employeeCode?: string | null } | { error: string };
 
 export default function UsersAdminPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAuthed, setIsAuthed] = useState(false);
-  const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [stores, setStores] = useState<Store[]>([]);
   const [users, setUsers] = useState<UserRow[]>([]);
 
   const [newName, setNewName] = useState("");
   const [newActive, setNewActive] = useState(true);
+  const [newEmployeeCode, setNewEmployeeCode] = useState("");
   const [newStoreIds, setNewStoreIds] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
 
@@ -71,7 +77,6 @@ export default function UsersAdminPage() {
     setError(null);
     const { data: { session } } = await supabase.auth.getSession();
     const token = session?.access_token || "";
-    setSessionToken(token || null);
     if (!token) {
       router.replace("/login?next=/admin/users");
       return;
@@ -112,7 +117,11 @@ export default function UsersAdminPage() {
     return Object.entries(newStoreIds).filter(([, v]) => v).map(([id]) => id);
   }, [newStoreIds]);
 
-  const canCreate = newName.trim().length > 0 && newSelectedStoreIds.length > 0 && !saving;
+  const canCreate =
+    newName.trim().length > 0 &&
+    newEmployeeCode.trim().length > 0 &&
+    newSelectedStoreIds.length > 0 &&
+    !saving;
 
   async function createUser() {
     if (!canCreate) return;
@@ -135,6 +144,7 @@ export default function UsersAdminPage() {
         body: JSON.stringify({
           name: newName.trim(),
           active: newActive,
+          employeeCode: newEmployeeCode.trim().toUpperCase(),
           storeIds: newSelectedStoreIds,
         }),
       });
@@ -146,6 +156,7 @@ export default function UsersAdminPage() {
 
       setNewName("");
       setNewActive(true);
+      setNewEmployeeCode("");
       setNewStoreIds(prev => {
         const next = { ...prev };
         Object.keys(next).forEach(k => { next[k] = false; });
@@ -179,6 +190,7 @@ export default function UsersAdminPage() {
         body: JSON.stringify({
           name: user.name.trim(),
           active: user.active,
+          employeeCode: user.employeeCode?.trim().toUpperCase() || "",
           storeIds,
         }),
       });
@@ -254,6 +266,17 @@ export default function UsersAdminPage() {
           </div>
 
           <div className="space-y-2">
+            <label className="text-sm muted">Employee Code / Login Username</label>
+            <input
+              className="input uppercase tracking-widest"
+              value={newEmployeeCode}
+              onChange={e => setNewEmployeeCode(e.target.value.toUpperCase())}
+              placeholder="LV2-F12"
+              maxLength={10}
+            />
+          </div>
+
+          <div className="space-y-2">
             <label className="text-sm muted">Stores (select at least one)</label>
             <div className="grid gap-2 sm:grid-cols-2">
               {stores.map(s => (
@@ -287,7 +310,6 @@ export default function UsersAdminPage() {
               storeIdToName={storeIdToName}
               onSave={updateUser}
               onDeactivate={deactivateUser}
-              sessionToken={sessionToken}
               saving={saving}
             />
           ))}
@@ -309,7 +331,6 @@ function UserCard({
   storeIdToName,
   onSave,
   onDeactivate,
-  sessionToken,
   saving,
 }: {
   user: UserRow;
@@ -317,7 +338,6 @@ function UserCard({
   storeIdToName: Map<string, string>;
   onSave: (user: UserRow, storeIds: string[]) => void;
   onDeactivate: (userId: string) => void;
-  sessionToken: string | null;
   saving: boolean;
 }) {
   const [name, setName] = useState(user.name);
@@ -346,6 +366,11 @@ function UserCard({
   const [pinValue, setPinValue] = useState("");
   const [pinSaving, setPinSaving] = useState(false);
   const [pinMessage, setPinMessage] = useState<string | null>(null);
+  const [employeeCode, setEmployeeCode] = useState(user.employeeCode ?? "");
+
+  useEffect(() => {
+    setEmployeeCode(user.employeeCode ?? "");
+  }, [user.id, user.employeeCode]);
 
   return (
     <div className="card card-pad space-y-3">
@@ -391,6 +416,17 @@ function UserCard({
       </div>
 
       <div className="space-y-2">
+        <label className="text-sm muted">Employee Code / Login Username</label>
+        <input
+          className="input uppercase tracking-widest"
+          value={employeeCode}
+          onChange={e => setEmployeeCode(e.target.value.toUpperCase())}
+          placeholder="LV2-F12"
+          maxLength={10}
+        />
+      </div>
+
+      <div className="space-y-2">
         <label className="text-sm muted">Set PIN (4 digits)</label>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <input
@@ -411,6 +447,8 @@ function UserCard({
               setPinSaving(true);
               setPinMessage(null);
               try {
+                const { data: { session } } = await supabase.auth.getSession();
+                const token = session?.access_token || "";
                 const res = await fetch(
                   `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/set-pin`,
                   {
@@ -418,7 +456,7 @@ function UserCard({
                     headers: {
                       "Content-Type": "application/json",
                       apikey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
-                      ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+                      ...(token ? { Authorization: `Bearer ${token}` } : {}),
                     },
                     body: JSON.stringify({ profile_id: user.id, pin: pinValue }),
                   }
@@ -446,8 +484,8 @@ function UserCard({
       <div className="flex flex-wrap gap-2">
         <button
           className="btn-primary px-4 py-2 disabled:opacity-50"
-          onClick={() => onSave({ ...user, name, active }, selectedStoreIds)}
-          disabled={!canSave}
+          onClick={() => onSave({ ...user, name, active, employeeCode }, selectedStoreIds)}
+          disabled={!canSave || employeeCode.trim().length === 0}
         >
           Save Changes
         </button>

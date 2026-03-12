@@ -37,6 +37,7 @@ import { supabaseServer } from "@/lib/supabaseServer";
 import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
 
 type MembershipRow = { store_id: string };
+type ProfileRow = { employee_code: string | null };
 
 async function getProfileStoreIds(profileId: string) {
   const { data, error } = await supabaseServer
@@ -73,9 +74,18 @@ export async function PATCH(
       name?: string;
       active?: boolean;
       storeIds?: string[];
+      employeeCode?: string;
     };
 
-    const updateData: { name?: string; active?: boolean } = {};
+    const { data: profile, error: profileErr } = await supabaseServer
+      .from("profiles")
+      .select("employee_code")
+      .eq("id", profileId)
+      .maybeSingle<ProfileRow>();
+    if (profileErr) return NextResponse.json({ error: profileErr.message }, { status: 500 });
+    if (!profile) return NextResponse.json({ error: "Profile not found." }, { status: 404 });
+
+    const updateData: { name?: string; active?: boolean; employee_code?: string } = {};
     if (typeof body.name === "string") {
       const name = body.name.trim();
       if (!name) return NextResponse.json({ error: "Name is required." }, { status: 400 });
@@ -83,6 +93,14 @@ export async function PATCH(
     }
     if (typeof body.active === "boolean") {
       updateData.active = body.active;
+    }
+
+    if (typeof body.employeeCode === "string") {
+      const employeeCode = body.employeeCode.trim().toUpperCase();
+      if (!employeeCode) {
+        return NextResponse.json({ error: "Employee code is required." }, { status: 400 });
+      }
+      updateData.employee_code = employeeCode;
     }
 
     if (Object.keys(updateData).length > 0) {

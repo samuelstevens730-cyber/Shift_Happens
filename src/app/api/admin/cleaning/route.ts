@@ -66,7 +66,6 @@ export async function GET(req: Request) {
     const { data: tasks, error: tasksErr } = await supabaseServer
       .from("cleaning_tasks")
       .select("id, name, description, category, sort_order, is_active")
-      .eq("is_active", true)
       .order("sort_order", { ascending: true })
       .returns<TaskRow[]>();
     if (tasksErr) return NextResponse.json({ error: tasksErr.message }, { status: 500 });

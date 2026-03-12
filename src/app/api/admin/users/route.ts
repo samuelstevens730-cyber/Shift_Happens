@@ -42,8 +42,11 @@ import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
 type StoreRow = { id: string; name: string };
 type MembershipRow = {
   store_id: string;
-  profile: { id: string; name: string; active: boolean };
+  profile: { id: string; name: string; active: boolean; employee_code: string | null };
 };
+function normalizeEmployeeCode(value: string) {
+  return value.trim().toUpperCase();
+}
 
 export async function GET(req: Request) {
   const token = getBearerToken(req);
@@ -67,12 +70,18 @@ export async function GET(req: Request) {
 
   const { data: memberships, error: memErr } = await supabaseServer
     .from("store_memberships")
-    .select("store_id, profile:profile_id(id, name, active)")
+    .select("store_id, profile:profile_id(id, name, active, employee_code)")
     .in("store_id", managerStoreIds)
     .returns<MembershipRow[]>();
   if (memErr) return NextResponse.json({ error: memErr.message }, { status: 500 });
 
-  const userMap = new Map<string, { id: string; name: string; active: boolean; storeIds: string[] }>();
+  const userMap = new Map<string, {
+    id: string;
+    name: string;
+    active: boolean;
+    employeeCode: string | null;
+    storeIds: string[];
+  }>();
   (memberships ?? []).forEach(m => {
     const prof = m.profile;
     if (!prof) return;
@@ -84,6 +93,7 @@ export async function GET(req: Request) {
         id: prof.id,
         name: prof.name,
         active: Boolean(prof.active),
+        employeeCode: prof.employee_code ?? null,
         storeIds: [m.store_id],
       });
     }
@@ -106,6 +116,7 @@ export async function POST(req: Request) {
       name?: string;
       active?: boolean;
       storeIds?: string[];
+      employeeCode?: string;
     };
 
     const name = (body.name || "").trim();
@@ -118,10 +129,14 @@ export async function POST(req: Request) {
     const managerStoreIds = await getManagerStoreIds(user.id);
     const invalidStore = storeIds.find(id => !managerStoreIds.includes(id));
     if (invalidStore) return NextResponse.json({ error: "Invalid store selection." }, { status: 403 });
+    const employeeCode = typeof body.employeeCode === "string" ? normalizeEmployeeCode(body.employeeCode) : null;
+    if (!employeeCode) {
+      return NextResponse.json({ error: "Employee code is required." }, { status: 400 });
+    }
 
     const { data: profile, error: profErr } = await supabaseServer
       .from("profiles")
-      .insert({ name, active: body.active !== false })
+      .insert({ name, active: body.active !== false, employee_code: employeeCode })
       .select("id")
       .maybeSingle()
       .returns<{ id: string }>();
@@ -132,9 +147,12 @@ export async function POST(req: Request) {
     const { error: memErr } = await supabaseServer
       .from("store_memberships")
       .insert(rows);
-    if (memErr) return NextResponse.json({ error: memErr.message }, { status: 500 });
+    if (memErr) {
+      await supabaseServer.from("profiles").delete().eq("id", profile.id);
+      return NextResponse.json({ error: memErr.message }, { status: 500 });
+    }
 
-    return NextResponse.json({ ok: true, id: profile.id });
+    return NextResponse.json({ ok: true, id: profile.id, employeeCode });
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Failed to create user." }, { status: 500 });
   }
