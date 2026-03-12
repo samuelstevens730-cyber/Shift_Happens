@@ -622,7 +622,12 @@ export default function ShiftPage() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${authToken}`,
       },
-      body: JSON.stringify({ shiftId, scheduleId: task.schedule_id }),
+      body: JSON.stringify({
+        shiftId,
+        scheduleId: task.schedule_id,
+        cleaningTaskId: task.cleaning_task_id,
+        cleaningShiftType: task.cleaning_shift_type,
+      }),
     });
     const json = await res.json();
     if (!res.ok) {
@@ -645,7 +650,13 @@ export default function ShiftPage() {
         "Content-Type": "application/json",
         Authorization: `Bearer ${authToken}`,
       },
-      body: JSON.stringify({ shiftId, scheduleId: task.schedule_id, reason }),
+      body: JSON.stringify({
+        shiftId,
+        scheduleId: task.schedule_id,
+        cleaningTaskId: task.cleaning_task_id,
+        cleaningShiftType: task.cleaning_shift_type,
+        reason,
+      }),
     });
     const json = await res.json();
     if (!res.ok) {
