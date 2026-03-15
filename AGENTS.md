@@ -59,7 +59,7 @@ if (!auth) return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 })
 -   **Writes:** **ALWAYS use RPCs (Stored Procedures)** for complex mutations (Clock In, Shift Swap).
 -   **RPC Params:** Accept explicit actor params (e.g., `p_actor_profile_id`) instead of relying solely on `auth.uid()` inside logic.
 -   **Security:** Follow existing repo convention for `security definer`. Use `set row_security = off` where required for production behavior (e.g., bypassing RLS for specific admin actions).
--   **Migrations:** Schema truth spans `src/app/sql/` and `supabase/migrations/`. **Do not edit already-deployed migrations; add new numbered forward migrations.**
+-   **Migrations:** All SQL lives in `supabase/migrations/`. **Do not edit already-deployed migrations; add new forward migrations with a `YYYYMMDD_description.sql` filename.**
 
 ### RLS Policy Standards — Required for Every New Table
 Every new table that holds store- or employee-scoped data **must** have RLS enabled before shipping.

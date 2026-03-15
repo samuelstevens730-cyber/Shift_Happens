@@ -91,18 +91,18 @@ WEATHER_API_KEY=your-openweathermap-api-key
 npm run dev
 ```
 
-Run all numbered migration files in order in your Supabase SQL Editor:
+Run all migration files in order in your Supabase SQL Editor:
 
 ```
-src/app/sql/01_schema.sql          # Core tables and types
-src/app/sql/02_variance_review.sql
+supabase/migrations/20230101_01_schema.sql   # Core tables and types
+supabase/migrations/20230101_02_variance_review.sql
 ...
-src/app/sql/74_store_location.sql  # Store lat/long for weather
+supabase/migrations/20260315_fix_rollover_balance_variance.sql
 ```
 
-All files are numbered sequentially. Run them in order from `01` through `74`. Note: there is no `57_*.sql` — this gap is intentional.
+Files are named `YYYYMMDD_description.sql` and must be applied in lexicographic order. The original numbered migrations all carry the prefix `20230101_` to maintain sequencing before later-dated incremental migrations.
 
-> **Note**: `00_consolidated.sql` exists but only contains the initial schema and is not a substitute for running all migrations.
+> **Note**: `20230101_00_consolidated.sql` contains only the initial schema and is not a substitute for running all migrations.
 
 ### 5. Configure Supabase Authentication
 ### Validate
@@ -114,12 +114,7 @@ npm run build
 
 ## Database / Migrations
 
-SQL migrations live in:
-
-- `src/app/sql/`
-- `supabase/migrations/` (if present in your environment)
-
-Apply migrations in numeric order. Do not edit already-deployed migrations; add forward migrations.
+All SQL migrations live in `supabase/migrations/`. Apply them in lexicographic (filename) order. Do not edit already-deployed migrations; add new forward migrations with a `YYYYMMDD_description.sql` filename.
 
 ## Current App Surface
 

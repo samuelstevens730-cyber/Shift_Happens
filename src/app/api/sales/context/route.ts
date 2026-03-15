@@ -64,7 +64,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "You do not have access to this store." }, { status: 403 });
     }
 
-    const [settingsRes, rolloverConfigRes, dailyRecordRes, prevRecordRes] = await Promise.all([
+    const [settingsRes, rolloverConfigRes, dailyRecordRes, prevRecordRes, prevRolloverConfigRes] = await Promise.all([
       supabaseServer
         .from("store_settings")
         .select("sales_tracking_enabled, sales_rollover_enabled")
@@ -88,11 +88,18 @@ export async function GET(req: Request) {
         .eq("store_id", storeId)
         .eq("business_date", previousDateOnly(businessDate))
         .maybeSingle<DailySalesRecordRow>(),
+      supabaseServer
+        .from("store_rollover_config")
+        .select("has_rollover")
+        .eq("store_id", storeId)
+        .eq("day_of_week", dayOfWeekFromDateOnly(previousDateOnly(businessDate)))
+        .maybeSingle<{ has_rollover: boolean | null }>(),
     ]);
 
     if (settingsRes.error) return NextResponse.json({ error: settingsRes.error.message }, { status: 500 });
     if (rolloverConfigRes.error) return NextResponse.json({ error: rolloverConfigRes.error.message }, { status: 500 });
     if (dailyRecordRes.error) return NextResponse.json({ error: dailyRecordRes.error.message }, { status: 500 });
+    if (prevRolloverConfigRes.error) return NextResponse.json({ error: prevRolloverConfigRes.error.message }, { status: 500 });
     if (prevRecordRes.error) return NextResponse.json({ error: prevRecordRes.error.message }, { status: 500 });
 
     const salesTrackingEnabled = Boolean(settingsRes.data?.sales_tracking_enabled);
@@ -110,8 +117,10 @@ export async function GET(req: Request) {
     const isRolloverNight = Boolean(rolloverConfigRes.data?.has_rollover) && Boolean(salesRolloverEnabled);
 
     const prev = prevRecordRes.data;
+    const prevWasRolloverNight =
+      Boolean(prevRolloverConfigRes.data?.has_rollover) && Boolean(salesRolloverEnabled);
     const pendingRollover = Boolean(
-      prev?.is_rollover_night &&
+      prevWasRolloverNight &&
       prev?.opener_rollover_cents == null
     );
 

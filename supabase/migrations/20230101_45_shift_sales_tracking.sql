@@ -136,7 +136,8 @@ begin
   new.verified_total_cents := new.verified_open_sales_cents + new.verified_close_sales_cents;
 
   if new.z_report_cents is not null then
-    new.balance_variance_cents := new.verified_total_cents - new.z_report_cents;
+    new.balance_variance_cents := new.verified_total_cents
+      - (coalesce(new.z_report_cents, 0) - coalesce(new.rollover_from_previous_cents, 0));
     new.out_of_balance := abs(new.balance_variance_cents) > coalesce(v_threshold_cents, 100);
   end if;
 
@@ -175,7 +176,8 @@ begin
 
   if p_source = 'closer' then
     update public.daily_sales_records
-       set closer_rollover_cents = p_amount_cents
+       set closer_rollover_cents = p_amount_cents,
+           is_rollover_night = true
      where store_id = p_store_id and business_date = p_business_date
     returning id, closer_rollover_cents, opener_rollover_cents
       into v_record_id, v_closer_val, v_opener_val;
