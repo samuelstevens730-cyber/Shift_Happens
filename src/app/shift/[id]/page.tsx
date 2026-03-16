@@ -237,6 +237,7 @@ export default function ShiftPage() {
 
   const [closeCheckpointConfirm, setCloseCheckpointConfirm] = useState(false);
   const [closeCheckpointNeedsConfirm, setCloseCheckpointNeedsConfirm] = useState(false);
+  const [closeCheckpointIsCeiling, setCloseCheckpointIsCeiling] = useState(false);
   const [closeCheckpointVarianceCents, setCloseCheckpointVarianceCents] = useState<number | null>(null);
   const [closeCheckpointSaving, setCloseCheckpointSaving] = useState(false);
   const [closeCheckpointErr, setCloseCheckpointErr] = useState<string | null>(null);
@@ -778,6 +779,7 @@ export default function ShiftPage() {
       if (!res.ok) {
         if (json?.requiresSalesConfirm) {
           setCloseCheckpointNeedsConfirm(true);
+          setCloseCheckpointIsCeiling(Boolean(json?.isSanityCeiling));
           setCloseCheckpointVarianceCents(typeof json?.salesVarianceCents === "number" ? json.salesVarianceCents : null);
           return;
         }
@@ -786,6 +788,7 @@ export default function ShiftPage() {
 
       setCloseCheckpointNeedsConfirm(false);
       setCloseCheckpointConfirm(false);
+      setCloseCheckpointIsCeiling(false);
       setCloseCheckpointVarianceCents(null);
       setCloseCheckpointErr(null);
       await loadSalesContext();
@@ -1108,14 +1111,15 @@ export default function ShiftPage() {
               </div>
 
               {closeCheckpointNeedsConfirm && (
-                <label className="flex items-center gap-2 text-sm">
+                <label className="flex items-center gap-2 text-sm text-amber-300">
                   <input
                     type="checkbox"
-                  checked={closeCheckpointConfirm}
-                  onChange={e => setCloseCheckpointConfirm(e.target.checked)}
+                    checked={closeCheckpointConfirm}
+                    onChange={e => setCloseCheckpointConfirm(e.target.checked)}
                   />
-                  I confirm these sales numbers are correct
-                  {closeCheckpointVarianceCents != null ? ` (variance $${(closeCheckpointVarianceCents / 100).toFixed(2)})` : ""}
+                  {closeCheckpointIsCeiling
+                    ? "This Z report total is unusually large — I have double-checked and it is correct"
+                    : `I confirm these sales numbers are correct${closeCheckpointVarianceCents != null ? ` (variance $${(closeCheckpointVarianceCents / 100).toFixed(2)})` : ""}`}
                 </label>
               )}
 

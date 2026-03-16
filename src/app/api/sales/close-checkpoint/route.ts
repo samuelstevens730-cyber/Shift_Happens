@@ -91,9 +91,9 @@ export async function POST(req: Request) {
     const [settingsRes, rolloverRes] = await Promise.all([
       supabaseServer
         .from("store_settings")
-        .select("sales_tracking_enabled, sales_rollover_enabled")
+        .select("sales_tracking_enabled, sales_rollover_enabled, sales_sanity_ceiling_cents")
         .eq("store_id", shift.store_id)
-        .maybeSingle<{ sales_tracking_enabled: boolean | null; sales_rollover_enabled: boolean | null }>(),
+        .maybeSingle<{ sales_tracking_enabled: boolean | null; sales_rollover_enabled: boolean | null; sales_sanity_ceiling_cents: number | null }>(),
       supabaseServer
         .from("store_rollover_config")
         .select("has_rollover")
@@ -117,6 +117,20 @@ export async function POST(req: Request) {
     const zReportCents = Math.round(zReportRaw ?? 0);
     const priorXReportCents = Math.round(priorXRaw ?? 0);
     const closeSalesCents = zReportCents - priorXReportCents;
+
+    // Sanity ceiling — flag suspiciously large Z reports for confirmation.
+    const sanityCeiling = settingsRes.data?.sales_sanity_ceiling_cents ?? 250000;
+    if (zReportCents > sanityCeiling && !body.salesConfirmed) {
+      return NextResponse.json(
+        {
+          error: `Z report total ($${(zReportCents / 100).toFixed(2)}) is unusually large. Please double-check your report before confirming.`,
+          requiresSalesConfirm: true,
+          isSanityCeiling: true,
+          salesVarianceCents: null,
+        },
+        { status: 400 }
+      );
+    }
 
     // Zero-contamination guard: treat 0 as "not captured" (same as null).
     const closeTxnCount =

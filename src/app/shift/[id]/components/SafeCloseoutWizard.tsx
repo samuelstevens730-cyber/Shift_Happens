@@ -90,6 +90,8 @@ export default function SafeCloseoutWizard({
   const [err, setErr] = useState<string | null>(null);
   const [statusNote, setStatusNote] = useState<string | null>(null);
   const [submitResult, setSubmitResult] = useState<{ status: SubmitStatus; message: string } | null>(null);
+  const [salesNeedsCeilingConfirm, setSalesNeedsCeilingConfirm] = useState(false);
+  const [salesCeilingConfirmed, setSalesCeilingConfirmed] = useState(false);
 
   const denomTolerance = context?.settings.safe_denom_tolerance_cents ?? 0;
   const closeoutStatus = context?.closeout?.status ?? null;
@@ -100,6 +102,8 @@ export default function SafeCloseoutWizard({
     setErr(null);
     setStatusNote(null);
     setSubmitResult(null);
+    setSalesNeedsCeilingConfirm(false);
+    setSalesCeilingConfirmed(false);
 
     if (context?.closeout) {
       const draft = context.closeout;
@@ -376,6 +380,7 @@ export default function SafeCloseoutWizard({
           { photo_type: "deposit_required", storage_path: nextDepositPath },
           ...(nextPosPath ? [{ photo_type: "pos_optional", storage_path: nextPosPath }] : []),
         ],
+        salesConfirmed: salesNeedsCeilingConfirm ? salesCeilingConfirmed : false,
       };
 
       const res = await fetch("/api/closeout/submit", {
@@ -388,8 +393,15 @@ export default function SafeCloseoutWizard({
       });
       const json = await res.json();
       if (!res.ok) {
+        if (json?.requiresSalesConfirm && json?.isSanityCeiling) {
+          setSalesNeedsCeilingConfirm(true);
+          setErr("⚠️ " + (json?.error ?? "Total sales is unusually large. Please confirm before submitting."));
+          return;
+        }
         throw new Error(json?.error || "Failed to submit closeout.");
       }
+      setSalesNeedsCeilingConfirm(false);
+      setSalesCeilingConfirmed(false);
 
       const status = json?.status as SubmitStatus;
       const message = String(json?.message ?? "Closeout submitted.");
@@ -578,6 +590,16 @@ export default function SafeCloseoutWizard({
                     />
                     {posPath && <div className="text-xs text-emerald-300">✅ Z-report uploaded.</div>}
                   </div>
+                  {salesNeedsCeilingConfirm && (
+                    <label className="flex items-center gap-2 text-sm text-amber-300">
+                      <input
+                        type="checkbox"
+                        checked={salesCeilingConfirmed}
+                        onChange={(e) => setSalesCeilingConfirmed(e.target.checked)}
+                      />
+                      These sales figures are unusually large — I have double-checked and they are correct
+                    </label>
+                  )}
                 </div>
               )}
             </>
@@ -599,7 +621,11 @@ export default function SafeCloseoutWizard({
               </button>
             )}
             {!readOnlyPassed && step === 5 && (
-              <button className="rounded bg-emerald-500 px-3 py-1.5 text-sm font-semibold text-black disabled:opacity-50" disabled={saving} onClick={() => void submitCloseout()}>
+              <button
+                className="rounded bg-emerald-500 px-3 py-1.5 text-sm font-semibold text-black disabled:opacity-50"
+                disabled={saving || (salesNeedsCeilingConfirm && !salesCeilingConfirmed)}
+                onClick={() => void submitCloseout()}
+              >
                 {saving ? "Submitting..." : "Submit Closeout"}
               </button>
             )}

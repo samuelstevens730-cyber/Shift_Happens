@@ -30,6 +30,7 @@ type Body = {
   photo_metadata?: PhotoInput[];
   actual_deposit_cents?: number;
   deposit_override_reason?: string | null;
+  salesConfirmed?: boolean;
 };
 
 type RpcResult = SubmitSafeCloseoutResult;
@@ -111,6 +112,25 @@ export async function POST(req: Request) {
     if (!windowCheck.allowed) {
       return NextResponse.json(
         { error: windowCheck.reason ?? "Safe closeout is not available yet for this shift." },
+        { status: 400 }
+      );
+    }
+
+    // Sanity ceiling — flag suspiciously large cash+card totals for confirmation.
+    const { data: storeSettings } = await supabaseServer
+      .from("store_settings")
+      .select("sales_sanity_ceiling_cents")
+      .eq("store_id", closeout.store_id)
+      .maybeSingle<{ sales_sanity_ceiling_cents: number | null }>();
+    const sanityCeiling = storeSettings?.sales_sanity_ceiling_cents ?? 250000;
+    const totalSales = cashSales + cardSales;
+    if (totalSales > sanityCeiling && !body.salesConfirmed) {
+      return NextResponse.json(
+        {
+          error: `Total sales ($${(totalSales / 100).toFixed(2)}) is unusually large. Please double-check your figures before confirming.`,
+          requiresSalesConfirm: true,
+          isSanityCeiling: true,
+        },
         { status: 400 }
       );
     }
