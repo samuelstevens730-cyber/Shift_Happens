@@ -74,7 +74,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const { data: appUser, error: appUserErr } = await supabaseServer
       .from("app_users")
       .select("id")
-      .eq("auth_user_id", auth.userId)
+      // app_users.id is the auth.users id for managers in this schema.
+      .eq("id", auth.userId)
       .maybeSingle<{ id: string }>();
     if (appUserErr) return NextResponse.json({ error: appUserErr.message }, { status: 500 });
     if (!appUser) {
