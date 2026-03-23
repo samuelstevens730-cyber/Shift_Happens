@@ -11,14 +11,16 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { useEffect, useState, Suspense } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { createEmployeeSupabase } from "@/lib/employeeSupabase";
 import PinGate from "@/components/PinGate";
 import ExpandableCard from "@/components/ExpandableCard";
-import { Clock, Calendar, FileText, Shield, Star, X, Timer } from "lucide-react";
+import HomeHeader from "@/components/HomeHeader";
+import RevealOnScroll from "@/components/RevealOnScroll";
+import { ArrowRight, Calendar, ChevronDown, ChevronUp, Clock, FileText, Shield, Star, Timer, Trophy, X } from "lucide-react";
+import type { EmployeePublicScoreboardResponse } from "@/types/employeePublicScoreboard";
 
 // Storage keys (match PinGate.tsx)
 const PIN_TOKEN_KEY = "sh_pin_token";
@@ -44,6 +46,22 @@ type TimeEntry = {
   started_at: string;
   ended_at: string | null;
   hours: number;
+};
+
+type OpenShiftState = {
+  shiftId: string;
+  startedAt: string | null;
+  shiftType: string | null;
+  storeId: string | null;
+  storeName: string | null;
+};
+
+type HeroState = {
+  mode: "off" | "open" | "clocked-in";
+  label: string;
+  ctaLabel?: string;
+  href: string;
+  detail: string;
 };
 
 const CST_TZ = "America/Chicago";
@@ -144,7 +162,6 @@ function getStoreLabel(shifts: ScheduleShift[]) {
 
 function HomePageInner() {
   const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const preselectedStore = searchParams.get("store");
 
@@ -172,6 +189,12 @@ function HomePageInner() {
   const [timeEntries, setTimeEntries] = useState<TimeEntry[]>([]);
   const [currentPeriodHours, setCurrentPeriodHours] = useState(0);
   const [payPeriodRange, setPayPeriodRange] = useState({ start: "", end: "" });
+  const [openShift, setOpenShift] = useState<OpenShiftState | null>(null);
+  const [scoreboardPreview, setScoreboardPreview] = useState<{
+    rank: number | null;
+    score: number | null;
+    grade: string | null;
+  } | null>(null);
 
   // Check for existing auth on mount
   useEffect(() => {
@@ -492,6 +515,70 @@ function HomePageInner() {
     setEmployeeMessages((prev) => prev.filter((m) => m.id !== messageId));
   };
 
+  useEffect(() => {
+    if (!navProfileId) {
+      setOpenShift(null);
+      setScoreboardPreview(null);
+      return;
+    }
+
+    let alive = true;
+
+    async function loadOperationalPreview() {
+      const targetProfileId = navProfileId;
+      if (!targetProfileId) return;
+      const authHeader = await getAuthHeaderValue();
+      if (!authHeader) return;
+
+      const scoreboardFrom = addDaysToKey(getCstDateKey(new Date()), -29);
+      const scoreboardTo = getCstDateKey(new Date());
+
+      const [openShiftRes, scoreboardRes] = await Promise.all([
+        fetch(`/api/shift/open?profileId=${encodeURIComponent(targetProfileId)}`, {
+          headers: { Authorization: authHeader },
+        }),
+        fetch(
+          `/api/employee/scoreboard?from=${encodeURIComponent(scoreboardFrom)}&to=${encodeURIComponent(scoreboardTo)}&storeId=all`,
+          { headers: { Authorization: authHeader } }
+        ),
+      ]);
+
+      if (!alive) return;
+
+      if (openShiftRes.ok) {
+        const json = (await openShiftRes.json()) as Partial<OpenShiftState>;
+        if (json?.shiftId) {
+          setOpenShift({
+            shiftId: json.shiftId,
+            startedAt: json.startedAt ?? null,
+            shiftType: json.shiftType ?? null,
+            storeId: json.storeId ?? null,
+            storeName: json.storeName ?? null,
+          });
+        } else {
+          setOpenShift(null);
+        }
+      }
+
+      if (scoreboardRes.ok) {
+        const payload = (await scoreboardRes.json()) as EmployeePublicScoreboardResponse;
+        const rows = payload.publicRows ?? [];
+        const myRank = payload.myRow ? rows.findIndex((row) => row.profileId === payload.myRow?.profileId) + 1 : 0;
+        setScoreboardPreview({
+          rank: myRank > 0 ? myRank : null,
+          score: payload.myRow?.score ?? null,
+          grade: payload.myRow?.grade ?? null,
+        });
+      }
+    }
+
+    void loadOperationalPreview();
+
+    return () => {
+      alive = false;
+    };
+  }, [navProfileId, hasAdminAuth, hasPinAuth]);
+
   // Determine which cards to show
   const showMySchedule = hasPinAuth || hasAdminAuth;
   const showRequests = hasPinAuth || hasAdminAuth;
@@ -510,23 +597,57 @@ function HomePageInner() {
   );
   const [showNextWeek, setShowNextWeek] = useState(false);
 
-  // Nav items: HOME | ADMIN | LOGOUT
-    const scheduleHref = navProfileId ? `/schedule?profileId=${encodeURIComponent(navProfileId)}` : "/schedule";
-    const shiftsHref = navProfileId ? `/shifts?profileId=${encodeURIComponent(navProfileId)}` : "/shifts";
-    const navItems = [
-      { href: "/", label: "HOME", active: pathname === "/" },
-      ...(hasAdminAuth || hasPinAuth
-        ? [
-            { href: scheduleHref, label: "MY SCHEDULE", active: pathname === "/schedule" },
-            { href: shiftsHref, label: "MY SHIFTS", active: pathname === "/shifts" },
-          ]
-        : []),
-      ...(hasAdminAuth ? [{ href: "/admin", label: "ADMIN", active: pathname === "/admin" }] : []),
-    ];
+  const scheduleHref = navProfileId ? `/schedule?profileId=${encodeURIComponent(navProfileId)}` : "/schedule";
+  const shiftsHref = navProfileId ? `/shifts?profileId=${encodeURIComponent(navProfileId)}` : "/shifts";
+  const todayShifts = scheduleShifts.filter((shift) => shift.shift_date === todayKey);
+  const tomorrowShifts = scheduleShifts.filter((shift) => shift.shift_date === tomorrowKey);
+  const yesterdayShifts = scheduleShifts.filter((shift) => shift.shift_date === yesterdayKey);
+  const nextScheduledShift = [...scheduleShifts]
+    .sort((a, b) => {
+      const dateA = `${a.shift_date}T${a.scheduled_start}`;
+      const dateB = `${b.shift_date}T${b.scheduled_start}`;
+      return dateA.localeCompare(dateB);
+    })
+    .find((shift) => shift.shift_date >= todayKey);
+  const nextShiftLabel = nextScheduledShift
+    ? `${formatCstLabel(nextScheduledShift.shift_date)} | ${formatTimeLabel(nextScheduledShift.scheduled_start)}`
+    : "No scheduled shift loaded";
+  const openShiftDateKey = openShift?.startedAt ? getCstDateKey(new Date(openShift.startedAt)) : null;
+  const heroState: HeroState = openShift?.shiftId
+    ? openShiftDateKey === todayKey
+      ? {
+          mode: "clocked-in",
+          label: "Clock Out",
+          href: `/shift/${openShift.shiftId}`,
+          detail: openShift.storeName ?? "Open shift active",
+        }
+      : {
+          mode: "open",
+          label: "Recover Shift",
+          href: `/shift/${openShift.shiftId}`,
+          detail: openShift.storeName ?? "Resume open shift",
+        }
+    : {
+        mode: "off",
+        label: "Start Shift",
+        ctaLabel: "Punch In",
+        href: "/clock",
+        detail: todayShifts.length ? getShiftTimeRange(todayShifts) : "Off shift",
+      };
+
+  const immediateActions = [
+    { href: "/dashboard/requests", label: "Requests", detail: "Time off, swaps, corrections", enabled: showRequests },
+    { href: shiftsHref, label: "My Shifts", detail: "Hours and prior shifts", enabled: showMySchedule },
+    { href: scheduleHref, label: "Full Schedule", detail: "See the rest of the week", enabled: showMySchedule },
+    ...(showAdmin ? [{ href: "/admin", label: "Admin", detail: "Manager tools", enabled: true }] : []),
+    ...(showAdmin ? [{ href: "/admin/cleaning/report", label: "Cleaning Audit", detail: "Yesterday by store", enabled: true }] : []),
+  ].filter((action) => action.enabled);
+  const [showMoreActions, setShowMoreActions] = useState(false);
+  const visibleActions = showMoreActions ? immediateActions : immediateActions.slice(0, 4);
 
   if (!authChecked) {
     return (
-      <div className="bento-shell flex items-center justify-center">
+      <div className="bento-shell employee-shell-loading">
         <div className="text-muted">Loading...</div>
       </div>
     );
@@ -534,314 +655,224 @@ function HomePageInner() {
 
   return (
     <div className="bento-shell">
-      {/* Top Bar: Logo + Navigation */}
-      <div className="bento-top-bar">
-        <Image
-          src="/brand/no_cap_logo.jpg"
-          alt="No Cap Smoke Shop"
-          width={120}
-          height={120}
-          priority
-          className="bento-logo"
-        />
-        <nav className="bento-nav">
-          {navItems.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`bento-nav-link ${item.active ? "bento-nav-active" : "bento-nav-inactive"}`}
-            >
-              {item.label}
-            </Link>
-          ))}
-            {hasAdminAuth || hasPinAuth ? (
-              <button
-                onClick={async () => {
-                  await supabase.auth.signOut();
-                  sessionStorage.removeItem(PIN_TOKEN_KEY);
-                  sessionStorage.removeItem(PIN_STORE_KEY);
-                  sessionStorage.removeItem(PIN_PROFILE_KEY);
-                  setHasAdminAuth(false);
-                  setHasPinAuth(false);
-                  setNavProfileId(null);
-                  router.push("/");
-                }}
-                className="bento-nav-link bento-nav-inactive"
-              >
-                LOGOUT
-              </button>
-            ) : (
-              <button
-                onClick={() => setShowAuthModal(true)}
-                className="bento-nav-link bento-nav-inactive"
-              >
-                LOGIN
-              </button>
-            )}
-          </nav>
-        </div>
+      <HomeHeader
+        isManager={hasAdminAuth}
+        isAuthenticated={hasAdminAuth || hasPinAuth}
+        profileId={navProfileId}
+        onLogin={() => setShowAuthModal(true)}
+      />
 
-      {/* Employee Messages Banner */}
-      {employeeMessages.length > 0 && (
-        <div className="w-full px-4 mb-4">
-          {employeeMessages.map((message) => (
-            <div
-              key={message.id}
-              className="bg-[var(--card)] border border-[var(--green)]/30 rounded-xl p-4 relative"
-            >
-              <h3 className="text-[var(--green)] font-semibold text-sm mb-1">
-                Message from Management
-              </h3>
-              <p className="text-sm text-[var(--text)]">{message.content}</p>
-              <Link
-                href="/dashboard/requests?tab=open"
-                className="text-xs text-[var(--green)] underline mt-2 inline-block"
-              >
-                View offers
-              </Link>
-              <button
-                onClick={() => dismissMessage(message.id)}
-                className="absolute top-2 right-2 text-xs text-[var(--muted)] hover:text-[var(--text)] inline-flex items-center gap-1"
-              >
-                <span>Dismiss</span>
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Bento Grid - No DASHBOARD card */}
-      <div className="bento-container">
-        {/* Left Column */}
-        <div className="bento-left">
-          {/* TIME CLOCK - redirects to clock page */}
-          <Link href="/clock" className="bento-card bento-time-clock">
-            <div className="flex flex-col items-center justify-center gap-3">
-              <Clock className="w-10 h-10 md:w-12 md:h-12" style={{ color: "var(--green)" }} strokeWidth={1.5} />
-              <span className="bento-card-title">TIME CLOCK</span>
+      <main className="employee-home">
+        <RevealOnScroll delayMs={0}>
+          <Link href={heroState.href} className={`employee-time-hero employee-time-hero-${heroState.mode}`}>
+            <div className="employee-time-label">Time Clock</div>
+            <div className="employee-time-state">{heroState.label}</div>
+            <div className="employee-time-meta">{heroState.detail}</div>
+            <div className="employee-time-cta">
+              {heroState.ctaLabel ?? heroState.label}
+              <ArrowRight className="h-4 w-4" />
             </div>
           </Link>
+        </RevealOnScroll>
 
-          {/* REQUESTS */}
-          {showRequests ? (
-            <div className="space-y-2">
-              <Link href="/dashboard/requests" className="bento-card bento-requests">
-                <div className="flex flex-col items-center justify-center gap-3">
-                  <FileText className="w-10 h-10 md:w-12 md:h-12 text-amber-400" strokeWidth={1.5} />
-                  <span className="bento-card-title">REQUESTS</span>
+        {employeeMessages.length > 0 && (
+          <RevealOnScroll delayMs={40}>
+            <section className="employee-message-stack">
+            {employeeMessages.map((message) => (
+              <div key={message.id} className="employee-message">
+                <div className="employee-message-copy">
+                  <div className="employee-message-kicker">Management Message</div>
+                  <p>{message.content}</p>
+                  <Link href="/dashboard/requests?tab=open" className="employee-inline-link">
+                    View offers
+                  </Link>
                 </div>
-              </Link>
-              <Link
-                href="/dashboard/requests?tab=advances"
-                className="block rounded-xl border border-amber-400/30 bg-amber-500/10 px-4 py-2 text-center text-xs font-semibold tracking-wide text-amber-200 hover:bg-amber-500/15"
-              >
-                QUICK LINK: SUBMIT ADVANCE
-              </Link>
-              <Link
-                href="/scoreboard"
-                className="block rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-center text-xs font-semibold tracking-wide text-cyan-200 hover:bg-cyan-500/15"
-              >
-                QUICK LINK: RANKINGS
-              </Link>
-            </div>
-          ) : (
-            <div className="bento-card bento-requests bento-card-disabled">
-              <div className="flex flex-col items-center justify-center gap-3">
-                <FileText className="w-10 h-10 md:w-12 md:h-12 text-amber-400" strokeWidth={1.5} />
-                <span className="bento-card-title">REQUESTS</span>
+                <button onClick={() => dismissMessage(message.id)} className="employee-dismiss">
+                  <span>Dismiss</span>
+                  <X className="h-4 w-4" />
+                </button>
               </div>
-            </div>
-          )}
-        </div>
+            ))}
+            </section>
+          </RevealOnScroll>
+        )}
 
-        {/* Right Column */}
-        <div className="bento-right">
-          {/* MY SCHEDULE - Expandable */}
-          <ExpandableCard
-            title="MY SCHEDULE"
-            icon={Calendar}
-            iconColor="text-sky-400"
-            borderColor="bento-my-schedule"
-            disabled={!showMySchedule}
-            fullViewLink="/dashboard/schedule"
-            fullViewText="View full schedule"
-            collapsedContent={
-              <div className="w-full space-y-3">
-                <div className="grid grid-cols-3 gap-2 text-center text-[10px] uppercase tracking-widest text-white/50">
-                  <div>Yesterday</div>
-                  <div>Today</div>
-                  <div>Tomorrow</div>
+        <section className="employee-home-stack">
+          <RevealOnScroll delayMs={70}>
+            <ExpandableCard
+              title="MY SCHEDULE"
+              icon={Calendar}
+              iconColor="text-[var(--accent-purple)]"
+              borderColor="bento-my-schedule"
+              disabled={!showMySchedule}
+              fullViewLink={scheduleHref}
+              fullViewText="Full schedule"
+              collapsedContent={
+                <div className="employee-schedule-triptych">
+                  {[
+                    { label: "Yesterday", shifts: yesterdayShifts },
+                    { label: "Today", shifts: todayShifts },
+                    { label: "Tomorrow", shifts: tomorrowShifts },
+                  ].map((day) => (
+                    <div key={day.label} className="employee-mini-day">
+                      <span className="employee-mini-day-label">{day.label}</span>
+                      <strong>{getShiftTimeRange(day.shifts)}</strong>
+                      <span>{getStoreLabel(day.shifts)}</span>
+                    </div>
+                  ))}
                 </div>
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  {[yesterdayKey, todayKey, tomorrowKey].map(key => {
-                    const shiftsForDay = scheduleShifts.filter(s => s.shift_date === key);
+              }
+              expandedContent={
+                <div className="space-y-2">
+                  {expandedKeys.slice(0, 5).map((key) => {
+                    const shiftsForDay = scheduleShifts.filter((shift) => shift.shift_date === key);
+                    const isToday = key === todayKey;
                     return (
-                      <div key={key} className="flex flex-col gap-1 rounded-lg border border-white/10 bg-white/5 p-2">
-                        <div className="text-xs font-semibold text-white">
-                          {getShiftTimeRange(shiftsForDay)}
-                        </div>
-                        <div className="text-[10px] text-white/60">
-                          {getStoreLabel(shiftsForDay)}
-                        </div>
+                      <div key={key} className={`employee-schedule-row ${isToday ? "employee-schedule-row-active" : ""}`}>
+                        <span className="text-sm font-medium w-24">{formatCstLabel(key)}</span>
+                        <span className="text-sm text-gray-300">{getShiftTimeRange(shiftsForDay)}</span>
+                        <span className="text-xs text-gray-500">{getStoreLabel(shiftsForDay)}</span>
                       </div>
                     );
                   })}
                 </div>
-              </div>
-            }
-            expandedContent={
-              <div className="space-y-2">
-                {expandedKeys.map(key => {
-                  const shiftsForDay = scheduleShifts.filter(s => s.shift_date === key);
-                  const isToday = key === todayKey;
-                  return (
-                    <div
-                      key={key}
-                      className={`flex justify-between items-center py-2 px-3 rounded-lg ${
-                        isToday ? "bg-sky-500/20 border border-sky-500/30" : "bg-white/5"
-                      }`}
-                    >
-                      <span className="text-sm font-medium w-24">{formatCstLabel(key)}</span>
-                      <span className="text-sm text-gray-300">{getShiftTimeRange(shiftsForDay)}</span>
-                      <span className="text-xs text-gray-500">{getStoreLabel(shiftsForDay)}</span>
-                    </div>
-                  );
-                })}
-                {showNextWeek && (
-                  <div className="space-y-2 pt-2">
-                    <div className="text-xs uppercase tracking-widest text-white/50">Next 7 days</div>
-                    {nextWeekKeys.map(key => {
-                      const shiftsForDay = scheduleShifts.filter(s => s.shift_date === key);
-                      return (
-                        <div
-                          key={key}
-                          className="flex justify-between items-center py-2 px-3 rounded-lg bg-white/5"
-                        >
-                          <span className="text-sm font-medium w-24">{formatCstLabel(key)}</span>
-                          <span className="text-sm text-gray-300">{getShiftTimeRange(shiftsForDay)}</span>
-                          <span className="text-xs text-gray-500">{getStoreLabel(shiftsForDay)}</span>
+              }
+            />
+          </RevealOnScroll>
+
+          <RevealOnScroll delayMs={95}>
+            <ExpandableCard
+              title="CURRENT HOURS"
+              icon={Timer}
+              iconColor="text-[var(--accent-gold)]"
+              borderColor="bento-hours"
+              disabled={!showMySchedule}
+              fullViewLink={shiftsHref}
+              fullViewText="Full timecard"
+              collapsedContent={
+                <div className="text-center">
+                  <p className="employee-metric-value">{currentPeriodHours.toFixed(1)}</p>
+                  <p className="text-sm text-[var(--accent-gold)]">hours this period</p>
+                  <p className="employee-metric-meta">
+                    {payPeriodRange.start
+                      ? `${new Date(payPeriodRange.start).toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${new Date(payPeriodRange.end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                      : "Current pay period"}
+                  </p>
+                </div>
+              }
+              expandedContent={
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center pb-2 border-b border-white/10">
+                    <span className="text-sm text-gray-400">Period Total</span>
+                    <span className="text-xl font-bold text-[var(--accent-gold)]">{currentPeriodHours.toFixed(2)} hrs</span>
+                  </div>
+                  <div className="space-y-2 max-h-[42vh] overflow-y-auto pr-1">
+                    {timeEntries.map((entry) => (
+                      <div key={entry.id} className="employee-hours-row">
+                        <div>
+                          <p className="text-sm font-medium">
+                            {new Date(entry.started_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            {new Date(entry.started_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} -{" "}
+                            {entry.ended_at
+                              ? new Date(entry.ended_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+                              : "--"}
+                          </p>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
-                <div className="-mx-4 mt-3 sticky bottom-0 bg-gradient-to-t from-[#0d0f12] via-[#0d0f12]/90 to-transparent px-4 pt-3">
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      className="btn-secondary text-xs py-2 text-center"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowNextWeek(prev => !prev);
-                      }}
-                    >
-                      {showNextWeek ? "Hide next week" : "Next 7 days"}
-                    </button>
-                    <Link href="/dashboard/shifts" className="btn-secondary text-xs py-2 text-center">
-                      View Full Schedule
-                    </Link>
-                  </div>
-                </div>
-              </div>
-            }
-          />
-
-          {/* CURRENT HOURS - Expandable */}
-          <ExpandableCard
-            title="CURRENT HOURS"
-            icon={Timer}
-            iconColor="text-orange-400"
-            borderColor="bento-hours"
-            disabled={!showMySchedule}
-            fullViewLink="/dashboard/shifts"
-            fullViewText="View full timecard"
-            collapsedContent={
-              <div className="text-center">
-                <p className="text-3xl font-bold text-white">{currentPeriodHours.toFixed(1)}</p>
-                <p className="text-sm text-orange-400">hours this period</p>
-                <p className="text-xs text-gray-400 mt-1">
-                  {new Date(payPeriodRange.start).toLocaleDateString("en-US", { month: "short", day: "numeric" })} - {" "}
-                  {new Date(payPeriodRange.end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                </p>
-              </div>
-            }
-            expandedContent={
-              <div className="space-y-3">
-                <div className="flex justify-between items-center pb-2 border-b border-white/10">
-                  <span className="text-sm text-gray-400">Period Total</span>
-                  <span className="text-xl font-bold text-orange-400">{currentPeriodHours.toFixed(2)} hrs</span>
-                </div>
-                <div className="space-y-2 max-h-[40vh] overflow-y-auto">
-                  {timeEntries.slice(0, 5).map((entry) => (
-                    <div key={entry.id} className="flex justify-between items-center py-2 px-3 bg-white/5 rounded-lg">
-                      <div>
-                        <p className="text-sm font-medium">
-                          {new Date(entry.started_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                        </p>
-                        <p className="text-xs text-gray-400">
-                          {new Date(entry.started_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} - {" "}
-                          {entry.ended_at ? new Date(entry.ended_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "--"}
-                        </p>
+                        <span className="text-sm font-bold text-white">{entry.hours.toFixed(1)}h</span>
                       </div>
-                      <span className="text-sm font-bold text-white">{entry.hours.toFixed(1)}h</span>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+                  {timeEntries.length === 0 ? (
+                    <p className="text-center text-gray-400 py-4">No hours logged this period.</p>
+                  ) : null}
                 </div>
-                {timeEntries.length === 0 && <p className="text-center text-gray-400 py-4">No hours logged this period</p>}
-              </div>
-            }
-          />
+              }
+            />
+          </RevealOnScroll>
 
-          {/* ADMIN */}
-          {showAdmin ? (
-            <div className="space-y-2">
-              <Link href="/admin" className="bento-card bento-admin">
-                <div className="flex flex-col items-center justify-center gap-3">
-                  <Shield className="w-10 h-10 md:w-12 md:h-12 text-pink-400" strokeWidth={1.5} />
-                  <span className="bento-card-title">ADMIN</span>
-                </div>
-              </Link>
-              <Link
-                href="/admin/cleaning/report"
-                className="block rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-4 py-2 text-center text-xs font-semibold tracking-wide text-cyan-200 hover:bg-cyan-500/15"
-              >
-                QUICK LINK: CLEANING AUDIT
+          <RevealOnScroll delayMs={120}>
+            <section className="employee-panel">
+            <div className="employee-panel-header">
+              <div>
+                <div className="employee-section-kicker">Immediate Actions</div>
+                <h2>Immediate Actions</h2>
+              </div>
+              {immediateActions.length > 4 ? (
+                <button
+                  type="button"
+                  className="employee-inline-toggle"
+                  onClick={() => setShowMoreActions((prev) => !prev)}
+                >
+                  {showMoreActions ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </button>
+              ) : null}
+            </div>
+            <div className="employee-panel-stack">
+              {visibleActions.map((action) => (
+                <Link key={action.href} href={action.href} className="employee-link-row">
+                  <div>
+                    <strong>{action.label}</strong>
+                    <span>{action.detail}</span>
+                  </div>
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              ))}
+            </div>
+            </section>
+          </RevealOnScroll>
+
+          <RevealOnScroll delayMs={145}>
+            <section className="employee-panel employee-rank-card">
+            <div className="employee-panel-header">
+              <div>
+                <div className="employee-section-kicker">Rankings</div>
+                <h2>Scoreboard</h2>
+              </div>
+              <Trophy className="h-5 w-5 text-[var(--accent-gold)]" />
+            </div>
+            <div className="employee-rank-row">
+              <div>
+                <span className="employee-rank-label">Your Rank</span>
+                <strong>{scoreboardPreview?.rank ? `#${scoreboardPreview.rank}` : "Unranked"}</strong>
+              </div>
+              <div>
+                <span className="employee-rank-label">Score</span>
+                <strong>{scoreboardPreview?.score != null ? scoreboardPreview.score.toFixed(1) : "--"}</strong>
+              </div>
+              <Link href="/scoreboard" className="employee-inline-link employee-rank-link">
+                Full scoreboard
               </Link>
             </div>
-          ) : (
-            <div className="bento-card bento-admin bento-card-disabled">
-              <div className="flex flex-col items-center justify-center gap-3">
-                <Shield className="w-10 h-10 md:w-12 md:h-12 text-pink-400" strokeWidth={1.5} />
-                <span className="bento-card-title">ADMIN</span>
-              </div>
-            </div>
-          )}
+            </section>
+          </RevealOnScroll>
 
-          {/* REVIEWS */}
           {showRequests ? (
-            <Link href="/reviews" className="bento-card">
-              <div className="flex flex-col items-center justify-center gap-3">
-                <Star className="w-10 h-10 md:w-12 md:h-12 text-yellow-300" strokeWidth={1.5} />
-                <span className="bento-card-title">REVIEWS</span>
-                <span className="text-[10px] text-white/60 text-center px-3">
-                  Log a Google review or check the leaderboard.
-                </span>
-              </div>
-            </Link>
-          ) : (
-            <div className="bento-card bento-card-disabled">
-              <div className="flex flex-col items-center justify-center gap-3">
-                <Star className="w-10 h-10 md:w-12 md:h-12 text-yellow-300" strokeWidth={1.5} />
-                <span className="bento-card-title">REVIEWS</span>
-                <span className="text-[10px] text-white/60 text-center px-3">
-                  Log a Google review or check the leaderboard.
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+            <RevealOnScroll delayMs={170}>
+              <Link href="/dashboard/requests?tab=advances" className="employee-lower-card">
+                <div className="employee-section-kicker">Advance Request</div>
+                <div className="employee-lower-row">
+                  <strong>Submit Advance</strong>
+                  <ArrowRight className="h-4 w-4" />
+                </div>
+              </Link>
+            </RevealOnScroll>
+          ) : null}
+
+          {showRequests ? (
+            <RevealOnScroll delayMs={195}>
+              <Link href="/reviews" className="employee-lower-card">
+                <div className="employee-section-kicker">Reviews</div>
+                <div className="employee-lower-row">
+                  <strong>Open Reviews</strong>
+                  <ArrowRight className="h-4 w-4" />
+                </div>
+              </Link>
+            </RevealOnScroll>
+          ) : null}
+        </section>
+      </main>
 
       {/* Auth Choice Modal */}
       {showAuthModal && (
@@ -903,7 +934,7 @@ function HomePageInner() {
 
 export default function Home() {
   return (
-    <Suspense fallback={<div className="bento-shell flex items-center justify-center"><div className="text-muted">Loading...</div></div>}>
+    <Suspense fallback={<div className="bento-shell employee-shell-loading"><div className="text-muted">Loading...</div></div>}>
       <HomePageInner />
     </Suspense>
   );

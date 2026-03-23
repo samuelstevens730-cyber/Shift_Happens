@@ -3,15 +3,18 @@
 import Link from "next/link";
 import Image from "next/image";
 import { useEffect, useState } from "react";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import UserAvatar, { type AvatarOptions } from "@/components/UserAvatar";
+import EmployeeBottomNav from "@/components/EmployeeBottomNav";
+import EmployeeShellFX from "@/components/EmployeeShellFX";
 
 interface HomeHeaderProps {
   isManager?: boolean;
   isAuthenticated?: boolean;
   profileId?: string | null;
   onLogin?: () => void;
+  utilityText?: string | null;
 }
 
 const PIN_TOKEN_KEY = "sh_pin_token";
@@ -28,6 +31,7 @@ export default function HomeHeader({
   isAuthenticated = false,
   profileId = null,
   onLogin,
+  utilityText = null,
 }: HomeHeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -67,85 +71,72 @@ export default function HomeHeader({
     };
   }, [isAuthenticated, profileId]);
 
-  const handleLogout = async () => {
+  async function handleLogout() {
     await supabase.auth.signOut();
-    // Clear PIN session too
     if (typeof window !== "undefined") {
       sessionStorage.removeItem("sh_pin_token");
       sessionStorage.removeItem("sh_pin_store_id");
       sessionStorage.removeItem("sh_pin_profile_id");
     }
     router.push("/");
-  };
-
-  const scheduleHref = profileId ? `/schedule?profileId=${encodeURIComponent(profileId)}` : "/schedule";
-  const shiftsHref = profileId ? `/shifts?profileId=${encodeURIComponent(profileId)}` : "/shifts";
+  }
 
   return (
-    <div className="bento-top-bar">
-      <Image
-        src="/brand/no_cap_logo.jpg"
-        alt="No Cap Smoke Shop"
-        width={120}
-        height={120}
-        priority
-        className="bento-logo"
-      />
-      <nav className="bento-nav">
-        <Link
-          href="/"
-          className={`bento-nav-link ${pathname === "/" ? "bento-nav-active" : "bento-nav-inactive"}`}
-        >
-          HOME
-        </Link>
-        {(isAuthenticated || profileId) && (
-          <>
-            <Link
-              href={scheduleHref}
-              className={`bento-nav-link ${pathname === "/schedule" ? "bento-nav-active" : "bento-nav-inactive"}`}
-            >
-              MY SCHEDULE
-            </Link>
-            <Link
-              href={shiftsHref}
-              className={`bento-nav-link ${pathname === "/shifts" ? "bento-nav-active" : "bento-nav-inactive"}`}
-            >
-              MY SHIFTS
-            </Link>
-          </>
-        )}
-        {isManager && (
-          <Link
-            href="/admin"
-            className={`bento-nav-link ${pathname === "/admin" ? "bento-nav-active" : "bento-nav-inactive"}`}
-          >
-            ADMIN
+    <>
+      {!pathname?.startsWith("/admin") ? <EmployeeShellFX /> : null}
+      <header className="employee-header">
+        <div className="employee-header-brand">
+          <Link href="/" className="employee-header-logo-wrap" aria-label="Go to home">
+            <span className="employee-header-logo-glow" aria-hidden="true" />
+            <Image
+              src="/brand/no_cap_logo.jpg"
+              alt="No Cap Smoke Shop"
+              width={72}
+              height={72}
+              priority
+              className="employee-header-logo"
+            />
           </Link>
-        )}
-        {isAuthenticated ? (
-          <div className="flex items-center gap-2">
-            <div className="h-8 w-8 overflow-hidden rounded-full border border-white/20 bg-black">
-              <UserAvatar
-                seed={avatar?.avatar_seed ?? profileId}
-                style={avatar?.avatar_style ?? "avataaars"}
-                options={avatar?.avatar_options ?? {}}
-                uploadUrl={avatar?.avatar_upload_url ?? null}
-                alt="My avatar"
-              />
-            </div>
-            <button onClick={handleLogout} className="bento-nav-link bento-nav-inactive">
-              LOGOUT
-            </button>
+          <div className="employee-header-copy">
+            <div className="employee-header-title">Shift Happens</div>
+            <div className="employee-header-subtitle">Welcome Back</div>
+            {utilityText ? <div className="employee-header-utility">{utilityText}</div> : null}
           </div>
-        ) : (
-          <button
-            onClick={() => (onLogin ? onLogin() : router.push(`/login?next=${encodeURIComponent(pathname || "/")}`))}
-            className="bento-nav-link bento-nav-inactive"
-          >
-            LOGIN
-          </button>
-        )}
-      </nav>
-    </div>
+        </div>
+
+        <div className="employee-header-actions">
+          {isAuthenticated ? (
+            <>
+              <Link href="/avatar" className="employee-header-avatar" aria-label="Open avatar settings">
+                <UserAvatar
+                  seed={avatar?.avatar_seed ?? profileId}
+                  style={avatar?.avatar_style ?? "avataaars"}
+                  options={avatar?.avatar_options ?? {}}
+                  uploadUrl={avatar?.avatar_upload_url ?? null}
+                  alt="My avatar"
+                />
+              </Link>
+              {isManager ? (
+                <Link href="/admin" className="employee-header-admin">
+                  Admin
+                </Link>
+              ) : null}
+              <button onClick={handleLogout} className="employee-header-logout">
+                Logout
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => (onLogin ? onLogin() : router.push(`/login?next=${encodeURIComponent(pathname || "/")}`))}
+              className="employee-header-logout"
+            >
+              Login
+            </button>
+          )}
+        </div>
+      </header>
+
+      {!pathname?.startsWith("/admin") ? <EmployeeBottomNav profileId={profileId} isManager={isManager} /> : null}
+    </>
   );
 }

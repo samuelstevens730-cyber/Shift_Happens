@@ -682,13 +682,13 @@ export default function ClockPageClient() {
   const modalOpen = openShiftPrompt || staleShiftPrompt;
 
   return (
-    <div className="app-shell">
+    <div className="app-shell clock-shell">
       <HomeHeader
         isManager={managerSession}
         isAuthenticated={managerSession || Boolean(pinToken)}
         profileId={profileId || null}
       />
-      <div className={`max-w-md mx-auto space-y-4 ${modalOpen ? "pointer-events-none select-none" : ""}`}>
+      <div className={`clock-layout ${modalOpen ? "pointer-events-none select-none" : ""}`}>
         {unscheduledPrompt && (
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4">
             <div className="card card-pad w-full max-w-md space-y-4">
@@ -721,141 +721,195 @@ export default function ClockPageClient() {
           </div>
         )}
 
-        <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">Clock In</h1>
-          <span className="text-xs muted">Employee</span>
-        </div>
+        <section className="clock-hero">
+          <div className="clock-hero-copy">
+            <div className="employee-kicker">Time Clock</div>
+            <h1 className="employee-title">Punch in without the noise.</h1>
+            <p className="employee-subtitle">
+              Confirm the store, planned start time, and shift type. The app handles payroll rounding and sends you straight into the active shift flow.
+            </p>
+          </div>
+          <div className="clock-status-box">
+            <span className="clock-status-label">Current Mode</span>
+            <strong>{qrToken && tokenStore ? "QR Locked" : "Manual Entry"}</strong>
+            <span>{selectedStoreName}</span>
+          </div>
+        </section>
 
-        <div className="card card-pad space-y-4">
-          {/* Manual mode banner - shown when no QR token */}
-          {!qrToken && (
-            <div className="banner text-sm">
-              QR token missing - manual clock-in is allowed. Select a store and employee to continue.
-            </div>
-          )}
-
-          {/* QR token validated - show locked store info */}
-          {qrToken && tokenStore && (
-            <div className="banner text-sm">
-              Token store: <b>{tokenStore.name}</b>. Store selection is locked to this location.
-              <div className="mt-2">
-                <a className="underline" href="/clock">Not at this store?</a>
-              </div>
-            </div>
-          )}
-
-          {/* Invalid QR token error */}
-          {qrToken && tokenError && (
-            <div className="banner banner-error text-sm">{tokenError}</div>
-          )}
-
-          {/* Manager profile error */}
-          {managerSession && managerProfileError && (
-            <div className="banner banner-error text-sm">{managerProfileError}</div>
-          )}
-
-          {error && (
-            <div className="banner banner-error text-sm">{error}</div>
-          )}
-
-          {/* Store selector - hidden when QR token locks the store */}
-          {!qrToken && (
-            <div className="space-y-2">
-              <label className="text-sm muted">Store</label>
-              <select
-                className="select"
-                value={storeId}
-                onChange={e => setStoreId(e.target.value)}
-                disabled={submitting || pinLockedSelection}
-              >
-                {stores.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          <div className="space-y-2">
-            <label className="text-sm muted">Employee</label>
-            {managerSession ? (
-              managerProfile ? (
-                <div className="input bg-white/5 cursor-not-allowed">
-                  {managerProfile.name} <span className="text-xs muted">(you)</span>
-                </div>
-              ) : (
-                <div className="input bg-[var(--card)] border border-[var(--green)]/30 text-center py-2">
-                  {managerProfileError ? "Manager profile missing" : "Loading profile..."}
-                </div>
-              )
-            ) : (
-              <div className="input bg-[var(--card)] border border-[var(--green)]/30 text-center py-2">
-                {authenticatedProfileName ?? "Not authenticated"}
+        <div className="clock-content-grid">
+          <div className="clock-form card card-pad space-y-4">
+            {!qrToken && (
+              <div className="banner text-sm">
+                Manual clock-in is active. Select a store and authenticate to continue.
               </div>
             )}
-          </div>
 
-          <div className="space-y-2">
-            <label className="text-sm muted">Shift type</label>
-            <select
-              className="select"
-              value={shiftKind}
-              onChange={e => setShiftKind(e.target.value as ShiftKind)}
-              disabled={submitting}
-            >
-              <option value="open">Open</option>
-              <option value="close">Close</option>
-              <option value="double">Double</option>
-              <option value="other">Other</option>
-            </select>
-            <div className="text-xs muted">
-              Defaults to today&apos;s scheduled shift when available. You can change it before clock-in.
+            {qrToken && tokenStore && (
+              <div className="banner text-sm">
+                Token store: <b>{tokenStore.name}</b>. Store selection is locked to this location.
+                <div className="mt-2">
+                  <a className="underline" href="/clock">Not at this store?</a>
+                </div>
+              </div>
+            )}
+
+            {qrToken && tokenError && (
+              <div className="banner banner-error text-sm">{tokenError}</div>
+            )}
+
+            {managerSession && managerProfileError && (
+              <div className="banner banner-error text-sm">{managerProfileError}</div>
+            )}
+
+            {error && (
+              <div className="banner banner-error text-sm">{error}</div>
+            )}
+
+            <div className="clock-form-section">
+              <div className="clock-section-heading">
+                <span className="employee-section-kicker">Assignment</span>
+                <h2>Shift setup</h2>
+              </div>
+
+          {/* Manual mode banner - shown when no QR token */}
+              {!qrToken && (
+                <div className="space-y-2">
+                  <label className="text-sm muted">Store</label>
+                  <select
+                    className="select"
+                    value={storeId}
+                    onChange={e => setStoreId(e.target.value)}
+                    disabled={submitting || pinLockedSelection}
+                  >
+                    {stores.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label className="text-sm muted">Employee</label>
+                {managerSession ? (
+                  managerProfile ? (
+                    <div className="input bg-white/5 cursor-not-allowed">
+                      {managerProfile.name} <span className="text-xs muted">(you)</span>
+                    </div>
+                  ) : (
+                    <div className="input bg-[var(--card)] border border-[var(--green)]/30 text-center py-2">
+                      {managerProfileError ? "Manager profile missing" : "Loading profile..."}
+                    </div>
+                  )
+                ) : (
+                  <div className="input bg-[var(--card)] border border-[var(--green)]/30 text-center py-2">
+                    {authenticatedProfileName ?? "Not authenticated"}
+                  </div>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm muted">Shift type</label>
+                <select
+                  className="select"
+                  value={shiftKind}
+                  onChange={e => setShiftKind(e.target.value as ShiftKind)}
+                  disabled={submitting}
+                >
+                  <option value="open">Open</option>
+                  <option value="close">Close</option>
+                  <option value="double">Double</option>
+                  <option value="other">Other</option>
+                </select>
+                <div className="text-xs muted">
+                  Defaults to today&apos;s scheduled shift when available. You can change it before clock-in.
+                </div>
+              </div>
+            </div>
+
+            <div className="clock-form-section">
+              <div className="clock-section-heading">
+                <span className="employee-section-kicker">Payroll Time</span>
+                <h2>Planned start</h2>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm muted">Planned start time</label>
+                <input
+                  type="datetime-local"
+                  className="input"
+                  value={plannedStartLocal}
+                  onChange={e => setPlannedStartLocal(e.target.value)}
+                  disabled={submitting}
+                />
+                <div className="text-xs muted">
+                  Times are recorded in CST. Rounded to {plannedStartRoundedLabel || "the nearest 30 minutes"} on submit.
+                </div>
+              </div>
+            </div>
+
+            <div className="banner text-sm">
+              Start drawer count is collected right after clock-in on the shift page.
+            </div>
+
+            <div className="sticky-cta">
+              <button
+                className="btn-primary w-full py-3 text-sm disabled:opacity-50"
+                disabled={!canStart || submitting}
+                onClick={() => {
+                  if (openShiftInfo) {
+                    setOpenShiftPrompt(true);
+                    return;
+                  }
+                  const planned = toCstDateFromLocalInput(plannedStartLocal);
+                  if (planned) {
+                    const roundedPlanned = roundTo30Minutes(planned);
+                    const windowCheck = checkClockWindow(shiftKind, roundedPlanned);
+                    if (!windowCheck.ok) {
+                      triggerClockWindowModal(windowCheck.label);
+                      return;
+                    }
+                  }
+                  if (canStart) setConfirmOpen(true);
+                }}
+              >
+                {submitting ? "Starting..." : "Start Shift"}
+              </button>
             </div>
           </div>
 
-        <div className="space-y-2">
-          <label className="text-sm muted">Planned start time</label>
-          <input
-            type="datetime-local"
-            className="input"
-            value={plannedStartLocal}
-            onChange={e => setPlannedStartLocal(e.target.value)}
-            disabled={submitting}
-          />
-          <div className="text-xs muted">
-            Times are recorded in CST. Rounded to {plannedStartRoundedLabel || "the nearest 30 minutes"} on submit.
-          </div>
-        </div>
+          <aside className="clock-side-stack">
+            <div className="clock-side-panel">
+              <div className="clock-side-kicker">Ready Check</div>
+              <div className="clock-display">
+                <span>Rounded</span>
+                <strong>{plannedStartRoundedLabel || "--"}</strong>
+              </div>
+              <div className="clock-meta-list">
+                <div className="clock-meta-row">
+                  <span>Store</span>
+                  <strong>{selectedStoreName}</strong>
+                </div>
+                <div className="clock-meta-row">
+                  <span>Employee</span>
+                  <strong>{selectedProfileName}</strong>
+                </div>
+                <div className="clock-meta-row">
+                  <span>Shift type</span>
+                  <strong className="uppercase">{shiftKind}</strong>
+                </div>
+              </div>
+            </div>
 
-          <div className="banner text-sm">
-            Start drawer count is collected right after clock-in on the shift page.
-          </div>
-
-          <div className="sticky-cta">
-            <button
-              className="btn-primary w-full py-3 text-sm disabled:opacity-50"
-              disabled={!canStart || submitting}
-              onClick={() => {
-                if (openShiftInfo) {
-                  setOpenShiftPrompt(true);
-                  return;
-                }
-                const planned = toCstDateFromLocalInput(plannedStartLocal);
-                if (planned) {
-                  const roundedPlanned = roundTo30Minutes(planned);
-                  const windowCheck = checkClockWindow(shiftKind, roundedPlanned);
-                  if (!windowCheck.ok) {
-                    triggerClockWindowModal(windowCheck.label);
-                    return;
-                  }
-                }
-                if (canStart) setConfirmOpen(true);
-              }}
-            >
-              {submitting ? "Starting..." : "Start Shift"}
-            </button>
-          </div>
+            <div className="clock-side-panel">
+              <div className="clock-side-kicker">What Happens Next</div>
+              <div className="clock-note-list">
+                <div>1. Confirm the planned start time you want payroll to use.</div>
+                <div>2. Start the shift and complete the opening drawer count on the shift page.</div>
+                <div>3. If the store or time window is wrong, stop here and correct it before submitting.</div>
+              </div>
+            </div>
+          </aside>
         </div>
       </div>
 
