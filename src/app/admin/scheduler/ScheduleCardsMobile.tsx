@@ -18,6 +18,9 @@ type Props = {
   assignments: Record<string, Assignment>;
   scheduleMap: Record<string, { id: string; status: string }>;
   employeesByStore: Record<string, Array<{ id: string; name: string }>>;
+  blockedAssignmentKeys: Set<string>;
+  getEmployeesForCell: (storeId: string, dateStr: string, currentProfileId?: string | null) => Array<{ id: string; name: string }>;
+  getTimeOffNote: (storeId: string, dateStr: string) => string | null;
   templateLookup: (storeId: string, dateStr: string, shiftType: "open" | "close") => TemplateRow | undefined;
   unassignedKeys: Set<string>;
   conflictKeys: Set<string>;
@@ -56,6 +59,9 @@ export default function ScheduleCardsMobile({
   assignments,
   scheduleMap,
   employeesByStore,
+  blockedAssignmentKeys,
+  getEmployeesForCell,
+  getTimeOffNote,
   templateLookup,
   unassignedKeys,
   conflictKeys,
@@ -139,6 +145,7 @@ export default function ScheduleCardsMobile({
           const hasIssues = card.issueKeys.length > 0;
           const pill = statusPill(scheduleStatus, hasIssues);
           const cardExpanded = expanded.has(card.cardKey);
+          const timeOffNote = getTimeOffNote(card.store.id, card.date);
 
           let dayHours = 0;
             const summaries = SHIFT_TYPES.map(shift => {
@@ -161,6 +168,7 @@ export default function ScheduleCardsMobile({
               hours,
               hasIssue: unassignedKeys.has(key) || conflictKeys.has(key),
               conflict: conflictKeys.has(key),
+              approvedTimeOffConflict: blockedAssignmentKeys.has(key),
               colorClass: assignment?.profileId ? (employeeColorMap[assignment.profileId] ?? "") : "",
             };
           });
@@ -206,13 +214,14 @@ export default function ScheduleCardsMobile({
                     </div>
                   ))}
                 </div>
+                {timeOffNote && <div className="mt-2 text-xs text-amber-200">{timeOffNote}</div>}
                 <div className="mt-2 text-xs muted">{cardExpanded ? "Collapse details" : "Expand details"}</div>
               </button>
 
               {cardExpanded && (
                 <div id={`scheduler-card-body-${card.cardKey}`} className="mt-3 space-y-3">
                   {summaries.map(item => {
-                    const employees = employeesByStore[card.store.id] ?? [];
+                    const employees = getEmployeesForCell(card.store.id, card.date, item.assignment?.profileId);
                     return (
                       <div key={item.key} className="border border-white/10 rounded p-3 space-y-2">
                         <div className="text-sm font-medium flex items-center justify-between">
@@ -267,6 +276,9 @@ export default function ScheduleCardsMobile({
                           </span>
                           {item.hours > 0 && <span>{item.hours.toFixed(2)} hrs</span>}
                         </div>
+                        {item.approvedTimeOffConflict && (
+                          <div className="text-xs text-rose-200">Assigned employee has approved time off for this day.</div>
+                        )}
                       </div>
                     );
                   })}

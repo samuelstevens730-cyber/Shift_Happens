@@ -35,7 +35,10 @@ export default function AdminSchedulerPage() {
     weeklyWarnings,
     conflicts,
     conflictKeys,
+    blockedAssignmentKeys,
     unassignedKeys,
+    getEmployeesForCell,
+    getTimeOffNote,
     handleEmployeeChange,
     handleModeChange,
     handleOtherTimeChange,
@@ -148,6 +151,9 @@ export default function AdminSchedulerPage() {
           dates={dates}
           assignments={assignments}
           employeesByStore={employeesByStore}
+          blockedAssignmentKeys={blockedAssignmentKeys}
+          getEmployeesForCell={getEmployeesForCell}
+          getTimeOffNote={getTimeOffNote}
           templateLookup={templateLookup}
           onEmployeeChange={handleEmployeeChange}
           onModeChange={handleModeChange}
@@ -160,6 +166,9 @@ export default function AdminSchedulerPage() {
           assignments={assignments}
           scheduleMap={scheduleMap}
           employeesByStore={employeesByStore}
+          blockedAssignmentKeys={blockedAssignmentKeys}
+          getEmployeesForCell={getEmployeesForCell}
+          getTimeOffNote={getTimeOffNote}
           templateLookup={templateLookup}
           unassignedKeys={unassignedKeys}
           conflictKeys={conflictKeys}

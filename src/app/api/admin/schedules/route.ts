@@ -29,6 +29,13 @@ type ScheduleRow = {
   period_end: string;
   status: string;
 };
+type TimeOffBlockRow = {
+  id: string;
+  profile_id: string;
+  start_date: string;
+  end_date: string;
+  request_id: string | null;
+};
 
 export async function GET(req: Request) {
   const token = getBearerToken(req);
@@ -45,6 +52,10 @@ export async function GET(req: Request) {
   }
   if (!storeIds.length) return NextResponse.json({ error: "No managed stores." }, { status: 403 });
 
+  const url = new URL(req.url);
+  const periodStart = (url.searchParams.get("periodStart") ?? "").trim();
+  const periodEnd = (url.searchParams.get("periodEnd") ?? "").trim();
+
   const { data: stores } = await supabaseServer
     .from("stores")
     .select("id, name")
@@ -57,6 +68,14 @@ export async function GET(req: Request) {
     .select("store_id, profile:profile_id(id, name, active)")
     .in("store_id", storeIds)
     .returns<MembershipRow[]>();
+
+  const profileIds = Array.from(
+    new Set(
+      (memberships ?? [])
+        .map(row => row.profile?.id ?? null)
+        .filter((value): value is string => Boolean(value))
+    )
+  );
 
   const { data: templates } = await supabaseServer
     .from("shift_templates")
@@ -71,11 +90,31 @@ export async function GET(req: Request) {
     .order("period_start", { ascending: false })
     .returns<ScheduleRow[]>();
 
+  let timeOffBlocks: TimeOffBlockRow[] = [];
+  if (profileIds.length) {
+    let blockQuery = supabaseServer
+      .from("time_off_blocks")
+      .select("id, profile_id, start_date, end_date, request_id")
+      .in("profile_id", profileIds)
+      .is("deleted_at", null);
+
+    if (periodStart) {
+      blockQuery = blockQuery.lte("start_date", periodEnd || "9999-12-31").gte("end_date", periodStart);
+    }
+
+    const { data: blockRows, error: blockErr } = await blockQuery
+      .order("start_date", { ascending: true })
+      .returns<TimeOffBlockRow[]>();
+    if (blockErr) return NextResponse.json({ error: blockErr.message }, { status: 500 });
+    timeOffBlocks = blockRows ?? [];
+  }
+
   return NextResponse.json({
     stores: stores ?? [],
     memberships: memberships ?? [],
     templates: templates ?? [],
     schedules: schedules ?? [],
+    timeOffBlocks,
   });
 }
 
@@ -86,7 +125,12 @@ export async function POST(req: Request) {
   const { data: { user }, error: authErr } = await supabaseServer.auth.getUser(token);
   if (authErr || !user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-  const body = await req.json().catch(() => ({})) as { periodStart?: string; periodEnd?: string };
+  let body: { periodStart?: string; periodEnd?: string };
+  try {
+    body = (await req.json()) as { periodStart?: string; periodEnd?: string };
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
   const periodStart = body.periodStart;
   const periodEnd = body.periodEnd;
   if (!periodStart || !periodEnd) {

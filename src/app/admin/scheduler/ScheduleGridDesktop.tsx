@@ -17,6 +17,9 @@ type Props = {
   dates: string[];
   assignments: Record<string, Assignment>;
   employeesByStore: Record<string, Array<{ id: string; name: string }>>;
+  blockedAssignmentKeys: Set<string>;
+  getEmployeesForCell: (storeId: string, dateStr: string, currentProfileId?: string | null) => Array<{ id: string; name: string }>;
+  getTimeOffNote: (storeId: string, dateStr: string) => string | null;
   templateLookup: (storeId: string, dateStr: string, shiftType: "open" | "close") => TemplateRow | undefined;
   onEmployeeChange: (storeId: string, dateStr: string, shiftType: "open" | "close", profileId: string) => void;
   onModeChange: (storeId: string, dateStr: string, shiftType: "open" | "close", shiftMode: Assignment["shiftMode"]) => void;
@@ -34,6 +37,9 @@ export default function ScheduleGridDesktop({
   dates,
   assignments,
   employeesByStore,
+  blockedAssignmentKeys,
+  getEmployeesForCell,
+  getTimeOffNote,
   templateLookup,
   onEmployeeChange,
   onModeChange,
@@ -68,11 +74,13 @@ export default function ScheduleGridDesktop({
                 SHIFT_TYPES.map(shift => {
                   const key = assignmentKey(store.id, dateStr, shift.key);
                   const current = assignments[key];
-                  const employees = employeesByStore[store.id] ?? [];
+                  const employees = getEmployeesForCell(store.id, dateStr, current?.profileId);
                   const tpl = templateLookup(store.id, dateStr, shift.key);
                   const cellStart = current?.shiftMode === "other" ? current?.scheduledStart : tpl?.start_time;
                   const cellEnd = current?.shiftMode === "other" ? current?.scheduledEnd : tpl?.end_time;
                   const cellHours = cellStart && cellEnd ? calcHours(cellStart, cellEnd).toFixed(2) : null;
+                  const timeOffNote = getTimeOffNote(store.id, dateStr);
+                  const hasApprovedTimeOffConflict = blockedAssignmentKeys.has(key);
                   return (
                     <td key={key} className="px-2 py-2 align-top min-w-[220px]">
                       <div className="space-y-1">
@@ -116,6 +124,10 @@ export default function ScheduleGridDesktop({
                         <div className="text-xs muted">
                           {cellStart && cellEnd ? `${formatTimeLabel(cellStart)} - ${formatTimeLabel(cellEnd)}` : "Template missing"}
                         </div>
+                        {timeOffNote && <div className="text-xs text-amber-200">{timeOffNote}</div>}
+                        {hasApprovedTimeOffConflict && (
+                          <div className="text-xs text-rose-200">Assigned employee has approved time off for this day.</div>
+                        )}
                         {current?.profileId && (
                           <div className={`text-xs px-2 py-1 rounded border flex items-center justify-between gap-2 ${employeeColorMap[current.profileId] ?? ""}`}>
                             <span>{employees.find(p => p.id === current.profileId)?.name ?? "Employee"}</span>

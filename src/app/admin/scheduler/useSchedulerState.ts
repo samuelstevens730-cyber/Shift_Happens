@@ -25,6 +25,13 @@ export type ScheduleRow = {
   period_end: string;
   status: string;
 };
+export type TimeOffBlockRow = {
+  id: string;
+  profile_id: string;
+  start_date: string;
+  end_date: string;
+  request_id: string | null;
+};
 export type ShiftRow = {
   id: string;
   schedule_id: string;
@@ -49,6 +56,7 @@ type SchedulesResponse = {
   memberships: MembershipRow[];
   templates: TemplateRow[];
   schedules: ScheduleRow[];
+  timeOffBlocks: TimeOffBlockRow[];
 };
 
 type ScheduleDetailResponse = {
@@ -147,11 +155,16 @@ export function useSchedulerState() {
   const [templates, setTemplates] = useState<TemplateRow[]>([]);
   const [memberships, setMemberships] = useState<MembershipRow[]>([]);
   const [schedules, setSchedules] = useState<ScheduleRow[]>([]);
+  const [timeOffBlocks, setTimeOffBlocks] = useState<TimeOffBlockRow[]>([]);
   const [scheduleMap, setScheduleMap] = useState<Record<string, ScheduleRow>>({});
   const [assignments, setAssignments] = useState<Record<string, Assignment>>({});
   const [dirtyKeys, setDirtyKeys] = useState<Set<string>>(new Set());
   const [saving, setSaving] = useState(false);
   const autoEnsureOnceRef = useRef<Set<string>>(new Set());
+  const { start, end } = useMemo(() => getPeriodBounds(month, half), [month, half]);
+  const periodStart = toISODate(start);
+  const periodEnd = toISODate(end);
+  const dates = useMemo(() => dateRange(start, end), [start, end]);
 
   useEffect(() => {
     let alive = true;
@@ -185,7 +198,8 @@ export function useSchedulerState() {
       router.replace("/login?next=/admin/scheduler");
       return null;
     }
-    const res = await fetch("/api/admin/schedules", {
+    const query = new URLSearchParams({ periodStart, periodEnd });
+    const res = await fetch(`/api/admin/schedules?${query.toString()}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     const json = (await res.json()) as SchedulesResponse | { error: string };
@@ -202,18 +216,14 @@ export function useSchedulerState() {
     );
     setMemberships(json.memberships);
     setSchedules(json.schedules);
+    setTimeOffBlocks(json.timeOffBlocks ?? []);
     return json;
-  }, [router]);
+  }, [router, periodEnd, periodStart]);
 
   useEffect(() => {
     if (!isAuthed) return;
     void loadMeta();
   }, [isAuthed, loadMeta]);
-
-  const { start, end } = useMemo(() => getPeriodBounds(month, half), [month, half]);
-  const periodStart = toISODate(start);
-  const periodEnd = toISODate(end);
-  const dates = useMemo(() => dateRange(start, end), [start, end]);
 
   useEffect(() => {
     const map: Record<string, ScheduleRow> = {};
@@ -275,6 +285,71 @@ export function useSchedulerState() {
     Object.values(map).forEach(list => list.sort((a, b) => a.name.localeCompare(b.name)));
     return map;
   }, [memberships]);
+
+  const storeIdByProfile = useMemo(() => {
+    const map: Record<string, string> = {};
+    memberships.forEach(m => {
+      const profileId = m.profile?.id;
+      if (!profileId) return;
+      map[profileId] = m.store_id;
+    });
+    return map;
+  }, [memberships]);
+
+  const approvedTimeOffByStoreDate = useMemo(() => {
+    const map: Record<string, Array<{ profileId: string; name: string }>> = {};
+    const nameByProfile = new Map<string, string>();
+
+    memberships.forEach(m => {
+      const profileId = m.profile?.id;
+      if (!profileId) return;
+      nameByProfile.set(profileId, m.profile?.name?.trim() || "Unknown");
+    });
+
+    for (const block of timeOffBlocks) {
+      const storeId = storeIdByProfile[block.profile_id];
+      if (!storeId) continue;
+      const startDate = new Date(`${block.start_date}T00:00:00`);
+      const endDate = new Date(`${block.end_date}T00:00:00`);
+      const current = new Date(startDate);
+
+      while (current <= endDate) {
+        const dateStr = toISODate(current);
+        const key = `${storeId}|${dateStr}`;
+        const existing = map[key] ?? [];
+        if (!existing.some(item => item.profileId === block.profile_id)) {
+          existing.push({
+            profileId: block.profile_id,
+            name: nameByProfile.get(block.profile_id) ?? "Unknown",
+          });
+          existing.sort((a, b) => a.name.localeCompare(b.name));
+          map[key] = existing;
+        }
+        current.setDate(current.getDate() + 1);
+      }
+    }
+
+    return map;
+  }, [memberships, storeIdByProfile, timeOffBlocks]);
+
+  const getEmployeesForCell = useCallback(
+    (storeId: string, dateStr: string, currentProfileId?: string | null) => {
+      const employees = employeesByStore[storeId] ?? [];
+      const blockedIds = new Set((approvedTimeOffByStoreDate[`${storeId}|${dateStr}`] ?? []).map(item => item.profileId));
+      return employees.filter(employee => employee.id === currentProfileId || !blockedIds.has(employee.id));
+    },
+    [approvedTimeOffByStoreDate, employeesByStore]
+  );
+
+  const getTimeOffNote = useCallback(
+    (storeId: string, dateStr: string) => {
+      const blocked = approvedTimeOffByStoreDate[`${storeId}|${dateStr}`] ?? [];
+      if (!blocked.length) return null;
+      const names = blocked.map(item => item.name).join(", ");
+      return `${names} ${blocked.length === 1 ? "has" : "have"} approved time off for this day.`;
+    },
+    [approvedTimeOffByStoreDate]
+  );
 
   const templatesByStore = useMemo(() => {
     const map: Record<string, TemplateRow[]> = {};
@@ -427,6 +502,24 @@ export function useSchedulerState() {
     return { messages, keys };
   }, [assignments, dates, stores, memberships]);
 
+  const blockedAssignmentKeys = useMemo(() => {
+    const keys = new Set<string>();
+    for (const store of stores) {
+      for (const dateStr of dates) {
+        const blockedIds = new Set((approvedTimeOffByStoreDate[`${store.id}|${dateStr}`] ?? []).map(item => item.profileId));
+        if (!blockedIds.size) continue;
+        for (const shiftType of SHIFT_TYPES) {
+          const key = assignmentKey(store.id, dateStr, shiftType.key);
+          const profileId = assignments[key]?.profileId;
+          if (profileId && blockedIds.has(profileId)) {
+            keys.add(key);
+          }
+        }
+      }
+    }
+    return keys;
+  }, [approvedTimeOffByStoreDate, assignments, dates, stores]);
+
   const unassignedKeys = useMemo(() => {
     const keys = new Set<string>();
     for (const store of stores) {
@@ -444,6 +537,10 @@ export function useSchedulerState() {
     async (forceAll = false, list?: ScheduleRow[]) => {
       if (conflictDetails.messages.length) {
         setError("Resolve double-booking conflicts before saving.");
+        return false;
+      }
+      if (blockedAssignmentKeys.size) {
+        setError("Resolve approved time off conflicts before saving.");
         return false;
       }
       const token = await getBearerToken();
@@ -485,7 +582,7 @@ export function useSchedulerState() {
       await loadDetails();
       return true;
     },
-    [dates, dirtyKeys, stores, assignments, loadDetails, conflictDetails.messages, getScheduleForStore, schedules]
+    [dates, dirtyKeys, stores, assignments, loadDetails, conflictDetails.messages, blockedAssignmentKeys, getScheduleForStore, schedules]
   );
 
   const saveDraft = useCallback(async () => {
@@ -608,7 +705,10 @@ export function useSchedulerState() {
     weeklyWarnings,
     conflicts: conflictDetails.messages,
     conflictKeys: conflictDetails.keys,
+    blockedAssignmentKeys,
     unassignedKeys,
+    getEmployeesForCell,
+    getTimeOffNote,
     handleEmployeeChange,
     handleModeChange,
     handleOtherTimeChange,

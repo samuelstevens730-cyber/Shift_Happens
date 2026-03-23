@@ -38,11 +38,11 @@ Workforce management application for two retail stores (**LV1**, **LV2**).
 | `schedule_shifts` | Individual planned shifts within a schedule |
 | `shift_templates` | Weekly shift patterns per store and day-of-week |
 | `shift_swap_requests` + `shift_swap_offers` | Employee shift-swap workflow |
-| `time_off_requests` + `time_off_blocks` | Time-off request workflow |
+| `time_off_requests` + `time_off_blocks` | Time-off request workflow. Approved requests insert `time_off_blocks`, which the scheduler uses to warn/block same-day assignments |
 | `timesheet_change_requests` | Timesheet correction requests |
 | `advance_requests` | Pay advance requests |
 | `profiles` | Employee records: `pin_hash`, `pin_fingerprint`, `employee_code`, `name`, `avatar_url`, `active`, `auth_user_id` |
-| `app_users` | Manager records — linked to `auth.users` via `auth_user_id` |
+| `app_users` | Manager records — `app_users.id` is the linked `auth.users.id` |
 | `store_managers` | Manager-to-store assignment (scoping table for all admin auth) |
 | `store_memberships` | Employee-to-store assignment |
 | `stores` | Store records: `name`, `qr_token`, `expected_drawer_cents`, `latitude`, `longitude` |
@@ -95,7 +95,7 @@ Workforce management application for two retail stores (**LV1**, **LV2**).
 | `/admin/cleaning/report` | Day-by-day cleaning audit of completed and skipped tasks by store |
 | `/admin/assignments` | Assign tasks and messages for next shift |
 | `/admin/settings` | Store config, checklists, feature flags |
-| `/admin/scheduler` | Schedule builder and publishing |
+| `/admin/scheduler` | Schedule builder and publishing. Approved time off is surfaced from `time_off_blocks` as day notes, filtered pick-lists, and save-time conflict prevention |
 | `/admin/employee-schedules` | View schedules per employee |
 
 ---

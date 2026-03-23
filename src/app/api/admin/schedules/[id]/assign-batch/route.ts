@@ -4,7 +4,7 @@
  */
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
-import { getBearerToken } from "@/lib/adminAuth";
+import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
 
 type ScheduleRow = { id: string; store_id: string };
 type TemplateRow = { day_of_week: number; shift_type: string; start_time: string; end_time: string };
@@ -30,7 +30,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const { data: { user }, error: authErr } = await supabaseServer.auth.getUser(token);
   if (authErr || !user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-  const body = await req.json().catch(() => ({})) as { assignments?: Assignment[] };
+  let body: { assignments?: Assignment[] };
+  try {
+    body = (await req.json()) as { assignments?: Assignment[] };
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
   const assignments = body.assignments ?? [];
   if (!assignments.length) return NextResponse.json({ error: "No assignments provided." }, { status: 400 });
 
@@ -42,13 +47,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .returns<ScheduleRow>();
   if (schedErr || !schedule) return NextResponse.json({ error: "Schedule not found." }, { status: 404 });
 
-  const { data: managed } = await supabaseServer
-    .from("store_managers")
-    .select("store_id")
-    .eq("user_id", user.id)
-    .eq("store_id", schedule.store_id)
-    .returns<{ store_id: string }[]>();
-  if (!managed?.length) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  const managerStoreIds = await getManagerStoreIds(user.id);
+  if (!managerStoreIds.includes(schedule.store_id)) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
 
   const { data: templates } = await supabaseServer
     .from("shift_templates")
@@ -87,6 +89,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const invalid = profileIds.find(id => !allowed.has(id));
     if (invalid) {
       return NextResponse.json({ error: "Employee not assigned to this store." }, { status: 400 });
+    }
+  }
+
+  const assignmentDates = Array.from(new Set(assignments.map(a => a.date).filter(Boolean)));
+  if (profileIds.length && assignmentDates.length) {
+    const sortedDates = [...assignmentDates].sort();
+    const { data: blockRows, error: blockErr } = await supabaseServer
+      .from("time_off_blocks")
+      .select("profile_id,start_date,end_date")
+      .in("profile_id", profileIds)
+      .is("deleted_at", null)
+      .lte("start_date", sortedDates[sortedDates.length - 1])
+      .gte("end_date", sortedDates[0])
+      .returns<Array<{ profile_id: string; start_date: string; end_date: string }>>();
+    if (blockErr) return NextResponse.json({ error: blockErr.message }, { status: 500 });
+
+    for (const a of assignments) {
+      if (!a.profileId || !a.date) continue;
+      const blocked = (blockRows ?? []).some(
+        row => row.profile_id === a.profileId && row.start_date <= a.date && row.end_date >= a.date
+      );
+      if (blocked) {
+        return NextResponse.json(
+          { error: "Employee has approved time off on this date. Remove the assignment before saving." },
+          { status: 400 }
+        );
+      }
     }
   }
 
