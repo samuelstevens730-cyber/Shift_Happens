@@ -82,7 +82,7 @@ Workforce management application for two retail stores (**LV1**, **LV2**).
 | `/admin/variances` | Drawer variance review queue (badge count on hub) |
 | `/admin/open-shifts` | Monitor stale/abandoned shifts |
 | `/admin/shifts` | Shift CRUD with filtering |
-| `/admin/overrides` | Approve shifts >13 hours |
+| `/admin/overrides` | Scheduled shift variation review queue with bulk clear, approval, and per-shift review drawer |
 | `/admin/requests` | Swap/time-off/timesheet approval queue |
 | `/admin/safe-ledger` | Safe closeout audit, evidence review, export |
 | `/admin/shift-sales` | Per-shift AM/PM sales, rollover entries |

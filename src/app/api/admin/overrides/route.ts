@@ -36,10 +36,12 @@ import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
 type ShiftJoinRow = {
   id: string;
   shift_type: string | null;
+  planned_start_at: string | null;
   started_at: string | null;
   ended_at: string | null;
   requires_override: boolean | null;
   override_at: string | null;
+  override_note: string | null;
   store: { id: string; name: string } | null;
   profile: { id: string; name: string | null } | null;
 };
@@ -50,9 +52,11 @@ type OverrideRow = {
   storeName: string | null;
   employeeName: string | null;
   shiftType: string | null;
+  plannedStartAt: string | null;
   startedAt: string | null;
   endedAt: string | null;
   durationHours: number | null;
+  overrideNote: string | null;
 };
 
 function calcDurationHours(startedAt: string | null, endedAt: string | null) {
@@ -75,7 +79,7 @@ export async function GET(req: Request) {
 
   const { data, error } = await supabaseServer
     .from("shifts")
-    .select("id, shift_type, started_at, ended_at, requires_override, override_at, store:store_id(id,name), profile:profile_id(id,name)")
+    .select("id, shift_type, planned_start_at, started_at, ended_at, requires_override, override_at, override_note, store:store_id(id,name), profile:profile_id(id,name)")
     .eq("requires_override", true)
     .is("override_at", null)
     .in("store_id", managerStoreIds)
@@ -90,9 +94,11 @@ export async function GET(req: Request) {
     storeName: r.store?.name ?? null,
     employeeName: r.profile?.name ?? null,
     shiftType: r.shift_type ?? null,
+    plannedStartAt: r.planned_start_at ?? null,
     startedAt: r.started_at ?? null,
     endedAt: r.ended_at ?? null,
     durationHours: calcDurationHours(r.started_at ?? null, r.ended_at ?? null),
+    overrideNote: r.override_note ?? null,
   }));
 
   return NextResponse.json({ rows });

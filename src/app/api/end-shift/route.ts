@@ -63,6 +63,8 @@ type Body = {
 
 type TemplateRow = { id: string; store_id: string | null; shift_type: string };
 type ScheduleShiftRow = {
+  id?: string;
+  schedule_id?: string;
   shift_date: string;
   scheduled_start: string;
   scheduled_end: string;
@@ -604,15 +606,23 @@ export async function POST(req: Request) {
     if (shift.schedule_shift_id) {
       const shiftDate = getCstDateKey(shift.planned_start_at);
       if (shiftDate) {
-        const { data: scheduledRows, error: scheduleShiftErr } = await supabaseServer
+        const { data: anchoredScheduleRow, error: anchoredScheduleErr } = await supabaseServer
           .from("schedule_shifts")
-          .select("shift_date, scheduled_start, scheduled_end, shift_type, shift_mode, schedules!inner(status)")
-          .eq("store_id", shift.store_id)
-          .eq("profile_id", shift.profile_id)
-          .eq("shift_date", shiftDate)
-          .eq("schedules.status", "published")
-          .returns<ScheduleShiftRow[]>();
-        if (!scheduleShiftErr && scheduledRows?.length) {
+          .select("id, schedule_id, shift_date")
+          .eq("id", shift.schedule_shift_id)
+          .maybeSingle<Pick<ScheduleShiftRow, "id" | "schedule_id" | "shift_date">>();
+
+        if (!anchoredScheduleErr && anchoredScheduleRow?.schedule_id) {
+          const { data: scheduledRows, error: scheduleShiftErr } = await supabaseServer
+            .from("schedule_shifts")
+            .select("id, schedule_id, shift_date, scheduled_start, scheduled_end, shift_type, shift_mode, schedules!inner(status)")
+            .eq("schedule_id", anchoredScheduleRow.schedule_id)
+            .eq("profile_id", shift.profile_id)
+            .eq("shift_date", anchoredScheduleRow.shift_date ?? shiftDate)
+            .eq("schedules.status", "published")
+            .returns<ScheduleShiftRow[]>();
+
+          if (!scheduleShiftErr && scheduledRows?.length) {
           const scheduledCoverage = collapseScheduledCoverage(scheduledRows);
           const actualWindow = scheduledCoverage
             ? actualCoverageFromTimes(scheduledCoverage.shiftDate, shift.planned_start_at, endAt.toISOString())
@@ -623,6 +633,7 @@ export async function POST(req: Request) {
               actualWindow.endMinutes !== scheduledCoverage.endMinutes ||
               actualWindow.durationMinutes !== scheduledCoverage.durationMinutes;
           }
+        }
         }
       }
     }
