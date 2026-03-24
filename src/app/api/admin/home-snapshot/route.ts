@@ -108,12 +108,14 @@ export async function GET(req: Request) {
         .order("started_at", { ascending: true })
         .returns<OpenShiftRow[]>(),
 
-      // Scheduled shifts today
+      // Distinct employees scheduled today (published schedules only)
+      // Select profile_id rows, then dedupe in JS — avoids double-counting doubles
       supabaseServer
         .from("schedule_shifts")
-        .select("id", { count: "exact", head: true })
+        .select("profile_id, schedules!inner(status)")
         .in("store_id", storeIds)
-        .eq("shift_date", today),
+        .eq("shift_date", today)
+        .eq("schedules.status", "published"),
 
       // Pending swap requests
       supabaseServer
@@ -162,11 +164,16 @@ export async function GET(req: Request) {
       since: r.started_at ?? "",
     }));
 
+    // Dedupe by profile_id so doubles don't inflate the count
+    const scheduledToday = new Set(
+      (scheduledTodayRes.data ?? []).map((r: { profile_id: string }) => r.profile_id)
+    ).size;
+
     return NextResponse.json({
       yesterdaySales: sumSales(yesterdaySalesRes.data ?? null),
       weeklySales: sumSales(weeklySalesRes.data ?? null),
       clockedIn,
-      scheduledToday: scheduledTodayRes.count ?? 0,
+      scheduledToday,
       pendingRequests:
         (swapsRes.count ?? 0) + (timeOffRes.count ?? 0) + (timesheetRes.count ?? 0),
       unreviewedVariances: variancesRes.count ?? 0,
