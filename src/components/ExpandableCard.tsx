@@ -51,7 +51,7 @@ export default function ExpandableCard({
       <div className="flex flex-col h-full">
         {/* Header */}
         <div
-          className="flex items-center justify-between p-4 cursor-pointer"
+          className="flex items-center justify-between px-4 py-3 cursor-pointer"
           onClick={(e) => {
             e.stopPropagation();
             setIsExpanded(!isExpanded);
@@ -71,7 +71,7 @@ export default function ExpandableCard({
         {/* Content */}
         <div className="flex-1 min-h-0 overflow-hidden">
           {!isExpanded ? (
-            <div className="p-4 pt-0 flex flex-col items-center justify-center">
+            <div className="px-4 pb-3 flex flex-col items-center justify-center">
               {collapsedContent}
             </div>
           ) : (

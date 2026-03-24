@@ -99,7 +99,7 @@ export default function HomeHeader({
           </Link>
           <div className="employee-header-copy">
             <div className="employee-header-title">Shift Happens</div>
-            <div className="employee-header-subtitle">Welcome Back</div>
+            <div className="employee-header-subtitle">Let's track it.</div>
             {utilityText ? <div className="employee-header-utility">{utilityText}</div> : null}
           </div>
         </div>

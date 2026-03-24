@@ -721,20 +721,10 @@ export default function ClockPageClient() {
           </div>
         )}
 
-        <section className="clock-hero">
-          <div className="clock-hero-copy">
-            <div className="employee-kicker">Time Clock</div>
-            <h1 className="employee-title">Punch in without the noise.</h1>
-            <p className="employee-subtitle">
-              Confirm the store, planned start time, and shift type. The app handles payroll rounding and sends you straight into the active shift flow.
-            </p>
-          </div>
-          <div className="clock-status-box">
-            <span className="clock-status-label">Current Mode</span>
-            <strong>{qrToken && tokenStore ? "QR Locked" : "Manual Entry"}</strong>
-            <span>{selectedStoreName}</span>
-          </div>
-        </section>
+        <div className="clock-page-intro-card">
+          <h2 className="clock-page-intro-title">Clock In</h2>
+          <p className="clock-page-intro-desc">Select store, confirm shift type, and planned start time.</p>
+        </div>
 
         <div className="clock-content-grid">
           <div className="clock-form card card-pad space-y-4">
@@ -901,14 +891,6 @@ export default function ClockPageClient() {
               </div>
             </div>
 
-            <div className="clock-side-panel">
-              <div className="clock-side-kicker">What Happens Next</div>
-              <div className="clock-note-list">
-                <div>1. Confirm the planned start time you want payroll to use.</div>
-                <div>2. Start the shift and complete the opening drawer count on the shift page.</div>
-                <div>3. If the store or time window is wrong, stop here and correct it before submitting.</div>
-              </div>
-            </div>
           </aside>
         </div>
       </div>

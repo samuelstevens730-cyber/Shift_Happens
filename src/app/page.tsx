@@ -58,6 +58,7 @@ type OpenShiftState = {
 
 type HeroState = {
   mode: "off" | "open" | "clocked-in";
+  statusLabel: string;
   label: string;
   ctaLabel?: string;
   href: string;
@@ -617,30 +618,33 @@ function HomePageInner() {
     ? openShiftDateKey === todayKey
       ? {
           mode: "clocked-in",
+          statusLabel: "Clocked In",
           label: "Clock Out",
           href: `/shift/${openShift.shiftId}`,
           detail: openShift.storeName ?? "Open shift active",
         }
       : {
           mode: "open",
+          statusLabel: "Open Shift",
           label: "Recover Shift",
           href: `/shift/${openShift.shiftId}`,
           detail: openShift.storeName ?? "Resume open shift",
         }
     : {
         mode: "off",
+        statusLabel: "Off Shift",
         label: "Start Shift",
         ctaLabel: "Punch In",
         href: "/clock",
-        detail: todayShifts.length ? getShiftTimeRange(todayShifts) : "Off shift",
+        detail: todayShifts.length ? getShiftTimeRange(todayShifts) : "No shift scheduled",
       };
 
   const immediateActions = [
-    { href: "/dashboard/requests", label: "Requests", detail: "Time off, swaps, corrections", enabled: showRequests },
-    { href: shiftsHref, label: "My Shifts", detail: "Hours and prior shifts", enabled: showMySchedule },
-    { href: scheduleHref, label: "Full Schedule", detail: "See the rest of the week", enabled: showMySchedule },
-    ...(showAdmin ? [{ href: "/admin", label: "Admin", detail: "Manager tools", enabled: true }] : []),
-    ...(showAdmin ? [{ href: "/admin/cleaning/report", label: "Cleaning Audit", detail: "Yesterday by store", enabled: true }] : []),
+    { href: "/dashboard/requests", label: "Requests", detail: "Time off, swaps & corrections", enabled: showRequests },
+    { href: shiftsHref, label: "My Shifts", detail: "", enabled: showMySchedule },
+    { href: scheduleHref, label: "Full Schedule", detail: "", enabled: showMySchedule },
+    ...(showAdmin ? [{ href: "/admin", label: "Admin", detail: "", enabled: true }] : []),
+    ...(showAdmin ? [{ href: "/admin/cleaning/report", label: "Cleaning Audit", detail: "By store, yesterday", enabled: true }] : []),
   ].filter((action) => action.enabled);
   const [showMoreActions, setShowMoreActions] = useState(false);
   const visibleActions = showMoreActions ? immediateActions : immediateActions.slice(0, 4);
@@ -666,7 +670,7 @@ function HomePageInner() {
         <RevealOnScroll delayMs={0}>
           <Link href={heroState.href} className={`employee-time-hero employee-time-hero-${heroState.mode}`}>
             <div className="employee-time-label">Time Clock</div>
-            <div className="employee-time-state">{heroState.label}</div>
+            <div className="employee-time-state">{heroState.statusLabel}</div>
             <div className="employee-time-meta">{heroState.detail}</div>
             <div className="employee-time-cta">
               {heroState.ctaLabel ?? heroState.label}
@@ -750,12 +754,19 @@ function HomePageInner() {
               fullViewLink={shiftsHref}
               fullViewText="Full timecard"
               collapsedContent={
-                <div className="text-center">
-                  <p className="employee-metric-value">{currentPeriodHours.toFixed(1)}</p>
-                  <p className="text-sm text-[var(--accent-gold)]">hours this period</p>
-                  <p className="employee-metric-meta">
+                <div className="employee-hours-collapsed">
+                  <div className="employee-hours-stat">
+                    <p className="employee-metric-value">{currentPeriodHours.toFixed(1)}</p>
+                    <p className="text-sm text-[var(--accent-gold)]">hours</p>
+                  </div>
+                  <div className="employee-hours-divider" />
+                  <div className="employee-hours-stat">
+                    <p className="employee-metric-value">{timeEntries.length}</p>
+                    <p className="text-sm text-[var(--accent-gold)]">shifts</p>
+                  </div>
+                  <p className="employee-metric-meta employee-hours-period">
                     {payPeriodRange.start
-                      ? `${new Date(payPeriodRange.start).toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${new Date(payPeriodRange.end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                      ? `${new Date(payPeriodRange.start).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(payPeriodRange.end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
                       : "Current pay period"}
                   </p>
                 </div>
@@ -796,8 +807,7 @@ function HomePageInner() {
             <section className="employee-panel">
             <div className="employee-panel-header">
               <div>
-                <div className="employee-section-kicker">Immediate Actions</div>
-                <h2>Immediate Actions</h2>
+                <h2>Quick Actions</h2>
               </div>
               {immediateActions.length > 4 ? (
                 <button
@@ -814,7 +824,7 @@ function HomePageInner() {
                 <Link key={action.href} href={action.href} className="employee-link-row">
                   <div>
                     <strong>{action.label}</strong>
-                    <span>{action.detail}</span>
+                    {action.detail ? <span>{action.detail}</span> : null}
                   </div>
                   <ArrowRight className="h-4 w-4" />
                 </Link>

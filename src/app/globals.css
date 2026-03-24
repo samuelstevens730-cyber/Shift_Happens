@@ -971,11 +971,11 @@ body::after {
 }
 
 .bento-card-expandable {
-  min-height: 280px;
+  min-height: 0;
 }
 
 .bento-card-expanded {
-  min-height: 420px;
+  min-height: 360px;
 }
 
 .bento-card-scroll::-webkit-scrollbar {
@@ -1281,6 +1281,30 @@ body::after {
   gap: 18px;
 }
 
+.clock-page-intro-card {
+  background: rgba(15, 20, 30, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 12px 16px;
+}
+
+.clock-page-intro-title {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-green);
+  line-height: 1.1;
+  margin-bottom: 4px;
+}
+
+.clock-page-intro-desc {
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.45);
+  line-height: 1.4;
+}
+
 .clock-hero {
   display: grid;
   gap: 16px;
@@ -1557,15 +1581,15 @@ body::after {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 36px;
-  padding: 0 12px;
+  min-height: 30px;
+  padding: 0 10px;
   border-radius: 999px;
-  border: 1px solid rgba(182, 76, 255, 0.18);
-  background: rgba(255, 255, 255, 0.04);
-  color: var(--text-soft);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
+  border: 1px solid rgba(182, 76, 255, 0.10);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.32);
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 
@@ -1744,29 +1768,35 @@ body::after {
 
 .employee-schedule-triptych {
   display: grid;
-  gap: 10px;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
   width: 100%;
 }
 
 .employee-mini-day {
-  gap: 4px;
+  gap: 2px;
+  padding: 8px 6px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  text-align: center;
 }
 
 .employee-mini-day-label {
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.48);
+  color: rgba(255, 255, 255, 0.38);
 }
 
 .employee-mini-day strong {
   color: var(--text-strong);
-  font-size: 0.92rem;
+  font-size: 0.82rem;
+  line-height: 1.2;
 }
 
 .employee-mini-day span:last-child {
-  color: rgba(255, 255, 255, 0.58);
-  font-size: 0.72rem;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.66rem;
 }
 
 .employee-metric-card,
@@ -1791,7 +1821,7 @@ body::after {
 }
 
 .employee-metric-value {
-  font-size: clamp(2rem, 6vw, 3rem);
+  font-size: clamp(1.8rem, 5.5vw, 2.6rem);
   line-height: 0.92;
   letter-spacing: -0.05em;
   font-weight: 800;
@@ -1801,6 +1831,35 @@ body::after {
 .employee-metric-meta {
   color: rgba(255, 255, 255, 0.56);
   font-size: 0.82rem;
+}
+
+.employee-hours-collapsed {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 16px;
+  row-gap: 4px;
+}
+
+.employee-hours-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.employee-hours-divider {
+  width: 1px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.12);
+  align-self: center;
+}
+
+.employee-hours-period {
+  grid-column: 1 / -1;
+  text-align: center;
+  margin-top: 2px;
 }
 
 .employee-panel {
