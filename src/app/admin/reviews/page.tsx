@@ -341,10 +341,7 @@ export default function AdminReviewsPage() {
     <div className="app-shell">
       <div className="mx-auto max-w-7xl space-y-4">
         <div className="flex items-center justify-between gap-2">
-          <h1 className="text-2xl font-semibold">Reviews Admin — {monthLabel(month)}</h1>
-          <button className="btn-secondary px-3 py-1.5" onClick={() => router.push("/admin")}>
-            Back to Admin
-          </button>
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Reviews Admin — {monthLabel(month)}</h1>
         </div>
 
         {error && <div className="banner banner-error">{error}</div>}
