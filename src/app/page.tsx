@@ -643,6 +643,7 @@ function HomePageInner() {
     { href: "/dashboard/requests", label: "Requests", detail: "Time off, swaps & corrections", enabled: showRequests },
     { href: shiftsHref, label: "My Shifts", detail: "", enabled: showMySchedule },
     { href: scheduleHref, label: "Full Schedule", detail: "", enabled: showMySchedule },
+    { href: "/coverage-shift/new", label: "Coverage Shift", detail: "Log hours at another store", enabled: true },
     ...(showAdmin ? [{ href: "/admin", label: "Admin", detail: "", enabled: true }] : []),
     ...(showAdmin ? [{ href: "/admin/cleaning/report", label: "Cleaning Audit", detail: "By store, yesterday", enabled: true }] : []),
   ].filter((action) => action.enabled);
