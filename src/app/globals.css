@@ -2008,12 +2008,13 @@ body::after {
 }
 
 .admin-home-card-sales {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  align-items: flex-start;
   gap: 10px;
 }
 
 .admin-home-stat {
+  flex: 1;
   display: flex;
   align-items: flex-start;
   gap: 10px;
