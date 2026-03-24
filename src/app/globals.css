@@ -2196,7 +2196,10 @@ body::after {
 .employee-rank-row strong {
   display: block;
   color: var(--accent-gold, #dbb272);
-  font-size: 1.2rem;
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
 }
 
 .employee-rank-link {
