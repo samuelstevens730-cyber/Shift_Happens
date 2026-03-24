@@ -127,7 +127,17 @@ Two goals tackled together in one sprint:
 - Pending Approvals: sum of swaps + time-off + timesheet corrections (amber accent)
 - Card style: `bg-[var(--card)] border border-white/8 rounded-xl` — no glow borders; accent color on value only
 
-**3. Main body — 2/3 + 1/3 grid (unchanged structure)**
+**3. Immediate Action Items (full width, directly below KPI row)**
+- Moved up from the bottom-right of the old layout — this is a priority management tool and should be the first thing seen after the KPI snapshot
+- Filterable by People / Money / Scheduling / Approvals (badge counts on each filter tab)
+- Each item shows title, severity badge, category label, description
+- "Mark Reviewed" inline action for unscheduled shifts
+- Direct action links: "Open Shift Detail", "Review Closeout", "Approve / Deny"
+- Clicking an item opens the quick-view Dialog
+- Empty state: "All clear — nothing needs attention" (full width, styled prominently)
+- Collapsible (collapsed by default if zero items; expanded by default if items exist)
+
+**4. Main body — 2/3 + 1/3 grid**
 
 *Left column (2/3):*
 - **Sales Block**: tabbed Table/Chart view, date+store scoped
@@ -137,7 +147,6 @@ Two goals tackled together in one sprint:
 
 *Right column (1/3):*
 - **Store Health**: per-store grade (A–D), weighted score, top drag signals with mini progress bars; grade tone colors preserved (emerald/sky/amber/red)
-- **Immediate Action Items**: filterable by People / Money / Scheduling / Approvals; each item shows title, severity badge, category label, description; "Mark Reviewed" inline action for unscheduled shifts; direct action links ("Open Shift Detail", "Review Closeout", "Approve / Deny"); clicking item opens quick-view Dialog
 
 **4. Quick-view Dialog** — preserved as-is from current dashboard
 
