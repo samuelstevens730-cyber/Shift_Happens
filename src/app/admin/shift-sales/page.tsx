@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import type { ShiftSalesResponse } from "@/types/adminShiftSales";
@@ -403,7 +402,7 @@ export default function AdminShiftSalesPage() {
     <div className="app-shell">
       <div className="mx-auto max-w-7xl space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-2xl font-semibold">Shift Sales Report</h1>
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Shift Sales Report</h1>
           <div className="flex items-center gap-2">
             <button
               type="button"
@@ -413,9 +412,6 @@ export default function AdminShiftSalesPage() {
             >
               Export Employee CSV
             </button>
-            <Link href="/admin" className="btn-secondary px-3 py-1.5">
-              Back to Admin
-            </Link>
           </div>
         </div>
 
