@@ -810,12 +810,15 @@ export default function ShiftPage() {
         isAuthenticated={managerSession || Boolean(pinToken)}
         profileId={profileId ?? null}
       />
-      <div className="p-6 pb-24">
-        <div className="max-w-md mx-auto space-y-4">
-          <h1 className="text-2xl font-semibold">Shift</h1>
+      <div className="px-4 py-4 pb-28 md:px-6">
+        <div className="shift-detail-shell">
+          <div>
+            <h1 className="shift-detail-title">Shift</h1>
+            <p className="shift-detail-subtitle">Live shift actions, checklist, and closeout.</p>
+          </div>
 
         {err ? (
-          <div className="p-3 rounded border border-red-300 text-red-600 bg-red-50">{err}</div>
+          <div className="shift-flash shift-flash-error">{err}</div>
         ) : loading ? (
           <div className="space-y-4">
             <div className="h-4 bg-slate-800 rounded w-1/2 animate-pulse mb-2" />
@@ -824,15 +827,15 @@ export default function ShiftPage() {
             <SkeletonCard />
           </div>
         ) : !state ? (
-          <div className="p-6 text-slate-400">No data found for this shift.</div>
+          <div className="shift-empty-state">No data found for this shift.</div>
         ) : (
           <>
         {/* Banner shown when redirected to existing open shift */}
         {showReuseBanner && (
-          <div className="banner text-sm">
+          <div className="shift-banner">
             Redirected to currently open shift started at {reuseLabel}.
             <button
-              className="ml-3 underline"
+              className="ml-3 underline underline-offset-4"
               onClick={() => setShowReuseBanner(false)}
             >
               Dismiss
@@ -840,14 +843,18 @@ export default function ShiftPage() {
           </div>
         )}
 
-        <div className="space-y-2 rounded border border-slate-300 bg-white p-3">
-          <div className="text-sm text-gray-600">
-            Store: <b>{state.store.name}</b> · Employee: <b>{state.employee || "Unknown"}</b>
+        <div className="shift-info-panel">
+          <div className="shift-info-topline">
+            <span className="shift-info-chip">Store <strong>{state.store.name}</strong></span>
+            <span className="shift-info-chip">Employee <strong>{state.employee || "Unknown"}</strong></span>
+            <span className="shift-info-chip">Type <strong>{shiftTypeDraft ?? state.shift.shift_type}</strong></span>
           </div>
-          <div className="flex items-center gap-2">
-            <label className="text-sm text-gray-600">Shift Type</label>
+          <div className="shift-info-controls">
+            <div className="shift-field-row">
+              <label className="shift-field-label">Shift Type</label>
+              <div className="shift-inline-actions">
             <select
-              className="border rounded p-1.5 text-sm"
+              className="shift-field-select min-w-[180px]"
               value={shiftTypeDraft ?? state.shift.shift_type}
               onChange={(e) => {
                 setShiftTypeDraft(e.target.value as ShiftType);
@@ -861,7 +868,7 @@ export default function ShiftPage() {
               <option value="other">Other</option>
             </select>
             <button
-              className="rounded bg-black px-2.5 py-1 text-xs text-white disabled:opacity-50"
+              className="shift-button-secondary disabled:opacity-50"
               disabled={
                 shiftTypeSaving ||
                 !shiftTypeDraft ||
@@ -896,9 +903,11 @@ export default function ShiftPage() {
             >
               {shiftTypeSaving ? "Saving..." : "Save"}
             </button>
+              </div>
+            </div>
           </div>
           {shiftTypeErr && (
-            <div className="text-xs rounded border border-amber-300 bg-amber-50 p-2 text-amber-700">
+            <div className="shift-flash shift-flash-warn text-xs">
               {shiftTypeErr}
             </div>
           )}
@@ -914,16 +923,16 @@ export default function ShiftPage() {
         )}
 
         {salesContextLoading && (
-          <div className="text-xs text-slate-500">Loading sales rollover context...</div>
+          <div className="shift-note text-xs">Loading sales rollover context...</div>
         )}
         {salesContextErr && (
-          <div className="text-sm border border-amber-300 rounded p-2 text-amber-700 bg-amber-50">
+          <div className="shift-flash shift-flash-warn text-sm">
             {salesContextErr}
           </div>
         )}
         {(shiftType === "close" || shiftType === "double") && salesContext?.isRolloverNight && (
-          <div className="card card-pad rounded-2xl border-cyan-400/40 bg-[#0b1220] text-slate-100 shadow-[0_0_0_1px_rgba(6,182,212,0.08)]">
-            <div className="text-sm font-medium mb-2">Rollover Status</div>
+          <div className="shift-status-panel shift-status-panel-cyan">
+            <div className="shift-status-title mb-3">Rollover Status</div>
             <div className="flex flex-wrap gap-2 text-xs">
               <span className={`px-2 py-1 rounded-full border ${salesContext.closeEntryExists ? "border-emerald-400/50 text-emerald-300" : "border-amber-400/50 text-amber-300"}`}>
                 10pm sales: {salesContext.closeEntryExists ? "saved" : "pending"}
@@ -936,41 +945,44 @@ export default function ShiftPage() {
         )}
         {safeCloseoutFlash && (
           <div
-            className={`rounded border p-2 text-sm ${
+            className={`shift-flash text-sm ${
               safeCloseoutFlash.tone === "success"
-                ? "border-emerald-300 bg-emerald-50 text-emerald-800"
+                ? "shift-flash-success"
                 : safeCloseoutFlash.tone === "warn"
-                  ? "border-amber-300 bg-amber-50 text-amber-800"
-                  : "border-red-300 bg-red-50 text-red-700"
+                  ? "shift-flash-warn"
+                  : "shift-flash-error"
             }`}
           >
             {safeCloseoutFlash.message}
           </div>
         )}
         {(shiftType === "close" || shiftType === "double") && (
-          <div className="card card-pad rounded-2xl border-cyan-400/40 bg-[#0b1220] text-slate-100 shadow-[0_0_0_1px_rgba(6,182,212,0.08)] space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="text-sm font-semibold">Safe Ledger Closeout</div>
+          <div className="shift-status-panel shift-status-panel-cyan space-y-3">
+            <div className="shift-status-header">
+              <div>
+                <div className="shift-status-title">Safe Ledger Closeout</div>
+                <div className="shift-status-copy">Finish the end-of-day ledger flow before you leave.</div>
+              </div>
               <span
-                className={`text-xs rounded-full border px-2 py-1 ${
+                className={`shift-status-pill ${
                   safeCloseout.isPassed
-                    ? "border-emerald-400/50 text-emerald-300"
+                    ? "shift-status-pill-success"
                     : safeCloseout.isEnabled
-                      ? "border-amber-400/50 text-amber-300"
-                      : "border-slate-500/40 text-slate-300"
+                      ? "shift-status-pill-warn"
+                      : "shift-status-pill-muted"
                 }`}
               >
                 {safeCloseout.isPassed ? "✅ Passed" : safeCloseout.isEnabled ? "⚠️ Pending" : "Not enabled"}
               </span>
             </div>
             {safeCloseout.loading && (
-              <div className="text-xs text-slate-400">Loading safe closeout context...</div>
+              <div className="shift-note text-xs">Loading safe closeout context...</div>
             )}
             {safeCloseout.error && (
-              <div className="text-xs border border-red-400/40 rounded p-2 text-red-300 bg-red-900/20">❌ {safeCloseout.error}</div>
+              <div className="shift-flash shift-flash-error text-xs">❌ {safeCloseout.error}</div>
             )}
             {safeCloseoutWindowReason && (
-              <div className="text-xs border border-amber-400/40 rounded p-2 text-amber-200 bg-amber-900/20">
+              <div className="shift-flash shift-flash-warn text-xs">
                 NOTE: Safe closeout is for end-of-day drawer closeout only. {safeCloseoutWindowReason}
                 {safeCloseoutUnlockCountdown && (
                   <div className="mt-1 font-semibold">Unlocks in: {safeCloseoutUnlockCountdown}</div>
@@ -989,7 +1001,7 @@ export default function ShiftPage() {
             )}
             <div className="flex justify-end">
               <button
-                className="px-3 py-1.5 rounded bg-cyan-400 text-black font-semibold disabled:opacity-50"
+                className="shift-button disabled:opacity-50"
                 disabled={!safeCloseout.isEnabled || safeCloseout.loading || Boolean(safeCloseoutWindowReason)}
                 onClick={() => safeCloseout.openWizard("task")}
               >
@@ -1010,7 +1022,7 @@ export default function ShiftPage() {
         )}
 
         {endNote && (
-          <div className="text-sm border rounded p-3">
+          <div className="shift-note">
             End note: <b>{endNote}</b>
           </div>
         )}
@@ -1029,39 +1041,39 @@ export default function ShiftPage() {
 
         {/* Checklist section - not shown for "other" shift types */}
         {shiftType !== "other" && (
-          <div className="card card-pad rounded-2xl border-cyan-400/40 bg-[#0b1220] text-slate-100 shadow-[0_0_0_1px_rgba(6,182,212,0.08)]">
+          <div className="employee-panel">
             <button
               type="button"
-              className="w-full text-left flex items-center justify-between gap-2"
+              className="shift-section-toggle"
               onClick={() => setChecklistExpanded(prev => !prev)}
             >
-              <div className="space-y-1">
-                <div className="text-sm font-medium">Opening Checklist</div>
-                <div className="text-xs text-slate-300">
+              <div className="shift-section-toggle-copy">
+                <div className="shift-status-title">Opening Checklist</div>
+                <div className="shift-section-meta">
                   Complete: <b>{checklistCompletedCount}</b> · Incomplete: <b>{checklistIncompleteCount}</b>
                 </div>
               </div>
-              <span className="text-sm">{checklistExpanded ? "Hide" : "Show"}</span>
+              <span className="shift-section-link">{checklistExpanded ? "Hide" : "Show"}</span>
             </button>
 
             {checklistExpanded && (
               <div className="mt-3 space-y-2">
                 {(state.checklistGroups || []).length === 0 ? (
-                  <div className="text-sm border border-cyan-400/30 rounded p-3 bg-slate-900">No checklist items found.</div>
+                  <div className="shift-empty-state">No checklist items found.</div>
                 ) : (
-                  <ul className="border border-cyan-400/30 rounded divide-y divide-cyan-400/20 bg-slate-900">
+                  <ul className="shift-item-list">
                     {state.checklistGroups.map(g => {
                       const isDone = done.has(g.norm);
                       return (
-                        <li key={g.norm} className="flex items-center justify-between p-3">
+                        <li key={g.norm} className="shift-item-row">
                           <div>
-                            <div>{g.label}</div>
-                            <div className="text-xs text-slate-400">{g.required ? "Required" : "Optional"}</div>
+                            <div className="shift-item-title">{g.label}</div>
+                            <div className="shift-item-meta">{g.required ? "Required" : "Optional"}</div>
                           </div>
                           <button
                             onClick={() => checkGroup(g)}
                             disabled={isDone || requiresStartDrawerCapture}
-                            className={`px-3 py-1 rounded ${isDone ? "bg-emerald-500 text-black" : "bg-slate-200 text-black"}`}
+                            className={isDone ? "shift-button-secondary" : "shift-button"}
                           >
                             {isDone ? "Done" : "Check"}
                           </button>
@@ -1071,7 +1083,7 @@ export default function ShiftPage() {
                   </ul>
                 )}
 
-                <div className="text-sm">
+                <div className="shift-section-meta">
                   {remainingRequired > 0
                     ? `Finish ${remainingRequired} required task${remainingRequired === 1 ? "" : "s"} before clock out.`
                     : "All required tasks done."}
@@ -1086,23 +1098,23 @@ export default function ShiftPage() {
           salesContext?.salesTrackingEnabled &&
           salesContext.isRolloverNight &&
           !salesContext.closeEntryExists && (
-            <div className="card card-pad rounded-2xl border-cyan-400/40 bg-[#0b1220] text-slate-100 shadow-[0_0_0_1px_rgba(6,182,212,0.08)] space-y-3">
-              <div className="text-sm font-semibold">10:00 PM Sales Checkpoint</div>
-              <div className="text-xs text-slate-300">
+            <div className="shift-status-panel shift-status-panel-cyan space-y-3">
+              <div className="shift-status-title">10:00 PM Sales Checkpoint</div>
+              <div className="shift-status-copy">
                 Enter Z report and prior X at 10pm. Midnight rollover is entered at clock out.
               </div>
               <div className="space-y-2">
-                <label className="text-sm">Prior X Report ($)</label>
+                <label className="shift-field-label">Prior X Report ($)</label>
                 <input
-                  className="w-full border border-cyan-400/30 bg-slate-900 text-slate-100 rounded p-2"
+                  className="shift-field-input"
                   inputMode="decimal"
                   value={closeCheckpointPriorX}
                   onChange={e => setCloseCheckpointPriorX(e.target.value)}
                   placeholder="0.00"
                 />
-                <label className="text-sm">Z Report Total ($)</label>
+                <label className="shift-field-label">Z Report Total ($)</label>
                 <input
-                  className="w-full border border-cyan-400/30 bg-slate-900 text-slate-100 rounded p-2"
+                  className="shift-field-input"
                   inputMode="decimal"
                   value={closeCheckpointZ}
                   onChange={e => setCloseCheckpointZ(e.target.value)}
@@ -1111,7 +1123,7 @@ export default function ShiftPage() {
               </div>
 
               {closeCheckpointNeedsConfirm && (
-                <label className="flex items-center gap-2 text-sm text-amber-300">
+                <label className="flex items-center gap-2 text-sm text-[var(--text-strong)]">
                   <input
                     type="checkbox"
                     checked={closeCheckpointConfirm}
@@ -1124,14 +1136,14 @@ export default function ShiftPage() {
               )}
 
               {closeCheckpointErr && (
-                <div className="text-sm border border-red-300/50 rounded p-2 text-red-300 bg-red-900/20">
+                <div className="shift-flash shift-flash-error text-sm">
                   {closeCheckpointErr}
                 </div>
               )}
 
               <div className="flex justify-end">
                 <button
-                  className="px-3 py-1.5 rounded bg-emerald-500 text-black font-medium disabled:opacity-50"
+                  className="shift-button disabled:opacity-50"
                   disabled={closeCheckpointSaving || (closeCheckpointNeedsConfirm && !closeCheckpointConfirm)}
                   onClick={() => {
                     void submitCloseCheckpoint();
@@ -1145,80 +1157,80 @@ export default function ShiftPage() {
 
         {/* Cleaning tasks section (separate from operational checklist) */}
         {shiftType !== "other" && (
-          <div className="card card-pad rounded-2xl border-cyan-400/40 bg-[#0b1220] text-slate-100 shadow-[0_0_0_1px_rgba(6,182,212,0.08)]">
+          <div className="employee-panel">
             <button
               type="button"
-              className="w-full text-left flex items-center justify-between gap-2"
+              className="shift-section-toggle"
               onClick={() => setCleaningExpanded(prev => !prev)}
             >
-              <div className="space-y-1">
+              <div className="shift-section-toggle-copy">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">Cleaning Tasks</span>
+                  <span className="shift-status-title">Cleaning Tasks</span>
                   {cleaningSkippedCount > 0 && (
-                    <span className="text-xs rounded-full bg-amber-100 text-amber-800 border border-amber-300 px-2 py-0.5">
+                    <span className="shift-status-pill shift-status-pill-warn">
                       Skipped: {cleaningSkippedCount}
                     </span>
                   )}
                 </div>
-                <div className="text-xs text-slate-300">
+                <div className="shift-section-meta">
                   Complete: <b>{cleaningCompletedCount}</b> · Incomplete: <b>{cleaningIncompleteCount}</b>
                 </div>
               </div>
-              <span className="text-sm">{cleaningExpanded ? "Hide" : "Show"}</span>
+              <span className="shift-section-link">{cleaningExpanded ? "Hide" : "Show"}</span>
             </button>
 
             {cleaningExpanded && (
               <div className="mt-3 space-y-2">
-                <div className="text-xs text-amber-700 border border-amber-300 rounded p-2 bg-amber-50">
+                <div className="shift-flash shift-flash-warn text-xs">
                   Cleaning tasks can be skipped with a reason. Skips notify managers but do not block clock out.
                 </div>
-                <div className="text-xs text-red-700 border border-red-300 rounded p-2 bg-red-50">
+                <div className="shift-flash shift-flash-error text-xs">
                   Completion is mandatory: failure to complete these tasks, or marking them complete when they were not done, may result in disciplinary action up to and including termination. If a task cannot be completed, document the reason in the app so it can be reviewed and approved by a manager.
                 </div>
 
-                {cleaningLoading && <div className="text-sm border border-cyan-400/30 rounded p-3 bg-slate-900">Loading cleaning tasks...</div>}
+                {cleaningLoading && <div className="shift-empty-state">Loading cleaning tasks...</div>}
                 {!cleaningLoading && cleaningTasks.length === 0 && (
-                  <div className="text-sm border border-cyan-400/30 rounded p-3 bg-slate-900">No cleaning tasks scheduled for this shift.</div>
+                  <div className="shift-empty-state">No cleaning tasks scheduled for this shift.</div>
                 )}
 
                 {!cleaningLoading && cleaningTasks.length > 0 && (
                   <>
-                    <ul className="border border-cyan-400/30 rounded divide-y divide-cyan-400/20 bg-slate-900">
+                    <ul className="shift-item-list">
                       {cleaningTasks.map(task => {
                         const isCompleted = task.status === "completed";
                         const isSkipped = task.status === "skipped";
                         return (
-                          <li key={task.schedule_id} className="p-3 space-y-2">
+                          <li key={task.schedule_id} className="shift-item-row !items-start">
                             <div className="flex items-start justify-between gap-3">
                               <div>
-                                <div>{task.task_name}</div>
-                                <div className="text-xs text-slate-400">
+                                <div className="shift-item-title">{task.task_name}</div>
+                                <div className="shift-item-meta">
                                   {task.cleaning_shift_type.toUpperCase()} · {task.task_category ?? "cleaning"}
                                 </div>
                               </div>
-                              <div className="text-xs">
-                                {isCompleted && <span className="text-emerald-300">Completed</span>}
-                                {isSkipped && <span className="text-amber-700">Skipped</span>}
-                                {!isCompleted && !isSkipped && <span className="text-slate-400">Pending</span>}
+                              <div className="shift-item-status">
+                                {isCompleted && <span className="shift-item-status-complete">Completed</span>}
+                                {isSkipped && <span className="shift-item-status-skipped">Skipped</span>}
+                                {!isCompleted && !isSkipped && <span>Pending</span>}
                               </div>
                             </div>
 
                             {task.skipped_reason && (
-                              <div className="text-xs text-amber-700 border border-amber-300 rounded p-2 bg-amber-50">
+                              <div className="shift-flash shift-flash-warn text-xs">
                                 Reason: {task.skipped_reason}
                               </div>
                             )}
 
-                            <div className="flex gap-2 justify-end">
+                            <div className="shift-item-actions">
                               <button
-                                className={`px-3 py-1 rounded ${isCompleted ? "bg-emerald-500 text-black" : "bg-slate-200 text-black"}`}
+                                className={isCompleted ? "shift-button-secondary" : "shift-button"}
                                 disabled={isCompleted || requiresStartDrawerCapture}
                                 onClick={() => void completeCleaningTask(task)}
                               >
                                 {isCompleted ? "Done" : "Complete"}
                               </button>
                               <button
-                                className="px-3 py-1 rounded border border-amber-400 text-amber-800 disabled:opacity-50"
+                                className="shift-button-secondary disabled:opacity-50"
                                 disabled={isCompleted || requiresStartDrawerCapture}
                                 onClick={() => setSkipModalTask(task)}
                               >
@@ -1229,13 +1241,13 @@ export default function ShiftPage() {
                         );
                       })}
                     </ul>
-                    <div className="text-sm">
+                    <div className="shift-section-meta">
                       {cleaningCompletedCount} of {cleaningTasks.length} tasks completed
                     </div>
                   </>
                 )}
 
-                {cleaningErr && <div className="text-sm text-red-600 border border-red-300 rounded p-2">{cleaningErr}</div>}
+                {cleaningErr && <div className="shift-flash shift-flash-error text-sm">{cleaningErr}</div>}
               </div>
             )}
           </div>
@@ -1243,14 +1255,14 @@ export default function ShiftPage() {
 
         {/* Manager assignments section */}
         {(pendingMessages.length > 0 || pendingTasks.length > 0) && (
-          <div className="space-y-3">
+          <div className="employee-panel space-y-3">
             {/* Messages require acknowledgment */}
             {pendingMessages.length > 0 && (
-              <div className="border rounded p-3 space-y-2">
-                <div className="text-sm font-medium">Manager Messages</div>
+              <div className="space-y-2">
+                <div className="shift-status-title">Manager Messages</div>
                 <div className="space-y-2">
                   {pendingMessages.map(m => (
-                    <label key={m.id} className="flex items-start gap-2 text-sm">
+                    <label key={m.id} className="shift-note flex items-start gap-2 text-sm">
                       <input
                         type="checkbox"
                         checked={Boolean(m.acknowledged_at)}
@@ -1266,14 +1278,14 @@ export default function ShiftPage() {
 
             {/* Tasks require completion */}
             {pendingTasks.length > 0 && (
-              <div className="border rounded p-3 space-y-2">
-                <div className="text-sm font-medium">Tasks</div>
+              <div className="space-y-2">
+                <div className="shift-status-title">Tasks</div>
                 <div className="space-y-2">
                   {pendingTasks.map(t => (
-                    <div key={t.id} className="flex items-center justify-between gap-2 text-sm">
+                    <div key={t.id} className="shift-note flex items-center justify-between gap-2 text-sm">
                       <span>{t.message}</span>
                       <button
-                        className="px-3 py-1 rounded border"
+                        className="shift-button-secondary"
                         disabled={requiresStartDrawerCapture}
                         onClick={() => updateAssignment(t.id, "complete")}
                       >
@@ -1288,16 +1300,16 @@ export default function ShiftPage() {
         )}
 
         {pendingMessages.length + pendingTasks.length > 0 && (
-          <div className="text-sm">
+          <div className="shift-note">
             Please acknowledge all messages and complete all tasks before clocking out.
           </div>
         )}
 
         {/* Safe closeout + clock out actions */}
-        <div className="sticky-cta space-y-2">
+        <div className="sticky-cta shift-cta-bar">
           {(shiftType === "close" || shiftType === "double") && (
             <button
-              className="w-full rounded bg-cyan-400 text-black py-2 font-semibold disabled:opacity-50"
+              className="shift-button w-full disabled:opacity-50"
               disabled={safeCloseout.loading || Boolean(safeCloseoutWindowReason)}
               onClick={() => {
                 if (safeCloseoutWindowReason) {
@@ -1321,12 +1333,12 @@ export default function ShiftPage() {
             </button>
           )}
           {requiresSafeCloseoutBeforeClockOut && (
-            <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <div className="shift-flash shift-flash-warn text-xs">
               ⚠️ Complete Safe Closeout before clocking out.
             </div>
           )}
           <button
-            className="w-full rounded bg-black text-white py-2 disabled:opacity-50"
+            className="shift-button-secondary w-full disabled:opacity-50"
             disabled={
               requiresStartDrawerCapture ||
               (shiftType !== "other" && remainingRequired > 0) ||
@@ -1441,25 +1453,25 @@ function SkipCleaningTaskModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center p-4 overflow-y-auto modal-under-header">
-      <div className="w-full max-w-md bg-white text-black rounded-2xl p-4 space-y-3">
-        <h2 className="text-lg font-semibold">Skip Cleaning Task</h2>
-        <div className="text-sm">
+      <div className="shift-modal-shell space-y-3">
+        <h2 className="shift-status-title">Skip Cleaning Task</h2>
+        <div className="shift-section-meta">
           Task: <b>{taskName}</b>
         </div>
-        <label className="text-sm">Reason (required)</label>
+        <label className="shift-field-label">Reason (required)</label>
         <textarea
-          className="w-full border rounded p-2 min-h-24"
+          className="shift-field-textarea"
           value={reason}
           onChange={e => setReason(e.target.value)}
           placeholder="Why are you skipping this cleaning task?"
         />
-        {err && <div className="text-sm text-red-600 border border-red-300 rounded p-2">{err}</div>}
+        {err && <div className="shift-flash shift-flash-error text-sm">{err}</div>}
         <div className="flex justify-end gap-2">
-          <button className="px-3 py-1.5 rounded border" onClick={onClose} disabled={saving}>
+          <button className="shift-button-secondary" onClick={onClose} disabled={saving}>
             Cancel
           </button>
           <button
-            className="px-3 py-1.5 rounded bg-amber-600 text-white disabled:opacity-50"
+            className="shift-button-danger disabled:opacity-50"
             disabled={saving}
             onClick={async () => {
               setErr(null);
@@ -1524,26 +1536,26 @@ function StartDrawerCapturePanel({
     (!(outOfThreshold || changeNot200) || notify);
 
   return (
-    <div className="card card-pad rounded-2xl border-amber-400/50 bg-amber-950/90 text-amber-100 space-y-3">
-      <div className="text-sm font-semibold">Step 1: Enter Start Drawer</div>
-      <div className="text-xs text-amber-200">
+    <div className="shift-status-panel shift-status-panel-amber space-y-3">
+      <div className="shift-status-title">Start Drawer</div>
+      <div className="shift-status-copy">
         This must be completed before checklist/tasks/clock-out actions are unlocked.
       </div>
 
-      <label className="text-sm">Beginning drawer count ($)</label>
+      <label className="shift-field-label">Beginning drawer count ($)</label>
       <input
-        className="w-full border border-amber-300/40 bg-black/20 text-amber-50 rounded p-2"
+        className="shift-field-input"
         inputMode="decimal"
         value={drawer}
         onChange={e => setDrawer(e.target.value)}
         disabled={saving}
       />
 
-      <div className="text-xs border border-amber-300/40 rounded p-2">{thresholdMsg}</div>
+      <div className="shift-flash shift-flash-warn text-xs">{thresholdMsg}</div>
 
-      <label className="text-sm">Change drawer count ($)</label>
+      <label className="shift-field-label">Change drawer count ($)</label>
       <input
-        className="w-full border border-amber-300/40 bg-black/20 text-amber-50 rounded p-2"
+        className="shift-field-input"
         inputMode="decimal"
         value={changeDrawer}
         onChange={e => setChangeDrawer(e.target.value)}
@@ -1551,7 +1563,7 @@ function StartDrawerCapturePanel({
       />
 
       {changeNot200 && (
-        <div className="text-xs border border-amber-300/40 rounded p-2">
+        <div className="shift-flash shift-flash-warn text-xs">
           Change drawer should be exactly $200.00.
         </div>
       )}
@@ -1570,21 +1582,21 @@ function StartDrawerCapturePanel({
         </label>
       )}
 
-      <label className="text-sm">Note (optional)</label>
+      <label className="shift-field-label">Note (optional)</label>
       <input
-        className="w-full border border-amber-300/40 bg-black/20 text-amber-50 rounded p-2"
+        className="shift-field-input"
         value={note}
         onChange={e => setNote(e.target.value)}
         disabled={saving}
       />
 
       {err && (
-        <div className="text-sm border border-red-300 rounded p-2 text-red-700 bg-red-50">{err}</div>
+        <div className="shift-flash shift-flash-error text-sm">{err}</div>
       )}
 
       <div className="flex justify-end">
         <button
-          className="px-3 py-1.5 rounded bg-amber-300 text-black font-semibold disabled:opacity-50"
+          className="shift-button disabled:opacity-50"
           disabled={!canSubmit}
           onClick={async () => {
             setErr(null);
@@ -1681,47 +1693,47 @@ function ChangeoverPanel({
   }, [outOfThreshold]);
 
   if (alreadyConfirmed) {
-    return <div className="border rounded p-3 text-sm text-green-700">Changeover drawer count recorded.</div>;
+    return <div className="shift-banner">Changeover drawer count recorded.</div>;
   }
 
   return (
-    <div className="border rounded p-3 space-y-2">
-      <div className="text-sm font-medium">Mid-shift Changeover</div>
+    <div className="shift-status-panel shift-status-panel-amber space-y-3">
+      <div className="shift-status-title">Mid-shift Changeover</div>
 
-      <label className="text-sm">X Report Total ($) <span className="text-gray-500">(net register total at changeover)</span></label>
+      <label className="shift-field-label">X Report Total ($) <span className="text-gray-500 normal-case tracking-normal">(net register total at changeover)</span></label>
       <input
-        className="w-full border rounded p-2"
+        className="shift-field-input"
         inputMode="decimal"
         placeholder="0.00"
         value={xReport}
         onChange={e => setXReport(e.target.value)}
       />
 
-      <label className="text-sm">Drawer count ($)</label>
+      <label className="shift-field-label">Drawer count ($)</label>
       <input
-        className="w-full border rounded p-2"
+        className="shift-field-input"
         inputMode="decimal"
         value={drawer}
         onChange={e => setDrawer(e.target.value)}
       />
 
-      <label className="text-sm">Change drawer count ($)</label>
+      <label className="shift-field-label">Change drawer count ($)</label>
       <input
-        className="w-full border rounded p-2"
+        className="shift-field-input"
         inputMode="decimal"
         value={changeDrawer}
         onChange={e => setChangeDrawer(e.target.value)}
       />
 
       {changeNot200 && (
-        <div className="text-sm border rounded p-2 text-amber-700 border-amber-300">
+        <div className="shift-flash shift-flash-warn text-sm">
           Change drawer should be exactly $200.00.
         </div>
       )}
 
-      <label className="text-sm">Transaction count <span className="text-gray-500">(# of sales rung — AM half)</span></label>
+      <label className="shift-field-label">Transaction count <span className="text-gray-500 normal-case tracking-normal">(# of sales rung — AM half)</span></label>
       <input
-        className="w-full border rounded p-2"
+        className="shift-field-input"
         inputMode="numeric"
         placeholder="e.g. 42"
         value={txnCount}
@@ -1729,7 +1741,7 @@ function ChangeoverPanel({
       />
 
       {msg && (
-        <div className="text-sm border rounded p-2 text-amber-700 border-amber-300">
+        <div className="shift-flash shift-flash-warn text-sm">
           {msg}
         </div>
       )}
@@ -1749,13 +1761,13 @@ function ChangeoverPanel({
         </>
       )}
 
-      <label className="text-sm">Note (optional)</label>
-      <input className="w-full border rounded p-2" value={note} onChange={e => setNote(e.target.value)} />
+      <label className="shift-field-label">Note (optional)</label>
+      <input className="shift-field-input" value={note} onChange={e => setNote(e.target.value)} />
 
-      {err && <div className="text-sm text-red-600 border border-red-300 rounded p-2">{err}</div>}
+      {err && <div className="shift-flash shift-flash-error text-sm">{err}</div>}
 
       <button
-        className="rounded bg-black text-white px-3 py-2 disabled:opacity-50"
+        className="shift-button disabled:opacity-50"
         disabled={saving || !Number.isFinite(cents) || !hasValidChange || (outOfThreshold && !confirm)}
         onClick={async () => {
           setErr(null);
@@ -1969,27 +1981,27 @@ function ClockOutModal({
     const rolloverCents = parseMoneyInputToCents(rolloverAmount);
     return (
       <div className="fixed inset-0 bg-black/40 flex items-start justify-center p-4 overflow-y-auto modal-under-header">
-        <div className="w-full max-w-md bg-white text-black rounded-2xl p-4 space-y-3">
-          <h2 className="text-lg font-semibold">Midnight X Report</h2>
-          <div className="text-sm">
+        <div className="shift-modal-shell space-y-3">
+          <h2 className="shift-status-title">Midnight X Report</h2>
+          <div className="shift-section-meta">
             Enter the midnight X report total before you leave. This is compared against the opener's blind entry tomorrow morning.
           </div>
-          <label className="text-sm">Midnight X Report Total ($)</label>
+          <label className="shift-field-label">Midnight X Report Total ($)</label>
           <input
-            className="w-full border rounded p-2"
+            className="shift-field-input"
             inputMode="decimal"
             value={rolloverAmount}
             onChange={e => setRolloverAmount(e.target.value)}
             placeholder="0.00"
           />
           {rolloverErr && (
-            <div className="text-sm border border-amber-300 rounded p-2 text-amber-700 bg-amber-50">
+            <div className="shift-flash shift-flash-warn text-sm">
               {rolloverErr}
             </div>
           )}
           <div className="flex justify-end gap-2">
             <button
-              className="px-3 py-1.5 rounded border"
+              className="shift-button-secondary"
               disabled={rolloverSaving}
               onClick={() => {
                 onClose();
@@ -1999,7 +2011,7 @@ function ClockOutModal({
               Skip for now
             </button>
             <button
-              className="px-3 py-1.5 rounded bg-black text-white disabled:opacity-50"
+              className="shift-button disabled:opacity-50"
               disabled={rolloverSaving || rolloverCents == null || !businessDate || !authToken}
               onClick={async () => {
                 setRolloverErr(null);
@@ -2060,41 +2072,41 @@ function ClockOutModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center p-4 overflow-y-auto modal-under-header">
-      <div className="w-full max-w-md bg-white text-black rounded-2xl p-4 space-y-3 max-h-[85vh] overflow-y-auto overscroll-contain">
-        <h2 className="text-lg font-semibold">End Shift</h2>
+      <div className="shift-modal-shell space-y-3 max-h-[85vh] overflow-y-auto overscroll-contain">
+        <h2 className="shift-status-title">End Shift</h2>
 
-        <label className="text-sm">End time</label>
+        <label className="shift-field-label">End time</label>
         <input
           type="datetime-local"
-          className="w-full border rounded p-2"
+          className="shift-field-input"
           value={endLocal}
           onChange={e => setEndLocal(e.target.value)}
         />
 
-        <label className="text-sm">Ending drawer count ($){isOther ? " (optional)" : ""}</label>
+        <label className="shift-field-label">Ending drawer count ($){isOther ? " (optional)" : ""}</label>
         <input
-          className="w-full border rounded p-2"
+          className="shift-field-input"
           inputMode="decimal"
           value={drawer}
           onChange={e => setDrawer(e.target.value)}
         />
 
         {msg && (
-          <div className="text-sm border rounded p-2 text-amber-700 border-amber-300">
+          <div className="shift-flash shift-flash-warn text-sm">
             {msg}
           </div>
         )}
 
-        <label className="text-sm">Change drawer count ($){isOther ? " (optional)" : ""}</label>
+        <label className="shift-field-label">Change drawer count ($){isOther ? " (optional)" : ""}</label>
         <input
-          className="w-full border rounded p-2"
+          className="shift-field-input"
           inputMode="decimal"
           value={changeDrawer}
           onChange={e => setChangeDrawer(e.target.value)}
         />
 
         {hasValidChange && changeNot200 && (
-          <div className="text-sm border rounded p-2 text-amber-700 border-amber-300">
+          <div className="shift-flash shift-flash-warn text-sm">
             Change drawer should be exactly $200.00.
           </div>
         )}
@@ -2116,27 +2128,27 @@ function ClockOutModal({
           </label>
         )}
 
-        <label className="text-sm">Note (optional)</label>
-        <input className="w-full border rounded p-2" value={note} onChange={e => setNote(e.target.value)} />
+        <label className="shift-field-label">Note (optional)</label>
+        <input className="shift-field-input" value={note} onChange={e => setNote(e.target.value)} />
 
         {!isOther && salesTrackingEnabled && (
-          <div className="space-y-2 border rounded p-3">
-            <div className="text-sm font-medium">Sales Report</div>
-            {salesContextLoading && <div className="text-xs text-slate-500">Loading sales context...</div>}
+          <div className="employee-panel space-y-2">
+            <div className="shift-status-title">Sales Report</div>
+            {salesContextLoading && <div className="shift-note text-xs">Loading sales context...</div>}
 
             {shiftType === "open" && (
               <>
-                <label className="text-sm">X Report Total ($)</label>
+                <label className="shift-field-label">X Report Total ($)</label>
                 <input
-                  className="w-full border rounded p-2"
+                  className="shift-field-input"
                   inputMode="decimal"
                   value={salesXReport}
                   onChange={e => setSalesXReport(e.target.value)}
                   placeholder="0.00"
                 />
-                <label className="text-sm">Transaction count <span className="text-gray-500">(# of sales rung — optional)</span></label>
+                <label className="shift-field-label">Transaction count <span className="text-gray-500 normal-case tracking-normal">(# of sales rung — optional)</span></label>
                 <input
-                  className="w-full border rounded p-2"
+                  className="shift-field-input"
                   inputMode="numeric"
                   value={openTransactionCount}
                   onChange={e => setOpenTransactionCount(e.target.value)}
@@ -2147,25 +2159,25 @@ function ClockOutModal({
 
             {(shiftType === "close" || shiftType === "double") && !isRolloverNight && !useSafeCloseoutSalesForClose && (
               <>
-                <label className="text-sm">Prior X Report ($)</label>
+                <label className="shift-field-label">Prior X Report ($)</label>
                 <input
-                  className="w-full border rounded p-2"
+                  className="shift-field-input"
                   inputMode="decimal"
                   value={salesPriorX}
                   onChange={e => setSalesPriorX(e.target.value)}
                   placeholder="0.00"
                 />
-                <label className="text-sm">Z Report Total ($)</label>
+                <label className="shift-field-label">Z Report Total ($)</label>
                 <input
-                  className="w-full border rounded p-2"
+                  className="shift-field-input"
                   inputMode="decimal"
                   value={salesZReport}
                   onChange={e => setSalesZReport(e.target.value)}
                   placeholder="0.00"
                 />
-                <label className="text-sm">Transaction count <span className="text-gray-500">(# of sales rung — optional)</span></label>
+                <label className="shift-field-label">Transaction count <span className="text-gray-500 normal-case tracking-normal">(# of sales rung — optional)</span></label>
                 <input
-                  className="w-full border rounded p-2"
+                  className="shift-field-input"
                   inputMode="numeric"
                   value={closeTransactionCount}
                   onChange={e => setCloseTransactionCount(e.target.value)}
@@ -2175,23 +2187,23 @@ function ClockOutModal({
             )}
             {(shiftType === "close" || shiftType === "double") && !isRolloverNight && useSafeCloseoutSalesForClose && (
               <>
-                <div className="text-xs border rounded p-2 text-emerald-700 border-emerald-300 bg-emerald-50">
+                <div className="shift-flash shift-flash-success text-xs">
                   Using submitted Safe Closeout totals for close-shift sales.
                 </div>
-                <label className="text-sm">Prior X Report ($)</label>
+                <label className="shift-field-label">Prior X Report ($)</label>
                 <input
-                  className="w-full border rounded p-2"
+                  className="shift-field-input"
                   inputMode="decimal"
                   value={salesPriorX}
                   onChange={e => setSalesPriorX(e.target.value)}
                   placeholder="Enter if missing"
                 />
-                <div className="text-xs text-slate-500">
+                <div className="shift-section-meta text-xs">
                   Only needed if opener X report was not entered earlier.
                 </div>
-                <label className="text-sm">Transaction count <span className="text-gray-500">(# of sales rung - required)</span></label>
+                <label className="shift-field-label">Transaction count <span className="text-gray-500 normal-case tracking-normal">(# of sales rung - required)</span></label>
                 <input
-                  className="w-full border rounded p-2"
+                  className="shift-field-input"
                   inputMode="numeric"
                   value={closeTransactionCount}
                   onChange={e => setCloseTransactionCount(e.target.value)}
@@ -2201,12 +2213,12 @@ function ClockOutModal({
             )}
             {(shiftType === "close" || shiftType === "double") && isRolloverNight && (
               <>
-                <div className="text-xs border rounded p-2 text-blue-700 border-blue-300">
+                <div className="shift-flash shift-flash-warn text-xs">
                   10pm Z/Prior-X is entered from the shift page. At clock out, enter transaction count for the full close period.
                 </div>
-                <label className="text-sm">Transaction count <span className="text-gray-500">(# of sales rung - required)</span></label>
+                <label className="shift-field-label">Transaction count <span className="text-gray-500 normal-case tracking-normal">(# of sales rung - required)</span></label>
                 <input
-                  className="w-full border rounded p-2"
+                  className="shift-field-input"
                   inputMode="numeric"
                   value={closeTransactionCount}
                   onChange={e => setCloseTransactionCount(e.target.value)}
@@ -2218,8 +2230,8 @@ function ClockOutModal({
         )}
 
         {salesNeedsConfirm && (
-          <div className="space-y-2 border rounded p-3 border-amber-300 bg-amber-50">
-            <div className="text-sm text-amber-800">
+          <div className="shift-flash shift-flash-warn space-y-2">
+            <div className="text-sm">
               Sales numbers do not balance.
               {salesVarianceCents != null ? ` Variance: $${(salesVarianceCents / 100).toFixed(2)}.` : ""}
             </div>
@@ -2240,15 +2252,15 @@ function ClockOutModal({
           I understand I'm ending my shift.
         </label>
 
-        {err && <div className="text-sm text-red-600 border border-red-300 rounded p-2">{err}</div>}
+        {err && <div className="shift-flash shift-flash-error text-sm">{err}</div>}
 
         <div className="flex gap-2 justify-end">
-          <button className="px-3 py-1.5 rounded border" onClick={onClose} disabled={saving}>
+          <button className="shift-button-secondary" onClick={onClose} disabled={saving}>
             Cancel
           </button>
           <button
             disabled={!canSubmit}
-            className="px-3 py-1.5 rounded bg-black text-white disabled:opacity-50"
+            className="shift-button disabled:opacity-50"
             onClick={async () => {
               setErr(null);
 
@@ -2369,7 +2381,7 @@ function ClockOutModal({
         </div>
 
         {outOfThreshold && !confirm && (
-          <div className="text-xs text-gray-600">
+          <div className="shift-section-meta text-xs">
             Confirmation is required when the drawer is outside the allowed threshold.
           </div>
         )}
@@ -2377,14 +2389,14 @@ function ClockOutModal({
 
       {clockWindowModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="card card-pad w-full max-w-md space-y-3 text-center">
-            <div className="text-lg font-semibold">CONTACT MANAGER IMMEDIATELY.</div>
-            <div className="text-xs muted">
+          <div className="shift-modal-shell w-full max-w-md space-y-3 text-center">
+            <div className="shift-status-title">Contact Manager Immediately</div>
+            <div className="shift-section-meta text-xs">
               The alarm indicates an invalid time entry and stops once the entry is corrected or the process is exited.
             </div>
-            <div className="text-xs muted">Proper clock in window: {clockWindowModal.label}</div>
+            <div className="shift-flash shift-flash-warn text-xs">Proper clock in window: {clockWindowModal.label}</div>
             <button
-              className="btn-secondary px-4 py-2"
+              className="shift-button-secondary mx-auto"
               onClick={() => setClockWindowModal({ open: false, label: "" })}
             >
               Close

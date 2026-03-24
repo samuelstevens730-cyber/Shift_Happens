@@ -28,25 +28,25 @@ export default function RolloverEntryCard({
   const [err, setErr] = useState<string | null>(null);
 
   return (
-    <div className="border rounded p-3 space-y-2">
-      <div className="text-sm font-semibold">Enter rollover sales from last night</div>
-      <div className="text-xs text-slate-500">
+    <div className="shift-status-panel shift-status-panel-amber space-y-3">
+      <div className="shift-status-title">Enter rollover sales from last night</div>
+      <div className="shift-status-copy">
         Enter the rollover amount using the printed report. This is a blind verification entry.
       </div>
-      <label className="text-sm">Rollover amount ($)</label>
+      <label className="shift-field-label">Rollover amount ($)</label>
       <input
-        className="w-full border rounded p-2"
+        className="shift-field-input"
         inputMode="decimal"
         value={amount}
         onChange={e => setAmount(e.target.value)}
         placeholder="0.00"
       />
 
-      {err && <div className="text-sm text-amber-700 border border-amber-300 rounded p-2">{err}</div>}
+      {err && <div className="shift-flash shift-flash-warn text-sm">{err}</div>}
 
       <div className="flex justify-end">
         <button
-          className="px-3 py-1.5 rounded bg-black text-white disabled:opacity-50"
+          className="shift-button disabled:opacity-50"
           disabled={saving}
           onClick={async () => {
             setErr(null);
@@ -103,4 +103,3 @@ export default function RolloverEntryCard({
     </div>
   );
 }
-

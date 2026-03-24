@@ -425,27 +425,27 @@ export default function SafeCloseoutWizard({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/50 p-3 sm:p-4 overflow-y-auto modal-under-header">
-      <div className="mx-auto w-full max-w-xl rounded-2xl border border-cyan-400/40 bg-[#0b1220] text-slate-100 shadow-[0_0_0_1px_rgba(6,182,212,0.08)]">
-        <div className="flex items-center justify-between border-b border-cyan-400/20 p-4">
+      <div className="shift-modal-shell shift-modal-shell-wide mx-auto">
+        <div className="flex items-center justify-between border-b border-white/10 p-4">
           <div>
-            <div className="text-lg font-semibold">Safe Closeout Wizard</div>
-            <div className="text-xs text-slate-300">{mode === "gate" ? "Clock Out Gate" : "Task Flow"} · {progressLabel}</div>
+            <div className="shift-status-title">Safe Closeout Wizard</div>
+            <div className="shift-section-meta">{mode === "gate" ? "Clock Out Gate" : "Task Flow"} · {progressLabel}</div>
           </div>
-          <button className="rounded border border-slate-500 px-3 py-1 text-sm" onClick={onClose}>Close</button>
+          <button className="shift-button-secondary" onClick={onClose}>Close</button>
         </div>
 
         <div className="space-y-3 p-4">
-          {statusNote && <div className="rounded border border-emerald-400/40 bg-emerald-900/20 p-2 text-sm text-emerald-200">{statusNote}</div>}
-          {err && <div className="rounded border border-red-400/50 bg-red-900/30 p-2 text-sm text-red-200">{err}</div>}
+          {statusNote && <div className="shift-flash shift-flash-success text-sm">{statusNote}</div>}
+          {err && <div className="shift-flash shift-flash-error text-sm">{err}</div>}
 
           {submitResult && (
             <div
-              className={`rounded p-3 text-sm border ${
+              className={`shift-flash text-sm ${
                 submitResult.status === "pass"
-                  ? "border-emerald-400/50 bg-emerald-900/30 text-emerald-200"
+                  ? "shift-flash-success"
                   : submitResult.status === "warn"
-                    ? "border-amber-400/50 bg-amber-900/30 text-amber-200"
-                    : "border-red-400/50 bg-red-900/30 text-red-200"
+                    ? "shift-flash-warn"
+                    : "shift-flash-error"
               }`}
             >
               {submitResult.status === "pass" && "✅ "}
@@ -456,32 +456,36 @@ export default function SafeCloseoutWizard({
           )}
 
           {readOnlyPassed ? (
-            <div className="rounded border border-emerald-400/50 bg-emerald-900/20 p-3 text-sm text-emerald-200">
+            <div className="shift-flash shift-flash-success text-sm">
               ✅ This safe is already closed and passed for this business date.
             </div>
           ) : (
             <>
               {step === 1 && (
-                <div className="space-y-2">
-                  <div className="text-sm font-semibold">1) Shift Context</div>
-                  <label className="text-sm">Prior X Report Total ($)</label>
-                  <input className="w-full rounded border border-cyan-400/30 bg-slate-900 p-2" inputMode="decimal" value={priorX} onChange={(e) => setPriorX(e.target.value)} />
+                <div className="shift-step-panel">
+                  <div className="shift-step-label">1 · Shift Context</div>
+                  <label className="shift-field-label">Prior X Report Total ($)</label>
+                  <input className="shift-field-input" inputMode="decimal" value={priorX} onChange={(e) => setPriorX(e.target.value)} />
                 </div>
               )}
 
               {step === 2 && (
-                <div className="space-y-3">
-                  <div className="text-sm font-semibold">2) The Command (Financials)</div>
-                  <label className="text-sm">Cash Sales ($)</label>
-                  <input className="w-full rounded border border-cyan-400/30 bg-slate-900 p-2" inputMode="decimal" value={cashSales} onChange={(e) => setCashSales(e.target.value)} />
-                  <label className="text-sm">Card Sales ($)</label>
-                  <input className="w-full rounded border border-cyan-400/30 bg-slate-900 p-2" inputMode="decimal" value={cardSales} onChange={(e) => setCardSales(e.target.value)} />
+                <div className="shift-step-panel">
+                  <div className="shift-step-label">2 · Financials</div>
+                  <div className="shift-step-row">
+                    <label className="shift-field-label">Cash Sales ($)</label>
+                    <input className="shift-field-input" inputMode="decimal" value={cashSales} onChange={(e) => setCashSales(e.target.value)} />
+                  </div>
+                  <div className="shift-step-row">
+                    <label className="shift-field-label">Card Sales ($)</label>
+                    <input className="shift-field-input" inputMode="decimal" value={cardSales} onChange={(e) => setCardSales(e.target.value)} />
+                  </div>
                   <div className="space-y-2">
-                    <div className="text-sm font-medium">Expenses</div>
+                    <div className="shift-field-label">Expenses</div>
                     {expenses.map((row, index) => (
                       <div key={row.id} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_2fr_auto]">
                         <input
-                          className="rounded border border-cyan-400/30 bg-slate-900 p-2"
+                          className="shift-field-input"
                           inputMode="decimal"
                           placeholder="Amount ($)"
                           value={row.amount}
@@ -490,7 +494,7 @@ export default function SafeCloseoutWizard({
                           }}
                         />
                         <input
-                          className="rounded border border-cyan-400/30 bg-slate-900 p-2"
+                          className="shift-field-input"
                           placeholder="Note"
                           value={row.note}
                           onChange={(e) => {
@@ -498,7 +502,7 @@ export default function SafeCloseoutWizard({
                           }}
                         />
                         <button
-                          className="rounded border border-slate-500 px-3 py-2 text-xs"
+                          className="shift-button-secondary"
                           onClick={() => {
                             setExpenses((prev) => (prev.length === 1 ? prev : prev.filter((item) => item.id !== row.id)));
                           }}
@@ -507,24 +511,25 @@ export default function SafeCloseoutWizard({
                         </button>
                       </div>
                     ))}
-                    <button className="rounded border border-cyan-300 px-3 py-1 text-sm text-cyan-200" onClick={() => setExpenses((prev) => [...prev, { id: crypto.randomUUID(), amount: "", note: "" }])}>
+                    <button className="shift-button-secondary" onClick={() => setExpenses((prev) => [...prev, { id: crypto.randomUUID(), amount: "", note: "" }])}>
                       + Add Expense
                     </button>
                   </div>
-                  <div className="rounded border border-cyan-400/40 bg-cyan-950/40 p-3 text-center text-xl font-extrabold text-cyan-100">
-                    REQUIRED DEPOSIT: {dollars(requiredDepositCents)}
+                  <div className="shift-kpi-box">
+                    <span className="shift-field-label">Required Deposit</span>
+                    <strong>{dollars(requiredDepositCents)}</strong>
                   </div>
                 </div>
               )}
 
               {step === 3 && (
-                <div className="space-y-3">
-                  <div className="text-sm font-semibold">3) The Verification (Bills Only)</div>
+                <div className="shift-step-panel">
+                  <div className="shift-step-label">3 · Bill Verification</div>
                   {(["100", "50", "20", "10", "5", "2", "1"] as const).map((key) => (
                     <div key={key} className="grid grid-cols-[90px_1fr] items-center gap-2">
-                      <label className="text-sm">${key} bills</label>
+                      <label className="shift-field-label">${key} bills</label>
                       <input
-                        className="w-full rounded border border-cyan-400/30 bg-slate-900 p-2"
+                        className="shift-field-input"
                         inputMode="numeric"
                         placeholder="0"
                         value={denoms[key]}
@@ -532,13 +537,13 @@ export default function SafeCloseoutWizard({
                       />
                     </div>
                   ))}
-                  <div className={`rounded border p-2 text-sm ${countWithinTolerance ? "border-emerald-400/50 bg-emerald-900/20 text-emerald-200" : "border-amber-400/50 bg-amber-900/20 text-amber-200"}`}>
+                  <div className={`shift-flash text-sm ${countWithinTolerance ? "shift-flash-success" : "shift-flash-warn"}`}>
                     {countWithinTolerance ? "✅ Count verified." : "⚠️ Count mismatch."} Current Count: {dollars(denomTotalCents)} · Required: {dollars(requiredDepositCents)}
                   </div>
                   {!countWithinTolerance && (
-                    <div className="space-y-2 rounded border border-red-400/40 bg-red-900/20 p-2">
+                    <div className="shift-step-panel">
                       <button
-                        className="rounded bg-red-600 px-3 py-1.5 text-sm font-semibold text-white"
+                        className="shift-button-danger"
                         onClick={() => {
                           setVarianceOverride(true);
                           if (!varianceReason.trim()) {
@@ -550,7 +555,7 @@ export default function SafeCloseoutWizard({
                       </button>
                       {varianceOverride && (
                         <textarea
-                          className="w-full rounded border border-red-400/40 bg-slate-900 p-2 text-sm"
+                          className="shift-field-textarea"
                           rows={2}
                           value={varianceReason}
                           onChange={(e) => setVarianceReason(e.target.value)}
@@ -563,42 +568,42 @@ export default function SafeCloseoutWizard({
               )}
 
               {step === 4 && (
-                <div className="space-y-2">
-                  <div className="text-sm font-semibold">4) The Remainder</div>
-                  <label className="text-sm">Drawer Count ($)</label>
-                  <input className="w-full rounded border border-cyan-400/30 bg-slate-900 p-2" inputMode="decimal" value={drawerCount} onChange={(e) => setDrawerCount(e.target.value)} />
+                <div className="shift-step-panel">
+                  <div className="shift-step-label">4 · Drawer Count</div>
+                  <label className="shift-field-label">Drawer Count ($)</label>
+                  <input className="shift-field-input" inputMode="decimal" value={drawerCount} onChange={(e) => setDrawerCount(e.target.value)} />
                 </div>
               )}
 
               {step === 5 && (
-                <div className="space-y-3">
-                  <div className="text-sm font-semibold">5) Evidence & Submit</div>
+                <div className="shift-step-panel">
+                  <div className="shift-step-label">5 · Evidence & Submit</div>
                   <div className="space-y-1">
-                    <label className="text-sm">Deposit Slip (Required)</label>
+                    <label className="shift-field-label">Deposit Slip (Required)</label>
                     <input
                       type="file"
                       accept="image/*"
-                      className="block w-full text-sm text-slate-200 file:mr-3 file:rounded-lg file:border file:border-emerald-400/40 file:bg-emerald-500/15 file:px-3 file:py-2 file:text-sm file:font-medium file:text-emerald-100"
+                      className="shift-file-input"
                       onChange={(e) => setDepositFile(e.target.files?.[0] ?? null)}
                     />
-                    <div className="text-xs text-slate-400">Choose Camera or Photo Library when prompted.</div>
-                    {depositFile && <div className="text-xs text-emerald-300">Ready: {depositFile.name}</div>}
-                    {depositPath && <div className="text-xs text-emerald-300">✅ Deposit slip uploaded.</div>}
+                    <div className="shift-section-meta text-xs">Choose Camera or Photo Library when prompted.</div>
+                    {depositFile && <div className="shift-section-meta text-xs">Ready: {depositFile.name}</div>}
+                    {depositPath && <div className="shift-flash shift-flash-success text-xs">✅ Deposit slip uploaded.</div>}
                   </div>
                   <div className="space-y-1">
-                    <label className="text-sm">Z-Report (Optional)</label>
+                    <label className="shift-field-label">Z-Report (Optional)</label>
                     <input
                       type="file"
                       accept="image/*"
-                      className="block w-full text-sm text-slate-200 file:mr-3 file:rounded-lg file:border file:border-cyan-400/40 file:bg-cyan-500/15 file:px-3 file:py-2 file:text-sm file:font-medium file:text-cyan-100"
+                      className="shift-file-input"
                       onChange={(e) => setPosFile(e.target.files?.[0] ?? null)}
                     />
-                    <div className="text-xs text-slate-400">Choose Camera or Photo Library when prompted.</div>
-                    {posFile && <div className="text-xs text-cyan-300">Ready: {posFile.name}</div>}
-                    {posPath && <div className="text-xs text-emerald-300">✅ Z-report uploaded.</div>}
+                    <div className="shift-section-meta text-xs">Choose Camera or Photo Library when prompted.</div>
+                    {posFile && <div className="shift-section-meta text-xs">Ready: {posFile.name}</div>}
+                    {posPath && <div className="shift-flash shift-flash-success text-xs">✅ Z-report uploaded.</div>}
                   </div>
                   {salesNeedsCeilingConfirm && (
-                    <label className="flex items-center gap-2 text-sm text-amber-300">
+                    <label className="flex items-center gap-2 text-sm">
                       <input
                         type="checkbox"
                         checked={salesCeilingConfirmed}
@@ -613,9 +618,9 @@ export default function SafeCloseoutWizard({
           )}
         </div>
 
-        <div className="flex items-center justify-between border-t border-cyan-400/20 p-4">
+        <div className="flex items-center justify-between border-t border-white/10 p-4">
           <button
-            className="rounded border border-slate-500 px-3 py-1.5 text-sm disabled:opacity-50"
+            className="shift-button-secondary disabled:opacity-50"
             disabled={saving || readOnlyPassed || step <= 1}
             onClick={() => setStep((prev) => Math.max(1, prev - 1))}
           >
@@ -623,13 +628,13 @@ export default function SafeCloseoutWizard({
           </button>
           <div className="flex gap-2">
             {!readOnlyPassed && step < 5 && (
-              <button className="rounded bg-cyan-600 px-3 py-1.5 text-sm font-semibold text-black disabled:opacity-50" disabled={saving} onClick={() => void nextFromStep(step)}>
+              <button className="shift-button disabled:opacity-50" disabled={saving} onClick={() => void nextFromStep(step)}>
                 {saving ? "Saving..." : "Save & Next"}
               </button>
             )}
             {!readOnlyPassed && step === 5 && (
               <button
-                className="rounded bg-emerald-500 px-3 py-1.5 text-sm font-semibold text-black disabled:opacity-50"
+                className="shift-button disabled:opacity-50"
                 disabled={saving || (salesNeedsCeilingConfirm && !salesCeilingConfirmed)}
                 onClick={() => void submitCloseout()}
               >
