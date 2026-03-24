@@ -692,212 +692,413 @@ function HomePageInner() {
           </RevealOnScroll>
         )}
 
-        {showAdmin && (
-          <RevealOnScroll delayMs={0}>
-            <AdminHomeCard />
-          </RevealOnScroll>
-        )}
+        {showAdmin ? (
+          /* ── Admin layout: snapshot+clock top row, 2-col grid below ── */
+          <div className="admin-home-layout">
 
-        <div className="employee-desktop-grid">
-          {/* Column 1: Primary — Hero + Quick Actions */}
-          <div className="employee-col-primary">
-            <RevealOnScroll delayMs={0}>
-              <Link href={heroState.href} className={`employee-time-hero employee-time-hero-${heroState.mode}`}>
-                <div className="employee-time-label">Time Clock</div>
-                <div className="employee-time-state">{heroState.statusLabel}</div>
-                <div className="employee-time-meta">{heroState.detail}</div>
-                <div className="employee-time-cta">
-                  {heroState.ctaLabel ?? heroState.label}
-                  <ArrowRight className="h-4 w-4" />
-                </div>
-              </Link>
-            </RevealOnScroll>
-
-            <RevealOnScroll delayMs={60}>
-              <section className="employee-panel">
-              <div className="employee-panel-header">
-                <div><h2>Quick Actions</h2></div>
-                {immediateActions.length > 4 ? (
-                  <button
-                    type="button"
-                    className="employee-inline-toggle"
-                    onClick={() => setShowMoreActions((prev) => !prev)}
-                  >
-                    {showMoreActions ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </button>
-                ) : null}
-              </div>
-              <div className="employee-panel-stack">
-                {visibleActions.map((action) => (
-                  <Link key={action.href} href={action.href} className="employee-link-row">
-                    <div>
-                      <strong>{action.label}</strong>
-                      {action.detail ? <span>{action.detail}</span> : null}
-                    </div>
+            {/* Top row */}
+            <div className="admin-home-top-row">
+              <RevealOnScroll delayMs={0}>
+                <AdminHomeCard />
+              </RevealOnScroll>
+              <RevealOnScroll delayMs={0}>
+                <Link href={heroState.href} className={`employee-time-hero employee-time-hero-${heroState.mode}`}>
+                  <div className="employee-time-label">Time Clock</div>
+                  <div className="employee-time-state">{heroState.statusLabel}</div>
+                  <div className="employee-time-meta">{heroState.detail}</div>
+                  <div className="employee-time-cta">
+                    {heroState.ctaLabel ?? heroState.label}
                     <ArrowRight className="h-4 w-4" />
-                  </Link>
-                ))}
-              </div>
-              </section>
-            </RevealOnScroll>
-          </div>
+                  </div>
+                </Link>
+              </RevealOnScroll>
+            </div>
 
-          {/* Column 2: Planning — Schedule + Hours */}
-          <div className="employee-col-planning">
-            <RevealOnScroll delayMs={30}>
-              <ExpandableCard
-                title="MY SCHEDULE"
-                icon={Calendar}
-                iconColor="text-[var(--accent-purple)]"
-                borderColor="bento-my-schedule"
-                disabled={!showMySchedule}
-                fullViewLink={scheduleHref}
-                fullViewText="Full schedule"
-                collapsedContent={
-                  <div className="employee-schedule-triptych">
-                    {[
-                      { label: "Yesterday", shifts: yesterdayShifts },
-                      { label: "Today", shifts: todayShifts },
-                      { label: "Tomorrow", shifts: tomorrowShifts },
-                    ].map((day) => (
-                      <div key={day.label} className="employee-mini-day">
-                        <span className="employee-mini-day-label">{day.label}</span>
-                        <strong>{getShiftTimeRange(day.shifts)}</strong>
-                        <span>{getStoreLabel(day.shifts)}</span>
-                      </div>
+            {/* Bottom 2-col grid */}
+            <div className="admin-home-bottom-grid">
+
+              {/* Left col: Quick Actions + Schedule */}
+              <div className="admin-home-bottom-col">
+                <RevealOnScroll delayMs={60}>
+                  <section className="employee-panel">
+                  <div className="employee-panel-header">
+                    <div><h2>Quick Actions</h2></div>
+                    {immediateActions.length > 4 ? (
+                      <button
+                        type="button"
+                        className="employee-inline-toggle"
+                        onClick={() => setShowMoreActions((prev) => !prev)}
+                      >
+                        {showMoreActions ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="employee-panel-stack">
+                    {visibleActions.map((action) => (
+                      <Link key={action.href} href={action.href} className="employee-link-row">
+                        <div>
+                          <strong>{action.label}</strong>
+                          {action.detail ? <span>{action.detail}</span> : null}
+                        </div>
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
                     ))}
                   </div>
-                }
-                expandedContent={
-                  <div className="space-y-2">
-                    {expandedKeys.slice(0, 5).map((key) => {
-                      const shiftsForDay = scheduleShifts.filter((shift) => shift.shift_date === key);
-                      const isToday = key === todayKey;
-                      return (
-                        <div key={key} className={`employee-schedule-row ${isToday ? "employee-schedule-row-active" : ""}`}>
-                          <span className="text-sm font-medium w-24">{formatCstLabel(key)}</span>
-                          <span className="text-sm text-gray-300">{getShiftTimeRange(shiftsForDay)}</span>
-                          <span className="text-xs text-gray-500">{getStoreLabel(shiftsForDay)}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                }
-              />
-            </RevealOnScroll>
-
-            <RevealOnScroll delayMs={50}>
-              <ExpandableCard
-                title="CURRENT HOURS"
-                icon={Timer}
-                iconColor="text-[var(--accent-gold)]"
-                borderColor="bento-hours"
-                disabled={!showMySchedule}
-                fullViewLink={shiftsHref}
-                fullViewText="Full timecard"
-                collapsedContent={
-                  <div className="employee-hours-collapsed">
-                    <div className="employee-hours-stat">
-                      <p className="employee-metric-value">{currentPeriodHours.toFixed(1)}</p>
-                      <p className="text-sm text-[var(--accent-gold)]">hours</p>
-                    </div>
-                    <div className="employee-hours-divider" />
-                    <div className="employee-hours-stat">
-                      <p className="employee-metric-value">{timeEntries.length}</p>
-                      <p className="text-sm text-[var(--accent-gold)]">shifts</p>
-                    </div>
-                    <p className="employee-metric-meta employee-hours-period">
-                      {payPeriodRange.start
-                        ? `${new Date(payPeriodRange.start).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(payPeriodRange.end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                        : "Current pay period"}
-                    </p>
-                  </div>
-                }
-                expandedContent={
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center pb-2 border-b border-white/10">
-                      <span className="text-sm text-gray-400">Period Total</span>
-                      <span className="text-xl font-bold text-[var(--accent-gold)]">{currentPeriodHours.toFixed(2)} hrs</span>
-                    </div>
-                    <div className="space-y-2 max-h-[42vh] overflow-y-auto pr-1">
-                      {timeEntries.map((entry) => (
-                        <div key={entry.id} className="employee-hours-row">
-                          <div>
-                            <p className="text-sm font-medium">
-                              {new Date(entry.started_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
-                            </p>
-                            <p className="text-xs text-gray-400">
-                              {new Date(entry.started_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} -{" "}
-                              {entry.ended_at
-                                ? new Date(entry.ended_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
-                                : "--"}
-                            </p>
+                  </section>
+                </RevealOnScroll>
+                <RevealOnScroll delayMs={30}>
+                  <ExpandableCard
+                    title="MY SCHEDULE"
+                    icon={Calendar}
+                    iconColor="text-[var(--accent-purple)]"
+                    borderColor="bento-my-schedule"
+                    disabled={!showMySchedule}
+                    fullViewLink={scheduleHref}
+                    fullViewText="Full schedule"
+                    collapsedContent={
+                      <div className="employee-schedule-triptych">
+                        {[
+                          { label: "Yesterday", shifts: yesterdayShifts },
+                          { label: "Today", shifts: todayShifts },
+                          { label: "Tomorrow", shifts: tomorrowShifts },
+                        ].map((day) => (
+                          <div key={day.label} className="employee-mini-day">
+                            <span className="employee-mini-day-label">{day.label}</span>
+                            <strong>{getShiftTimeRange(day.shifts)}</strong>
+                            <span>{getStoreLabel(day.shifts)}</span>
                           </div>
-                          <span className="text-sm font-bold text-white">{entry.hours.toFixed(1)}h</span>
+                        ))}
+                      </div>
+                    }
+                    expandedContent={
+                      <div className="space-y-2">
+                        {expandedKeys.slice(0, 5).map((key) => {
+                          const shiftsForDay = scheduleShifts.filter((s) => s.shift_date === key);
+                          const isToday = key === todayKey;
+                          return (
+                            <div key={key} className={`employee-schedule-row ${isToday ? "employee-schedule-row-active" : ""}`}>
+                              <span className="text-sm font-medium w-24">{formatCstLabel(key)}</span>
+                              <span className="text-sm text-gray-300">{getShiftTimeRange(shiftsForDay)}</span>
+                              <span className="text-xs text-gray-500">{getStoreLabel(shiftsForDay)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    }
+                  />
+                </RevealOnScroll>
+              </div>{/* end admin-home-bottom-col left */}
+
+              {/* Right col: Hours + Rankings + Advance + Reviews */}
+              <div className="admin-home-bottom-col">
+                <RevealOnScroll delayMs={50}>
+                  <ExpandableCard
+                    title="CURRENT HOURS"
+                    icon={Timer}
+                    iconColor="text-[var(--accent-gold)]"
+                    borderColor="bento-hours"
+                    disabled={!showMySchedule}
+                    fullViewLink={shiftsHref}
+                    fullViewText="Full timecard"
+                    collapsedContent={
+                      <div className="employee-hours-collapsed">
+                        <div className="employee-hours-stat">
+                          <p className="employee-metric-value">{currentPeriodHours.toFixed(1)}</p>
+                          <p className="text-sm text-[var(--accent-gold)]">hours</p>
+                        </div>
+                        <div className="employee-hours-divider" />
+                        <div className="employee-hours-stat">
+                          <p className="employee-metric-value">{timeEntries.length}</p>
+                          <p className="text-sm text-[var(--accent-gold)]">shifts</p>
+                        </div>
+                        <p className="employee-metric-meta employee-hours-period">
+                          {payPeriodRange.start
+                            ? `${new Date(payPeriodRange.start).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(payPeriodRange.end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                            : "Current pay period"}
+                        </p>
+                      </div>
+                    }
+                    expandedContent={
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center pb-2 border-b border-white/10">
+                          <span className="text-sm text-gray-400">Period Total</span>
+                          <span className="text-xl font-bold text-[var(--accent-gold)]">{currentPeriodHours.toFixed(2)} hrs</span>
+                        </div>
+                        <div className="space-y-2 max-h-[42vh] overflow-y-auto pr-1">
+                          {timeEntries.map((entry) => (
+                            <div key={entry.id} className="employee-hours-row">
+                              <div>
+                                <p className="text-sm font-medium">
+                                  {new Date(entry.started_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                </p>
+                                <p className="text-xs text-gray-400">
+                                  {new Date(entry.started_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} -{" "}
+                                  {entry.ended_at
+                                    ? new Date(entry.ended_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+                                    : "--"}
+                                </p>
+                              </div>
+                              <span className="text-sm font-bold text-white">{entry.hours.toFixed(1)}h</span>
+                            </div>
+                          ))}
+                        </div>
+                        {timeEntries.length === 0 ? (
+                          <p className="text-center text-gray-400 py-4">No hours logged this period.</p>
+                        ) : null}
+                      </div>
+                    }
+                  />
+                </RevealOnScroll>
+
+                <RevealOnScroll delayMs={40}>
+                  <section className="employee-panel employee-rank-card">
+                  <div className="employee-panel-header">
+                    <div>
+                      <div className="employee-section-kicker">Rankings</div>
+                      <h2>Scoreboard</h2>
+                    </div>
+                    <Trophy className="h-5 w-5 text-[var(--accent-gold)]" />
+                  </div>
+                  <div className="employee-rank-row">
+                    <div>
+                      <span className="employee-rank-label">Your Rank</span>
+                      <strong>{scoreboardPreview?.rank ? `#${scoreboardPreview.rank}` : "Unranked"}</strong>
+                    </div>
+                    <div>
+                      <span className="employee-rank-label">Score</span>
+                      <strong>{scoreboardPreview?.score != null ? scoreboardPreview.score.toFixed(1) : "--"}</strong>
+                    </div>
+                    <Link href="/scoreboard" className="employee-inline-link employee-rank-link">
+                      Full scoreboard
+                    </Link>
+                  </div>
+                  </section>
+                </RevealOnScroll>
+
+                {showRequests ? (
+                  <RevealOnScroll delayMs={60}>
+                    <Link href="/dashboard/requests?tab=advances" className="employee-lower-card">
+                      <div className="employee-section-kicker">Advance Request</div>
+                      <div className="employee-lower-row">
+                        <strong>Submit Advance</strong>
+                        <ArrowRight className="h-4 w-4" />
+                      </div>
+                    </Link>
+                  </RevealOnScroll>
+                ) : null}
+
+                {showRequests ? (
+                  <RevealOnScroll delayMs={80}>
+                    <Link href="/reviews" className="employee-lower-card">
+                      <div className="employee-section-kicker">Reviews</div>
+                      <div className="employee-lower-row">
+                        <strong>Open Reviews</strong>
+                        <ArrowRight className="h-4 w-4" />
+                      </div>
+                    </Link>
+                  </RevealOnScroll>
+                ) : null}
+              </div>{/* end admin-home-bottom-col right */}
+
+            </div>{/* end admin-home-bottom-grid */}
+          </div>
+
+        ) : (
+          <div className="employee-desktop-grid">
+            <div className="employee-col-primary">
+              <RevealOnScroll delayMs={0}>
+                <Link href={heroState.href} className={`employee-time-hero employee-time-hero-${heroState.mode}`}>
+                  <div className="employee-time-label">Time Clock</div>
+                  <div className="employee-time-state">{heroState.statusLabel}</div>
+                  <div className="employee-time-meta">{heroState.detail}</div>
+                  <div className="employee-time-cta">
+                    {heroState.ctaLabel ?? heroState.label}
+                    <ArrowRight className="h-4 w-4" />
+                  </div>
+                </Link>
+              </RevealOnScroll>
+              <RevealOnScroll delayMs={60}>
+                <section className="employee-panel">
+                <div className="employee-panel-header">
+                  <div><h2>Quick Actions</h2></div>
+                  {immediateActions.length > 4 ? (
+                    <button
+                      type="button"
+                      className="employee-inline-toggle"
+                      onClick={() => setShowMoreActions((prev) => !prev)}
+                    >
+                      {showMoreActions ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </button>
+                  ) : null}
+                </div>
+                <div className="employee-panel-stack">
+                  {visibleActions.map((action) => (
+                    <Link key={action.href} href={action.href} className="employee-link-row">
+                      <div>
+                        <strong>{action.label}</strong>
+                        {action.detail ? <span>{action.detail}</span> : null}
+                      </div>
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  ))}
+                </div>
+                </section>
+              </RevealOnScroll>
+            </div>
+
+            <div className="employee-col-planning">
+              <RevealOnScroll delayMs={30}>
+                <ExpandableCard
+                  title="MY SCHEDULE"
+                  icon={Calendar}
+                  iconColor="text-[var(--accent-purple)]"
+                  borderColor="bento-my-schedule"
+                  disabled={!showMySchedule}
+                  fullViewLink={scheduleHref}
+                  fullViewText="Full schedule"
+                  collapsedContent={
+                    <div className="employee-schedule-triptych">
+                      {[
+                        { label: "Yesterday", shifts: yesterdayShifts },
+                        { label: "Today", shifts: todayShifts },
+                        { label: "Tomorrow", shifts: tomorrowShifts },
+                      ].map((day) => (
+                        <div key={day.label} className="employee-mini-day">
+                          <span className="employee-mini-day-label">{day.label}</span>
+                          <strong>{getShiftTimeRange(day.shifts)}</strong>
+                          <span>{getStoreLabel(day.shifts)}</span>
                         </div>
                       ))}
                     </div>
-                    {timeEntries.length === 0 ? (
-                      <p className="text-center text-gray-400 py-4">No hours logged this period.</p>
-                    ) : null}
+                  }
+                  expandedContent={
+                    <div className="space-y-2">
+                      {expandedKeys.slice(0, 5).map((key) => {
+                        const shiftsForDay = scheduleShifts.filter((s) => s.shift_date === key);
+                        const isToday = key === todayKey;
+                        return (
+                          <div key={key} className={`employee-schedule-row ${isToday ? "employee-schedule-row-active" : ""}`}>
+                            <span className="text-sm font-medium w-24">{formatCstLabel(key)}</span>
+                            <span className="text-sm text-gray-300">{getShiftTimeRange(shiftsForDay)}</span>
+                            <span className="text-xs text-gray-500">{getStoreLabel(shiftsForDay)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  }
+                />
+              </RevealOnScroll>
+              <RevealOnScroll delayMs={50}>
+                <ExpandableCard
+                  title="CURRENT HOURS"
+                  icon={Timer}
+                  iconColor="text-[var(--accent-gold)]"
+                  borderColor="bento-hours"
+                  disabled={!showMySchedule}
+                  fullViewLink={shiftsHref}
+                  fullViewText="Full timecard"
+                  collapsedContent={
+                    <div className="employee-hours-collapsed">
+                      <div className="employee-hours-stat">
+                        <p className="employee-metric-value">{currentPeriodHours.toFixed(1)}</p>
+                        <p className="text-sm text-[var(--accent-gold)]">hours</p>
+                      </div>
+                      <div className="employee-hours-divider" />
+                      <div className="employee-hours-stat">
+                        <p className="employee-metric-value">{timeEntries.length}</p>
+                        <p className="text-sm text-[var(--accent-gold)]">shifts</p>
+                      </div>
+                      <p className="employee-metric-meta employee-hours-period">
+                        {payPeriodRange.start
+                          ? `${new Date(payPeriodRange.start).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(payPeriodRange.end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                          : "Current pay period"}
+                      </p>
+                    </div>
+                  }
+                  expandedContent={
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center pb-2 border-b border-white/10">
+                        <span className="text-sm text-gray-400">Period Total</span>
+                        <span className="text-xl font-bold text-[var(--accent-gold)]">{currentPeriodHours.toFixed(2)} hrs</span>
+                      </div>
+                      <div className="space-y-2 max-h-[42vh] overflow-y-auto pr-1">
+                        {timeEntries.map((entry) => (
+                          <div key={entry.id} className="employee-hours-row">
+                            <div>
+                              <p className="text-sm font-medium">
+                                {new Date(entry.started_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                              </p>
+                              <p className="text-xs text-gray-400">
+                                {new Date(entry.started_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} -{" "}
+                                {entry.ended_at
+                                  ? new Date(entry.ended_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+                                  : "--"}
+                              </p>
+                            </div>
+                            <span className="text-sm font-bold text-white">{entry.hours.toFixed(1)}h</span>
+                          </div>
+                        ))}
+                      </div>
+                      {timeEntries.length === 0 ? (
+                        <p className="text-center text-gray-400 py-4">No hours logged this period.</p>
+                      ) : null}
+                    </div>
+                  }
+                />
+              </RevealOnScroll>
+            </div>
+
+            <div className="employee-col-secondary">
+              <RevealOnScroll delayMs={40}>
+                <section className="employee-panel employee-rank-card">
+                <div className="employee-panel-header">
+                  <div>
+                    <div className="employee-section-kicker">Rankings</div>
+                    <h2>Scoreboard</h2>
                   </div>
-                }
-              />
-            </RevealOnScroll>
+                  <Trophy className="h-5 w-5 text-[var(--accent-gold)]" />
+                </div>
+                <div className="employee-rank-row">
+                  <div>
+                    <span className="employee-rank-label">Your Rank</span>
+                    <strong>{scoreboardPreview?.rank ? `#${scoreboardPreview.rank}` : "Unranked"}</strong>
+                  </div>
+                  <div>
+                    <span className="employee-rank-label">Score</span>
+                    <strong>{scoreboardPreview?.score != null ? scoreboardPreview.score.toFixed(1) : "--"}</strong>
+                  </div>
+                  <Link href="/scoreboard" className="employee-inline-link employee-rank-link">
+                    Full scoreboard
+                  </Link>
+                </div>
+                </section>
+              </RevealOnScroll>
+              {showRequests ? (
+                <RevealOnScroll delayMs={60}>
+                  <Link href="/dashboard/requests?tab=advances" className="employee-lower-card">
+                    <div className="employee-section-kicker">Advance Request</div>
+                    <div className="employee-lower-row">
+                      <strong>Submit Advance</strong>
+                      <ArrowRight className="h-4 w-4" />
+                    </div>
+                  </Link>
+                </RevealOnScroll>
+              ) : null}
+              {showRequests ? (
+                <RevealOnScroll delayMs={80}>
+                  <Link href="/reviews" className="employee-lower-card">
+                    <div className="employee-section-kicker">Reviews</div>
+                    <div className="employee-lower-row">
+                      <strong>Open Reviews</strong>
+                      <ArrowRight className="h-4 w-4" />
+                    </div>
+                  </Link>
+                </RevealOnScroll>
+              ) : null}
+            </div>
           </div>
 
-          {/* Column 3: Secondary — Rankings + Advances + Reviews */}
-          <div className="employee-col-secondary">
-            <RevealOnScroll delayMs={40}>
-              <section className="employee-panel employee-rank-card">
-              <div className="employee-panel-header">
-                <div>
-                  <div className="employee-section-kicker">Rankings</div>
-                  <h2>Scoreboard</h2>
-                </div>
-                <Trophy className="h-5 w-5 text-[var(--accent-gold)]" />
-              </div>
-              <div className="employee-rank-row">
-                <div>
-                  <span className="employee-rank-label">Your Rank</span>
-                  <strong>{scoreboardPreview?.rank ? `#${scoreboardPreview.rank}` : "Unranked"}</strong>
-                </div>
-                <div>
-                  <span className="employee-rank-label">Score</span>
-                  <strong>{scoreboardPreview?.score != null ? scoreboardPreview.score.toFixed(1) : "--"}</strong>
-                </div>
-                <Link href="/scoreboard" className="employee-inline-link employee-rank-link">
-                  Full scoreboard
-                </Link>
-              </div>
-              </section>
-            </RevealOnScroll>
-
-            {showRequests ? (
-              <RevealOnScroll delayMs={60}>
-                <Link href="/dashboard/requests?tab=advances" className="employee-lower-card">
-                  <div className="employee-section-kicker">Advance Request</div>
-                  <div className="employee-lower-row">
-                    <strong>Submit Advance</strong>
-                    <ArrowRight className="h-4 w-4" />
-                  </div>
-                </Link>
-              </RevealOnScroll>
-            ) : null}
-
-            {showRequests ? (
-              <RevealOnScroll delayMs={80}>
-                <Link href="/reviews" className="employee-lower-card">
-                  <div className="employee-section-kicker">Reviews</div>
-                  <div className="employee-lower-row">
-                    <strong>Open Reviews</strong>
-                    <ArrowRight className="h-4 w-4" />
-                  </div>
-                </Link>
-              </RevealOnScroll>
-            ) : null}
-          </div>
-        </div>
+        )}{/* end showAdmin conditional */}
       </main>
 
       {/* Auth Choice Modal */}

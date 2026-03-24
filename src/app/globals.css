@@ -1957,17 +1957,26 @@ body::after {
   gap: 12px;
 }
 
-/* Mobile: stacked body */
-.admin-home-card-body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+/* Admin home page layout */
+.admin-home-layout {
+  display: grid;
+  gap: 16px;
 }
 
-.admin-home-card-right {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.admin-home-top-row {
+  display: grid;
+  gap: 16px;
+}
+
+.admin-home-bottom-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.admin-home-bottom-col {
+  display: grid;
+  gap: 16px;
+  align-content: start;
 }
 
 .admin-home-card-header {
@@ -2853,22 +2862,19 @@ body::after {
     box-sizing: border-box;
   }
 
-  /* Admin snapshot: 2-col on desktop (sales left, people+actions right) */
-  .admin-home-card-body {
-    flex-direction: row;
+  /* Admin home layout: top row (snapshot + clock) + 2-col bottom */
+  .admin-home-top-row {
+    grid-template-columns: 1fr 1fr;
     align-items: stretch;
-    gap: 20px;
   }
 
-  .admin-home-card-sales {
-    flex: 0 0 260px;
-    flex-direction: column;
-    gap: 10px;
+  .admin-home-top-row .employee-time-hero {
+    height: 100%;
   }
 
-  .admin-home-card-right {
-    flex: 1;
-    min-width: 0;
+  .admin-home-bottom-grid {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
   }
 
   /* 3-column grid */
