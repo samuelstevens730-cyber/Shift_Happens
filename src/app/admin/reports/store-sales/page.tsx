@@ -87,7 +87,7 @@ function downloadBlob(blob: Blob, filename: string) {
 
 function BlockA({ summary }: { summary: StorePeriodSummary }) {
   return (
-    <div className="rounded border border-zinc-700 p-4">
+    <div className="rounded border border-white/8 p-4">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
         Top-Line Velocity
       </p>
@@ -168,7 +168,7 @@ function BlockA({ summary }: { summary: StorePeriodSummary }) {
 function BlockB({ summary }: { summary: StorePeriodSummary }) {
   const hasCloseoutData = summary.cashPct != null || summary.cashRisk.totalVarianceCents != null;
   return (
-    <div className="rounded border border-zinc-700 p-4">
+    <div className="rounded border border-white/8 p-4">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
         Risk And Cash Flow
       </p>
@@ -229,7 +229,7 @@ function BlockB({ summary }: { summary: StorePeriodSummary }) {
 function VolatilityCard({ summary }: { summary: StorePeriodSummary }) {
   const volatility = summary.volatility;
   return (
-    <div className="rounded border border-zinc-700 p-4">
+    <div className="rounded border border-white/8 p-4">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
         Distribution And Volatility
       </p>
@@ -265,7 +265,7 @@ function VolatilityCard({ summary }: { summary: StorePeriodSummary }) {
 
 function WeatherSummaryCard({ summary }: { summary: StorePeriodSummary }) {
   return (
-    <div className="rounded border border-zinc-700 p-4">
+    <div className="rounded border border-white/8 p-4">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
         Weather Summary
       </p>
@@ -314,7 +314,7 @@ function WeatherSummaryCard({ summary }: { summary: StorePeriodSummary }) {
 
 function VelocityCard({ summary }: { summary: StorePeriodSummary }) {
   return (
-    <div className="rounded border border-zinc-700 p-4">
+    <div className="rounded border border-white/8 p-4">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">Velocity Map</p>
       {summary.bestDay || summary.bestShiftType ? (
         <div className="space-y-1 text-sm">
@@ -348,7 +348,7 @@ function VelocityCard({ summary }: { summary: StorePeriodSummary }) {
 function DailyTrendChart({ summary }: { summary: StorePeriodSummary }) {
   if (summary.dailyTrend.length === 0) {
     return (
-      <div className="rounded border border-zinc-700 p-4">
+      <div className="rounded border border-white/8 p-4">
         <p className="text-sm italic text-zinc-500">No daily trend data available.</p>
       </div>
     );
@@ -362,7 +362,7 @@ function DailyTrendChart({ summary }: { summary: StorePeriodSummary }) {
   }));
 
   return (
-    <div className="rounded border border-zinc-700 p-4">
+    <div className="rounded border border-white/8 p-4">
       <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">
         Daily Sales Trend
       </p>
@@ -408,7 +408,7 @@ function DailyTrendChart({ summary }: { summary: StorePeriodSummary }) {
 
 function DayOfWeekTable({ summary }: { summary: StorePeriodSummary }) {
   return (
-    <div className="rounded border border-zinc-700 p-4">
+    <div className="rounded border border-white/8 p-4">
       <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">
         Day-of-Week Averages
       </p>
@@ -427,7 +427,7 @@ function DayOfWeekTable({ summary }: { summary: StorePeriodSummary }) {
           </thead>
           <tbody>
             {summary.dayOfWeekAverages.map((row) => (
-              <tr key={row.day} className="border-t border-zinc-800">
+              <tr key={row.day} className="border-t border-white/8">
                 <td className="py-2 pr-3">{row.day.slice(0, 3)}</td>
                 <td className="py-2 pr-3">{row.avgSalesCents != null ? formatCurrencyFromCents(row.avgSalesCents) : "N/A"}</td>
                 <td className="py-2 pr-3">{row.avgTransactions != null ? row.avgTransactions.toFixed(1) : "N/A"}</td>
@@ -449,7 +449,7 @@ function DayOfWeekTable({ summary }: { summary: StorePeriodSummary }) {
 function TopPerformersCard({ summary }: { summary: StorePeriodSummary }) {
   const { volume, efficiency } = summary.topPerformers;
   return (
-    <div className="rounded border border-zinc-700 p-4">
+    <div className="rounded border border-white/8 p-4">
       <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">
         Top Performers
       </p>
@@ -491,7 +491,7 @@ function TopPerformersCard({ summary }: { summary: StorePeriodSummary }) {
 
 function ShiftTypeBreakdownTable({ summary }: { summary: StorePeriodSummary }) {
   return (
-    <div className="rounded border border-zinc-700 p-4">
+    <div className="rounded border border-white/8 p-4">
       <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">
         Shift-Type Breakdown
       </p>
@@ -509,7 +509,7 @@ function ShiftTypeBreakdownTable({ summary }: { summary: StorePeriodSummary }) {
           </thead>
           <tbody>
             {summary.shiftTypeBreakdown.map((row) => (
-              <tr key={row.shiftType} className="border-t border-zinc-800">
+              <tr key={row.shiftType} className="border-t border-white/8">
                 <td className="py-2 pr-3 capitalize">{row.shiftType}</td>
                 <td className="py-2 pr-3">{row.avgSalesCents != null ? formatCurrencyFromCents(row.avgSalesCents) : "N/A"}</td>
                 <td className="py-2 pr-3">{row.avgTransactions != null ? row.avgTransactions.toFixed(1) : "N/A"}</td>
@@ -528,7 +528,7 @@ function ShiftTypeBreakdownTable({ summary }: { summary: StorePeriodSummary }) {
 function DataIntegrityCard({ summary }: { summary: StorePeriodSummary }) {
   const integrity = summary.dataIntegrity;
   return (
-    <div className="rounded border border-zinc-700 p-4">
+    <div className="rounded border border-white/8 p-4">
       <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">
         Data Integrity
       </p>
@@ -565,8 +565,8 @@ function DataIntegrityCard({ summary }: { summary: StorePeriodSummary }) {
 
 function StoreCard({ summary }: { summary: StorePeriodSummary }) {
   return (
-    <section className="overflow-hidden rounded-lg border border-zinc-700">
-      <header className="flex flex-wrap items-center gap-2 border-b border-zinc-700 bg-zinc-800 px-4 py-3">
+    <section className="overflow-hidden rounded-lg border border-white/8">
+      <header className="flex flex-wrap items-center gap-2 border-b border-white/8 bg-[var(--card)] px-4 py-3">
         <h2 className="text-lg font-semibold">{summary.storeName}</h2>
         <p className="text-xs text-zinc-500">
           {summary.periodFrom} - {summary.periodTo}
@@ -688,15 +688,15 @@ export default function StoreReportPage() {
   }, [from, summaries, to]);
 
   return (
-    <div className="mx-auto min-h-screen max-w-6xl space-y-6 bg-zinc-900 p-4 text-zinc-100 md:p-6">
+    <div className="mx-auto min-h-screen max-w-6xl space-y-6 bg-[var(--bg1)] p-4 text-[var(--text)] md:p-6">
       <header>
-        <h1 className="text-2xl font-semibold">Store Report</h1>
+        <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Store Report</h1>
         <p className="mt-1 text-sm text-zinc-500">
           Rollover-aware store performance, weather summary, trend chart, and top performers.
         </p>
       </header>
 
-      <section className="rounded-lg border border-zinc-700 p-4">
+      <section className="rounded-lg border border-white/8 p-4">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <label className="text-sm">
             <span className="mb-1 block text-xs text-zinc-500">From</span>
@@ -786,7 +786,7 @@ export default function StoreReportPage() {
                 ref={textareaRef}
                 readOnly
                 value={llmText}
-                className="h-64 w-full resize-y rounded border border-zinc-700 bg-zinc-900 p-3 font-mono text-xs text-zinc-300"
+                className="h-64 w-full resize-y rounded border border-white/8 bg-[var(--card)] p-3 font-mono text-xs text-zinc-300"
               />
             </section>
           )}
@@ -794,7 +794,7 @@ export default function StoreReportPage() {
       )}
 
       {summaries && summaries.length === 0 && (
-        <div className="rounded border border-zinc-700 p-6 text-center text-sm text-zinc-500">
+        <div className="rounded border border-white/8 p-6 text-center text-sm text-zinc-500">
           No data found for the selected filters.
         </div>
       )}
