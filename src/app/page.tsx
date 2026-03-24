@@ -619,14 +619,14 @@ function HomePageInner() {
       ? {
           mode: "clocked-in",
           statusLabel: "Clocked In",
-          label: "Clock Out",
+          label: "Open Shift",
           href: `/shift/${openShift.shiftId}`,
           detail: openShift.storeName ?? "Open shift active",
         }
       : {
           mode: "open",
           statusLabel: "Open Shift",
-          label: "Recover Shift",
+          label: "Open Shift",
           href: `/shift/${openShift.shiftId}`,
           detail: openShift.storeName ?? "Resume open shift",
         }
