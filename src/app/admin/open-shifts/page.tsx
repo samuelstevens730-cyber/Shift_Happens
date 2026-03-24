@@ -212,7 +212,7 @@ function OpenShiftsContent() {
   return (
     <div className="app-shell">
       <div className="max-w-5xl mx-auto space-y-6">
-        <h1 className="text-2xl font-semibold">Open Shifts</h1>
+        <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Open Shifts</h1>
 
         {source === "dashboard" && (
           <div className="banner text-xs border border-cyan-500/40 bg-cyan-500/10 text-cyan-100">
