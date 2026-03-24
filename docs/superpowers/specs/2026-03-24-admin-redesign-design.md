@@ -52,6 +52,7 @@ Two goals tackled together in one sprint:
 - Grouped nav with section labels, uses `usePathname()` for active state
 - Active link: green accent (`var(--green)`), left border highlight, subtle green background tint
 - Badge counts on: Requests (pending count), Variances (unreviewed count)
+- **Compose button:** Pinned at the bottom of the sidebar (above the user/store label). Uses `PenSquare` icon (Lucide) + "Quick Send" label, styled as `.btn-secondary` (purple outline, full width). Clicking opens the Quick Send modal (see `QuickSendModal` below).
 - **Badge data source:** One new lightweight endpoint: `GET /api/admin/badge-counts`
   - Returns `{ pendingRequests: number, unreviewedVariances: number }`
   - `pendingRequests`: count of rows across `shift_swap_requests`, `time_off_requests`, `timesheet_change_requests` where `status = 'pending'`, scoped by `managerStoreIds`
@@ -99,10 +100,26 @@ Two goals tackled together in one sprint:
 
 ### `AdminBottomNav.tsx`
 - Fixed at bottom on mobile, `z-50`
-- 5 tabs: Home · Requests (badged) · Schedule · Payroll · More
-- Active state: green accent, same as employee `EmployeeBottomNav` pattern
+- 5 tabs: Home · Requests (badged) · **Compose** · Payroll · More
+- The center tab is the **Compose** button — `PenSquare` icon, no label or short "Send" label. Tapping it opens the Quick Send modal directly (same `QuickSendModal` as sidebar). This gives Quick Send a permanent, thumb-friendly position in the mobile nav.
+- Active state: green accent for nav links, purple tint for Compose button to visually distinguish it as an action rather than a destination
 - Mirrors the structure and CSS of `src/components/EmployeeBottomNav.tsx`
 - **"More" tab:** Opens a slide-up panel using the shadcn `Sheet` component (`side="bottom"`). **`sheet.tsx` is not currently installed** — install it as the first step of Phase 1 before building `AdminBottomNav`: `npx shadcn@latest add sheet`. The sheet renders the full 5-group sidebar nav structure (same links as `AdminSidebar`). Sheet closes on: navigate to a link, tap the backdrop scrim, or tap a close button in the sheet header. Sheet sits at `z-[60]` (above the `z-50` bottom nav).
+
+### `QuickSendModal` (shared component)
+- **New file:** `src/components/QuickSendModal.tsx`
+- Shared by `AdminSidebar` (desktop compose button) and `AdminBottomNav` (mobile center tab)
+- Implemented as a shadcn `Dialog` (already installed at `src/components/ui/dialog.tsx`)
+- **Contents** — identical logic to the Quick Send block previously in the Command Center body:
+  - Type selector: Message / Task
+  - Target type: Store / Employee
+  - Store or Employee selector (conditional on target type)
+  - Message textarea
+  - Send button (violet, `sendQuickAssignment` logic)
+  - Error display on failure
+- Accepts `stores` and `users` as props (passed down from the layout, which fetches them once on mount alongside badge counts — reuse the same `/api/admin/users` call already in the dashboard)
+- On successful send: shows a brief inline confirmation ("Sent ✓"), clears the form, closes after 1.5s
+- Quick Send no longer appears as a standalone block in the Command Center body
 
 ---
 
@@ -146,7 +163,6 @@ Two goals tackled together in one sprint:
 - **Sales Block**: tabbed Table/Chart view, date+store scoped
   - Table: Date, Store, Day, Cash, Card, X-Report Carry, Total, Status — with totals row
   - Chart: Area (total) + per-store or cash/card lines; Total/Detailed mode toggle
-- **Quick Send**: Message or Task to Store or Employee — type, target type, store/employee selector, textarea, Send button (violet)
 
 *Right column (1/3):*
 - **Store Health**: per-store grade (A–D), weighted score, top drag signals with mini progress bars; grade tone colors preserved (emerald/sky/amber/red)
