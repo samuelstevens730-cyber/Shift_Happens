@@ -188,10 +188,10 @@ export default function AdminSidebar({ stores, users }: Props) {
         {/* Brand — logo + app name, links back to employee home */}
         <div className="px-4 pt-5 pb-4 border-b border-white/7">
           <Link href="/" className="flex items-center gap-3 group" aria-label="Return to home">
-            <div className="relative flex-shrink-0">
+            <div className="employee-sidebar-logo-wrap">
               <span className="employee-header-logo-glow" aria-hidden="true" />
               <Image
-                src="/brand/no_cap_logo.jpg"
+                src="/brand/no_cap_logo.png"
                 alt="No Cap Smoke Shop"
                 width={36}
                 height={36}
@@ -199,9 +199,9 @@ export default function AdminSidebar({ stores, users }: Props) {
                 className="employee-header-logo rounded-lg"
               />
             </div>
-            <div>
-              <div className="text-sm font-bold text-[var(--text)] leading-tight">Shift Happens</div>
-              <div className="text-[10px] text-[var(--muted)] leading-tight">Admin</div>
+            <div className="employee-header-copy">
+              <div className="employee-header-title">Shift Happens</div>
+              <div className="employee-header-subtitle">Admin</div>
             </div>
           </Link>
         </div>

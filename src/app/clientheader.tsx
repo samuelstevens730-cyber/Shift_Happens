@@ -110,7 +110,7 @@ export default function ClientHeader() {
       <div className="w-full px-3 py-2 flex items-center gap-3">
         <Link href="/" aria-label="Go to home" className="shrink-0">
           <Image
-            src="/brand/no_cap_logo.jpg"
+            src="/brand/no_cap_logo.png"
             alt="No Cap Smoke Shop"
             width={56}
             height={56}

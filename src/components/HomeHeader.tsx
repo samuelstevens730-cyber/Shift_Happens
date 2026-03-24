@@ -107,7 +107,7 @@ export default function HomeHeader({
             <Link href="/" className="employee-sidebar-logo-wrap" aria-label="Go to home">
               <span className="employee-header-logo-glow" aria-hidden="true" />
               <Image
-                src="/brand/no_cap_logo.jpg"
+                src="/brand/no_cap_logo.png"
                 alt="No Cap Smoke Shop"
                 width={96}
                 height={96}
@@ -170,7 +170,7 @@ export default function HomeHeader({
           <Link href="/" className="employee-header-logo-wrap" aria-label="Go to home">
             <span className="employee-header-logo-glow" aria-hidden="true" />
             <Image
-              src="/brand/no_cap_logo.jpg"
+              src="/brand/no_cap_logo.png"
               alt="No Cap Smoke Shop"
               width={96}
               height={96}

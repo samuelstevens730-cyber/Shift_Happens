@@ -1549,12 +1549,10 @@ body::after {
   z-index: 1;
   width: 62px;
   height: 62px;
-  border-radius: 16px;
-  border: 1px solid rgba(141, 255, 175, 0.26);
-  object-fit: cover;
-  box-shadow:
-    0 12px 24px rgba(0, 0, 0, 0.36),
-    0 0 18px rgba(120, 255, 71, 0.12);
+  border-radius: 0;
+  border: 0;
+  object-fit: contain;
+  box-shadow: none;
 }
 
 .employee-header-copy {
@@ -1606,6 +1604,46 @@ body::after {
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
+}
+
+.employee-header-logout {
+  min-height: 38px;
+  padding: 0 16px;
+  border-color: rgba(147, 51, 234, 0.34);
+  background:
+    linear-gradient(180deg, rgba(26, 18, 32, 0.94), rgba(14, 10, 18, 0.9));
+  color: rgba(244, 247, 242, 0.86);
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  box-shadow:
+    0 8px 20px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition:
+    transform 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background-color 160ms ease;
+}
+
+.employee-header-logout:hover {
+  color: var(--text-strong);
+  border-color: rgba(147, 51, 234, 0.56);
+  box-shadow:
+    0 10px 24px rgba(0, 0, 0, 0.28),
+    0 0 18px rgba(147, 51, 234, 0.14),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transform: translateY(-1px);
+}
+
+.employee-header-logout:active {
+  transform: translateY(0);
+}
+
+.employee-header-logout:focus-visible {
+  outline: 2px solid rgba(147, 51, 234, 0.44);
+  outline-offset: 2px;
 }
 
 .employee-header-avatar {
@@ -3383,13 +3421,17 @@ body::after {
 
   /* Sidebar logo: slightly smaller than top-bar version */
   .employee-desktop-sidebar .employee-header-logo {
-    width: 44px;
-    height: 44px;
+    width: 78px;
+    height: 78px;
+  }
+  .employee-sidebar-logo-wrap .employee-header-logo {
+    width: 78px;
+    height: 78px;
   }
   .employee-desktop-sidebar .employee-header-logo-wrap,
   .employee-sidebar-logo-wrap {
-    width: 44px;
-    height: 44px;
+    width: 82px;
+    height: 82px;
   }
   .employee-desktop-sidebar .employee-header-title {
     font-size: 1rem;

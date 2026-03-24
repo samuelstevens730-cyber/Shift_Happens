@@ -54,29 +54,27 @@ export default function AdminMobileHeader() {
   }
 
   return (
-    <header className="lg:hidden sticky top-0 z-20 flex items-center justify-between px-4 py-3 border-b border-white/7 bg-[rgba(8,10,9,0.88)] backdrop-blur-[14px]">
-      {/* Logo → home */}
-      <Link href="/" className="flex items-center gap-2.5" aria-label="Return to home">
-        <div className="relative flex-shrink-0">
+    <header className="employee-header lg:hidden">
+      <div className="employee-header-brand">
+        <Link href="/" className="employee-header-logo-wrap" aria-label="Return to home">
           <span className="employee-header-logo-glow" aria-hidden="true" />
           <Image
-            src="/brand/no_cap_logo.jpg"
+            src="/brand/no_cap_logo.png"
             alt="No Cap Smoke Shop"
-            width={30}
-            height={30}
+            width={96}
+            height={96}
             priority
-            className="employee-header-logo rounded-md"
+            className="employee-header-logo"
           />
+        </Link>
+        <div className="employee-header-copy">
+          <div className="employee-header-title">Shift Happens</div>
+          <div className="employee-header-subtitle">Command Center</div>
         </div>
-        <div>
-          <div className="text-sm font-bold text-[var(--text)] leading-tight">Shift Happens</div>
-          <div className="text-[10px] text-[var(--muted)] leading-tight">Admin</div>
-        </div>
-      </Link>
+      </div>
 
-      {/* Avatar + logout */}
-      <div className="flex items-center gap-3">
-        <Link href="/avatar" aria-label="Avatar settings" className="employee-sidebar-avatar">
+      <div className="employee-header-actions">
+        <Link href="/avatar" aria-label="Avatar settings" className="employee-header-avatar">
           <UserAvatar
             seed={avatar?.avatar_seed ?? userId}
             style={avatar?.avatar_style ?? "avataaars"}
@@ -85,10 +83,7 @@ export default function AdminMobileHeader() {
             alt="My avatar"
           />
         </Link>
-        <button
-          onClick={handleLogout}
-          className="text-xs text-[var(--muted)] hover:text-[var(--danger)] transition-colors"
-        >
+        <button onClick={handleLogout} className="employee-header-logout">
           Logout
         </button>
       </div>

@@ -12,6 +12,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, Suspense } from "react";
+import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { createEmployeeSupabase } from "@/lib/employeeSupabase";
@@ -1319,38 +1320,41 @@ function HomePageInner() {
       </main>
 
       {/* Auth Choice Modal */}
-      {showAuthModal && (
-        <div className="auth-modal-overlay">
-          <div className="card card-pad w-full max-w-sm space-y-6 shadow-2xl">
-            <div className="text-center space-y-2">
-              <h2 className="text-xl font-semibold">Welcome</h2>
-              <p className="text-sm muted">Choose how you&apos;d like to sign in</p>
-            </div>
+      {showAuthModal && typeof document !== "undefined"
+        ? createPortal(
+            <div className="auth-modal-overlay">
+              <div className="card card-pad w-full max-w-sm space-y-6 shadow-2xl">
+                <div className="text-center space-y-2">
+                  <h2 className="text-xl font-semibold">Welcome</h2>
+                  <p className="text-sm muted">Choose how you&apos;d like to sign in</p>
+                </div>
 
-            <div className="space-y-3">
-              <button
-                onClick={handleEmployeeChoice}
-                className="home-card home-card-green w-full"
-              >
-                <span className="text-lg">Employee</span>
-                <span className="text-xs muted mt-1">Sign in with PIN</span>
-              </button>
+                <div className="space-y-3">
+                  <button
+                    onClick={handleEmployeeChoice}
+                    className="home-card home-card-green w-full"
+                  >
+                    <span className="text-lg">Employee</span>
+                    <span className="text-xs muted mt-1">Sign in with PIN</span>
+                  </button>
 
-              <button
-                onClick={handleAdminChoice}
-                className="home-card home-card-pink w-full"
-              >
-                <span className="text-lg">Admin</span>
-                <span className="text-xs muted mt-1">Sign in with email</span>
-              </button>
-            </div>
+                  <button
+                    onClick={handleAdminChoice}
+                    className="home-card home-card-pink w-full"
+                  >
+                    <span className="text-lg">Admin</span>
+                    <span className="text-xs muted mt-1">Sign in with email</span>
+                  </button>
+                </div>
 
-            <div className="text-xs muted text-center">
-              Time Clock is available without signing in
-            </div>
-          </div>
-        </div>
-      )}
+                <div className="text-xs muted text-center">
+                  Time Clock is available without signing in
+                </div>
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
 
       {/* PIN Gate Modal */}
       {showPinGate && (

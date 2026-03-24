@@ -1313,52 +1313,55 @@ export default function ClockPageClient() {
         : null}
 
       {/* Confirmation modal - prevents accidental clock-ins */}
-      {confirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="card card-pad w-full max-w-md space-y-4">
-            <div className="text-lg font-semibold">Confirm clock in</div>
-            <div className="text-sm muted">
-              I am clocking in as <b>{selectedProfileName}</b> at <b>{selectedStoreName}</b> at{" "}
-              <b>{plannedStartLabel}</b>.
-            </div>
-            {plannedStartRoundedLabel && (
-              <div className="text-xs muted">
-                Rounded to <b>{plannedStartRoundedLabel}</b> for payroll.
+      {confirmOpen && typeof document !== "undefined"
+        ? createPortal(
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 p-4">
+              <div className="card card-pad w-full max-w-md space-y-4">
+                <div className="text-lg font-semibold">Confirm clock in</div>
+                <div className="text-sm muted">
+                  I am clocking in as <b>{selectedProfileName}</b> at <b>{selectedStoreName}</b> at{" "}
+                  <b>{plannedStartLabel}</b>.
+                </div>
+                {plannedStartRoundedLabel && (
+                  <div className="text-xs muted">
+                    Rounded to <b>{plannedStartRoundedLabel}</b> for payroll.
+                  </div>
+                )}
+
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={confirmChecked}
+                    onChange={e => setConfirmChecked(e.target.checked)}
+                    disabled={submitting}
+                  />
+                  I confirm the details above are correct.
+                </label>
+
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    className="btn-secondary px-4 py-2"
+                    onClick={() => setConfirmOpen(false)}
+                    disabled={submitting}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    className="btn-primary px-4 py-2 disabled:opacity-50"
+                    onClick={() => {
+                      if (!confirmChecked) return;
+                      void startShift();
+                    }}
+                    disabled={!confirmChecked || submitting}
+                  >
+                    {submitting ? "Starting..." : "Confirm & Start"}
+                  </button>
+                </div>
               </div>
-            )}
-
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={confirmChecked}
-                onChange={e => setConfirmChecked(e.target.checked)}
-                disabled={submitting}
-              />
-              I confirm the details above are correct.
-            </label>
-
-            <div className="flex flex-col sm:flex-row gap-2">
-              <button
-                className="btn-secondary px-4 py-2"
-                onClick={() => setConfirmOpen(false)}
-                disabled={submitting}
-              >
-                Cancel
-              </button>
-              <button
-                className="btn-primary px-4 py-2 disabled:opacity-50"
-                onClick={() => {
-                  if (!confirmChecked) return;
-                  void startShift();
-                }}
-                disabled={!confirmChecked || submitting}
-              >
-                {submitting ? "Starting..." : "Confirm & Start"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+            </div>,
+            document.body
+          )
+        : null}
 
       {clockWindowModal.open && typeof document !== "undefined"
         ? createPortal(
