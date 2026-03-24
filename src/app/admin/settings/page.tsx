@@ -442,7 +442,7 @@ export default function AdminSettingsPage() {
     <div className="app-shell">
       <div className="mx-auto max-w-4xl space-y-6">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">Settings</h1>
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Settings</h1>
           <span className="text-sm muted">Store configuration</span>
         </div>
 
