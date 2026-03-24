@@ -120,12 +120,15 @@ Two goals tackled together in one sprint:
 - Subtitle: current CST date + store context label
 - Filter bar (collapsible, collapsed by default): start date, end date, store selector (All / LV1 / LV2)
 
-**2. KPI row — 4 cards**
-- Yesterday's Sales: total value (green accent) + sub-line: Cash · Card · X-Report Carry
-- Yesterday's Closeout: status (PASS/WARN/FAIL/N/A) + variance amount
-- Open Shifts: count of currently started and not ended shifts (amber accent)
-- Pending Approvals: sum of swaps + time-off + timesheet corrections (amber accent)
-- Card style: `bg-[var(--card)] border border-white/8 rounded-xl` — no glow borders; accent color on value only
+**2. KPI row — 4 compact tiles**
+- Layout: `grid grid-cols-2 lg:grid-cols-4` — 2×2 on mobile, single row on desktop
+- Each tile is compact: large number on top, short label below, status color on the number. No sub-lines on mobile — keep it tight.
+- Yesterday's Sales: value in green (`var(--green)`)
+- Yesterday's Closeout: status word (PASS/WARN/FAIL/N/A) colored by outcome — green for PASS, amber for WARN, red for FAIL, muted for N/A
+- Open Shifts: count in purple (`var(--purple)`)
+- Pending Approvals: count in amber (`#ffa050`) if > 0, muted if 0
+- Card style: `bg-[var(--card)] border border-white/8 rounded-xl p-3` — compact padding, no glow borders
+- On desktop, Yesterday's Sales tile can show the Cash · Card · X-Report Carry sub-line (hidden on mobile via `hidden lg:block`)
 
 **3. Immediate Action Items (full width, directly below KPI row)**
 - Moved up from the bottom-right of the old layout — this is a priority management tool and should be the first thing seen after the KPI snapshot
@@ -134,8 +137,8 @@ Two goals tackled together in one sprint:
 - "Mark Reviewed" inline action for unscheduled shifts
 - Direct action links: "Open Shift Detail", "Review Closeout", "Approve / Deny"
 - Clicking an item opens the quick-view Dialog
-- Empty state: "All clear — nothing needs attention" (full width, styled prominently)
-- Collapsible (collapsed by default if zero items; expanded by default if items exist)
+- **Zero-item state:** Renders as a single compact green bar — `bg-[var(--green)]/10 border border-[var(--green)]/30 rounded-xl px-4 py-2 text-sm font-medium text-[var(--green)]` — reading "Immediate Action Items: All Clear". No expanded section, no collapsible chrome. Takes up one line of height.
+- **Non-zero state:** Full section rendered as described above. Collapsible, expanded by default.
 
 **4. Main body — 2/3 + 1/3 grid**
 
