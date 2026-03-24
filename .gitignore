@@ -45,3 +45,5 @@ supabase/signing_key.json
 
 # Git worktrees
 .worktrees/
+
+.superpowers/
