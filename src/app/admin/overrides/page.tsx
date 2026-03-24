@@ -312,7 +312,7 @@ function OverridesContent() {
       <div className="max-w-7xl mx-auto space-y-6 pb-12">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold">Scheduled Shift Variations</h1>
+            <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Scheduled Shift Variations</h1>
             <p className="text-sm muted">
               Review flagged shifts, clear false positives in bulk, or open an item for a closer review.
             </p>
