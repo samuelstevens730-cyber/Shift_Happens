@@ -692,6 +692,12 @@ function HomePageInner() {
           </RevealOnScroll>
         )}
 
+        {showAdmin && (
+          <RevealOnScroll delayMs={0}>
+            <AdminHomeCard />
+          </RevealOnScroll>
+        )}
+
         <div className="employee-desktop-grid">
           {/* Column 1: Primary — Hero + Quick Actions */}
           <div className="employee-col-primary">
@@ -706,12 +712,6 @@ function HomePageInner() {
                 </div>
               </Link>
             </RevealOnScroll>
-
-            {showAdmin && (
-              <RevealOnScroll delayMs={30}>
-                <AdminHomeCard />
-              </RevealOnScroll>
-            )}
 
             <RevealOnScroll delayMs={60}>
               <section className="employee-panel">
