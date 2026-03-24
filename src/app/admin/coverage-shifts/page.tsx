@@ -69,10 +69,7 @@ export default function CoverageShiftsPage() {
     <div className="app-shell">
       <div className="mx-auto max-w-3xl space-y-6">
         <div className="flex items-center justify-between gap-2">
-          <h1 className="text-xl font-semibold">Coverage Shift Requests</h1>
-          <button className="btn-secondary px-3 py-1.5" onClick={() => router.push("/admin")}>
-            ← Back
-          </button>
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Coverage Shift Requests</h1>
         </div>
 
         {pageError   && <div className="banner banner-error">{pageError}</div>}
