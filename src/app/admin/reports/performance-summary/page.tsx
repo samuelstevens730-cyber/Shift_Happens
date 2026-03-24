@@ -135,9 +135,9 @@ function EmployeeCard({
   const trend = delta ? trendBadge(delta.trending) : null;
 
   return (
-    <div className="rounded-xl border border-zinc-700/60 bg-zinc-800/50 overflow-hidden print:break-before-page print:border-0 print:shadow-none">
+    <div className="rounded-xl border border-white/8 bg-[var(--card)] overflow-hidden print:break-before-page print:border-0 print:shadow-none">
       {/* ── Card header ── */}
-      <div className="px-5 py-4 flex flex-wrap items-center justify-between gap-3 border-b border-zinc-700/50 bg-zinc-800/80">
+      <div className="px-5 py-4 flex flex-wrap items-center justify-between gap-3 border-b border-white/8 bg-[var(--card)]">
         <div>
           <p className="text-base font-semibold text-zinc-100 tracking-wide">
             {summary.employeeName}
@@ -259,7 +259,7 @@ function EmployeeCard({
       )}
 
       {/* ── Expandable: breakdowns ── */}
-      <div className="border-t border-zinc-700/40 print:block">
+      <div className="border-t border-white/8 print:block">
         <button
           onClick={() => setShowBreakdowns((v) => !v)}
           className="w-full px-5 py-2.5 flex items-center justify-between text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/30 transition-colors print:hidden"
@@ -276,7 +276,7 @@ function EmployeeCard({
                 <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">By Shift Type</p>
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="text-zinc-500 border-b border-zinc-700/40">
+                    <tr className="text-zinc-500 border-b border-white/8">
                       <th className="text-left pb-1 font-medium">Type</th>
                       <th className="text-right pb-1 font-medium">Shifts</th>
                       <th className="text-right pb-1 font-medium">Adj Avg</th>
@@ -307,7 +307,7 @@ function EmployeeCard({
                 <p className="text-xs text-zinc-500 uppercase tracking-wider mb-2">By Day of Week</p>
                 <table className="w-full text-xs">
                   <thead>
-                    <tr className="text-zinc-500 border-b border-zinc-700/40">
+                    <tr className="text-zinc-500 border-b border-white/8">
                       <th className="text-left pb-1 font-medium">Day</th>
                       <th className="text-right pb-1 font-medium">Shifts</th>
                       <th className="text-right pb-1 font-medium">Adj Avg</th>
@@ -333,7 +333,7 @@ function EmployeeCard({
 
       {/* ── Expandable: shift detail ── */}
       {summary.shifts.filter((s) => s.isCountable).length > 0 && (
-        <div className="border-t border-zinc-700/40 print:block">
+        <div className="border-t border-white/8 print:block">
           <button
             onClick={() => setShowShifts((v) => !v)}
             className="w-full px-5 py-2.5 flex items-center justify-between text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/30 transition-colors print:hidden"
@@ -346,7 +346,7 @@ function EmployeeCard({
             <div className="px-5 pb-4 overflow-x-auto print:block">
               <table className="w-full text-xs min-w-[480px]">
                 <thead>
-                  <tr className="text-zinc-500 border-b border-zinc-700/40">
+                  <tr className="text-zinc-500 border-b border-white/8">
                     <th className="text-left pb-1 font-medium">Date</th>
                     <th className="text-left pb-1 font-medium">Day</th>
                     <th className="text-left pb-1 font-medium">Type</th>
@@ -649,19 +649,19 @@ export default function PerformanceSummaryPage() {
         }
       `}</style>
 
-      <div className="min-h-screen bg-zinc-900 text-zinc-100 pb-24">
+      <div className="min-h-screen bg-[var(--bg1)] text-[var(--text)] pb-24">
         <div className="max-w-5xl mx-auto px-4 py-8">
 
           {/* ── Page header ── */}
           <div className="mb-8 no-print">
-            <h1 className="text-2xl font-bold text-zinc-100">Sales Performance Report</h1>
+            <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Sales Performance Report</h1>
             <p className="text-sm text-zinc-400 mt-1">
               Analyze employee sales by period. Generate, review, and export reports for sales meetings.
             </p>
           </div>
 
           {/* ── Controls ── */}
-          <div className="rounded-xl border border-zinc-700/60 bg-zinc-800/50 p-5 mb-6 no-print">
+          <div className="rounded-xl border border-white/8 bg-[var(--card)] p-5 mb-6 no-print">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
               {/* Date range */}
               <div>
