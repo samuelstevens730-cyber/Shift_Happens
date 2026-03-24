@@ -11,7 +11,6 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import {
   Activity,
@@ -99,7 +98,6 @@ function gradeTone(grade: "A" | "B" | "C" | "D" | undefined) {
 }
 
 export default function AdminPage() {
-  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<DashboardResponse | null>(null);
@@ -294,7 +292,6 @@ export default function AdminPage() {
         const { data: auth } = await supabase.auth.getSession();
         const token = auth.session?.access_token ?? "";
         if (!token) {
-          router.replace("/login?next=/admin");
           return;
         }
 
@@ -316,7 +313,7 @@ export default function AdminPage() {
     return () => {
       alive = false;
     };
-  }, [from, to, storeId, router]);
+  }, [from, to, storeId]);
 
   useEffect(() => {
     const onResize = () => setIsMobileChart(window.innerWidth < 640);
@@ -334,7 +331,6 @@ export default function AdminPage() {
       const { data: auth } = await supabase.auth.getSession();
       const token = auth.session?.access_token ?? "";
       if (!token) {
-        router.replace("/login?next=/admin");
         return;
       }
 
