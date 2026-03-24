@@ -243,7 +243,7 @@ export default function PayrollReconciliationPage() {
     <div className="app-shell">
       <div className="max-w-6xl mx-auto space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-2xl font-semibold">Payroll Reconciliation</h1>
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Payroll Reconciliation</h1>
           <Link href="/admin/payroll" className="btn-secondary px-3 py-2">Back to Payroll</Link>
         </div>
 
