@@ -1468,7 +1468,7 @@ body::after {
   margin: 0 auto;
   padding: max(12px, env(safe-area-inset-top)) 0 10px;
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 16px;
 }
@@ -1514,8 +1514,8 @@ body::after {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 54px;
-  height: 54px;
+  width: 70px;
+  height: 70px;
 }
 
 .employee-header-logo-glow {
@@ -1532,8 +1532,8 @@ body::after {
 .employee-header-logo {
   position: relative;
   z-index: 1;
-  width: 48px;
-  height: 48px;
+  width: 62px;
+  height: 62px;
   border-radius: 16px;
   border: 1px solid rgba(141, 255, 175, 0.26);
   object-fit: cover;
@@ -2446,13 +2446,13 @@ body::after {
   }
 
   .employee-header-logo-wrap {
-    width: 48px;
-    height: 48px;
+    width: 62px;
+    height: 62px;
   }
 
   .employee-header-logo {
-    width: 42px;
-    height: 42px;
+    width: 55px;
+    height: 55px;
     border-radius: 14px;
   }
 

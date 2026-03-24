@@ -91,8 +91,8 @@ export default function HomeHeader({
             <Image
               src="/brand/no_cap_logo.jpg"
               alt="No Cap Smoke Shop"
-              width={72}
-              height={72}
+              width={96}
+              height={96}
               priority
               className="employee-header-logo"
             />
