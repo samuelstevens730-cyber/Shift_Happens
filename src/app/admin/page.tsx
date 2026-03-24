@@ -318,6 +318,17 @@ export default function AdminIndex() {
               View individual schedules by employee, store, and pay period.
             </p>
           </Link>
+
+          {/* Coverage Shifts - approve cross-store coverage requests */}
+          <Link href="/admin/coverage-shifts" className="tile">
+            <div className="flex items-center gap-2">
+              <span className="tile-dot" />
+              <div className="text-lg font-medium">Coverage Shifts</div>
+            </div>
+            <p className="mt-2 text-sm muted">
+              Approve cross-store hours.
+            </p>
+          </Link>
         </section>
       </div>
     </div>
