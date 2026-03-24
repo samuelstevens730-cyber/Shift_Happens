@@ -1910,7 +1910,6 @@ body::after {
 }
 
 .employee-link-row strong,
-.employee-rank-row strong,
 .employee-lower-row strong {
   font-size: 0.92rem;
 }
@@ -2193,18 +2192,40 @@ body::after {
   color: rgba(255, 255, 255, 0.46);
 }
 
-.employee-rank-row strong {
+.employee-rank-value {
   display: block;
   color: var(--accent-gold, #dbb272);
-  font-size: 3.2rem;
   font-weight: 800;
   line-height: 1;
   letter-spacing: -0.03em;
 }
 
+.employee-rank-row .employee-rank-value-rank {
+  font-size: clamp(2.5rem, 6vw, 4.2rem);
+}
+
+.employee-rank-row .employee-rank-value-score {
+  font-size: clamp(3.1rem, 6.8vw, 4.25rem);
+}
+
 .employee-rank-link {
   grid-column: 1 / -1;
   margin-top: 2px;
+}
+
+@media (min-width: 1024px) {
+  .employee-rank-row {
+    grid-template-columns: minmax(0, 1.35fr) minmax(120px, 0.8fr);
+    gap: 22px;
+  }
+
+  .employee-rank-row .employee-rank-value-rank {
+    font-size: clamp(2.9rem, 4vw, 4.25rem);
+  }
+
+  .employee-rank-row .employee-rank-value-score {
+    font-size: clamp(2.4rem, 3.2vw, 3.2rem);
+  }
 }
 
 .employee-lower-row {

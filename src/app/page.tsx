@@ -704,12 +704,12 @@ function HomePageInner() {
            */
           <>
             <div className="grid gap-4 items-start lg:hidden">
-              {/* 1 – Snapshot */}
+              {/* 1  -  Snapshot */}
               <div className="order-1">
                 <RevealOnScroll delayMs={0}><AdminHomeCard /></RevealOnScroll>
               </div>
 
-              {/* 2 – Clock */}
+              {/* 2  -  Clock */}
               <div className="order-2">
                 <RevealOnScroll delayMs={0}>
                   <Link href={heroState.href} className={`employee-time-hero employee-time-hero-${heroState.mode}`}>
@@ -724,7 +724,7 @@ function HomePageInner() {
                 </RevealOnScroll>
               </div>
 
-              {/* 3 – Schedule */}
+              {/* 3  -  Schedule */}
               <div className="order-3">
                 <RevealOnScroll delayMs={10}>
                   <ExpandableCard
@@ -769,7 +769,7 @@ function HomePageInner() {
                 </RevealOnScroll>
               </div>
 
-              {/* 4 – Hours */}
+              {/* 4  -  Hours */}
               <div className="order-4">
                 <RevealOnScroll delayMs={20}>
                   <ExpandableCard
@@ -791,11 +791,11 @@ function HomePageInner() {
                           <p className="employee-metric-value">{timeEntries.length}</p>
                           <p className="text-sm text-[var(--accent-gold)]">shifts</p>
                         </div>
-                        <p className="employee-metric-meta employee-hours-period">
-                          {payPeriodRange.start
-                            ? `${new Date(payPeriodRange.start).toLocaleDateString("en-US", { month: "short", day: "numeric" })} â€“ ${new Date(payPeriodRange.end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
-                            : "Current pay period"}
-                        </p>
+                      <p className="employee-metric-meta employee-hours-period">
+                        {payPeriodRange.start
+                          ? `${new Date(payPeriodRange.start).toLocaleDateString("en-US", { month: "short", day: "numeric" })} - ${new Date(payPeriodRange.end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                          : "Current pay period"}
+                      </p>
                       </div>
                     }
                     expandedContent={
@@ -831,7 +831,7 @@ function HomePageInner() {
                 </RevealOnScroll>
               </div>
 
-              {/* 5 – Rankings */}
+              {/* 5  -  Rankings */}
               <div className="order-5">
                 <RevealOnScroll delayMs={10}>
                   <section className="employee-panel employee-rank-card">
@@ -845,11 +845,15 @@ function HomePageInner() {
                   <div className="employee-rank-row">
                     <div>
                       <span className="employee-rank-label">Your Rank</span>
-                      <strong>{scoreboardPreview?.rank ? `#${scoreboardPreview.rank}` : "Unranked"}</strong>
+                      <strong className="employee-rank-value employee-rank-value-rank">
+                        {scoreboardPreview?.rank ? `#${scoreboardPreview.rank}` : "Unranked"}
+                      </strong>
                     </div>
                     <div>
                       <span className="employee-rank-label">Score</span>
-                      <strong>{scoreboardPreview?.score != null ? scoreboardPreview.score.toFixed(1) : "--"}</strong>
+                      <strong className="employee-rank-value employee-rank-value-score">
+                        {scoreboardPreview?.score != null ? scoreboardPreview.score.toFixed(1) : "--"}
+                      </strong>
                     </div>
                     <Link href="/scoreboard" className="employee-inline-link employee-rank-link">
                       Full scoreboard
@@ -859,7 +863,7 @@ function HomePageInner() {
                 </RevealOnScroll>
               </div>
 
-              {/* 6 – Quick Actions */}
+              {/* 6  -  Quick Actions */}
               <div className="order-6">
                 <RevealOnScroll delayMs={30}>
                   <section className="employee-panel">
@@ -934,11 +938,15 @@ function HomePageInner() {
                 <div className="employee-rank-row">
                   <div>
                     <span className="employee-rank-label">Your Rank</span>
-                    <strong>{scoreboardPreview?.rank ? `#${scoreboardPreview.rank}` : "Unranked"}</strong>
+                    <strong className="employee-rank-value employee-rank-value-rank">
+                      {scoreboardPreview?.rank ? `#${scoreboardPreview.rank}` : "Unranked"}
+                    </strong>
                   </div>
                   <div>
                     <span className="employee-rank-label">Score</span>
-                    <strong>{scoreboardPreview?.score != null ? scoreboardPreview.score.toFixed(1) : "--"}</strong>
+                    <strong className="employee-rank-value employee-rank-value-score">
+                      {scoreboardPreview?.score != null ? scoreboardPreview.score.toFixed(1) : "--"}
+                    </strong>
                   </div>
                   <Link href="/scoreboard" className="employee-inline-link employee-rank-link">
                     Full scoreboard
@@ -1061,7 +1069,7 @@ function HomePageInner() {
                       </div>
                       <p className="employee-metric-meta employee-hours-period">
                         {payPeriodRange.start
-                          ? `${new Date(payPeriodRange.start).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(payPeriodRange.end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                          ? `${new Date(payPeriodRange.start).toLocaleDateString("en-US", { month: "short", day: "numeric" })}  -  ${new Date(payPeriodRange.end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
                           : "Current pay period"}
                       </p>
                     </div>
@@ -1219,7 +1227,7 @@ function HomePageInner() {
                       </div>
                       <p className="employee-metric-meta employee-hours-period">
                         {payPeriodRange.start
-                          ? `${new Date(payPeriodRange.start).toLocaleDateString("en-US", { month: "short", day: "numeric" })} – ${new Date(payPeriodRange.end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                          ? `${new Date(payPeriodRange.start).toLocaleDateString("en-US", { month: "short", day: "numeric" })}  -  ${new Date(payPeriodRange.end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
                           : "Current pay period"}
                       </p>
                     </div>
@@ -1375,3 +1383,4 @@ export default function Home() {
     </Suspense>
   );
 }
+
