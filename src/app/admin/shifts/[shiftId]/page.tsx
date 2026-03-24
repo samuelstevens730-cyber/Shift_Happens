@@ -556,14 +556,14 @@ export default function AdminShiftDetailPage() {
                 {"<-"} Back
               </Link>
             </div>
-            <h1 className="text-2xl font-semibold text-slate-100">Shift Detail</h1>
+            <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Shift Detail</h1>
             <p className="text-sm text-slate-400">
               Shift ID: <span className="font-mono">{data.shift.id}</span>
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
             <button
-              className="rounded border border-slate-700 bg-slate-900 px-3 py-1.5 text-sm text-slate-100 hover:bg-slate-800 disabled:opacity-50"
+              className="rounded border border-white/8 bg-[var(--card)] px-3 py-1.5 text-sm text-slate-100 hover:bg-slate-800 disabled:opacity-50"
               onClick={() => void exportPdf()}
               disabled={exportingPdf}
             >
@@ -585,7 +585,7 @@ export default function AdminShiftDetailPage() {
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
           <div className="space-y-4 xl:col-span-2">
-            <Card>
+            <Card className="border-white/8 bg-[var(--card)]">
               <CardHeader className="pb-2">
                 <CardTitle>Shift Summary</CardTitle>
                 <CardDescription>Store, employee, timeline, and review flags.</CardDescription>
@@ -597,7 +597,7 @@ export default function AdminShiftDetailPage() {
                   <div>
                     Shift Type:
                     <select
-                      className="ml-2 rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                      className="ml-2 rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                       value={shiftForm.shiftType}
                       onChange={(e) =>
                         setShiftForm((prev) => ({
@@ -620,7 +620,7 @@ export default function AdminShiftDetailPage() {
                     Planned Start:
                     <input
                       type="datetime-local"
-                      className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                      className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                       value={shiftForm.plannedStartAt}
                       onChange={(e) =>
                         setShiftForm((prev) => ({ ...prev, plannedStartAt: e.target.value }))
@@ -631,7 +631,7 @@ export default function AdminShiftDetailPage() {
                     Actual Start:
                     <input
                       type="datetime-local"
-                      className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                      className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                       value={shiftForm.startedAt}
                       onChange={(e) =>
                         setShiftForm((prev) => ({ ...prev, startedAt: e.target.value }))
@@ -642,7 +642,7 @@ export default function AdminShiftDetailPage() {
                     End:
                     <input
                       type="datetime-local"
-                      className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                      className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                       value={shiftForm.endedAt}
                       onChange={(e) =>
                         setShiftForm((prev) => ({ ...prev, endedAt: e.target.value }))
@@ -686,7 +686,7 @@ export default function AdminShiftDetailPage() {
                           <label className="block text-xs text-slate-300">
                             Approval Note (required):
                             <textarea
-                              className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1 text-sm text-slate-100"
+                              className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1 text-sm text-slate-100"
                               rows={2}
                               value={overrideNote}
                               onChange={(e) => setOverrideNote(e.target.value)}
@@ -720,7 +720,7 @@ export default function AdminShiftDetailPage() {
                   <label>
                     Manual Review:
                     <select
-                      className="ml-2 rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                      className="ml-2 rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                       value={shiftForm.manualCloseReviewStatus}
                       onChange={(e) =>
                         setShiftForm((prev) => ({
@@ -740,7 +740,7 @@ export default function AdminShiftDetailPage() {
                 <label className="block">
                   Shift Note:
                   <textarea
-                    className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                    className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                     rows={2}
                     value={shiftForm.shiftNote}
                     onChange={(e) =>
@@ -754,7 +754,7 @@ export default function AdminShiftDetailPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="border-white/8 bg-[var(--card)]">
               <CardHeader className="pb-2">
                 <CardTitle>Drawer Counts</CardTitle>
                 <CardDescription>Start/changeover/end counts tied to this shift.</CardDescription>
@@ -765,7 +765,7 @@ export default function AdminShiftDetailPage() {
                 ) : (
                   <div className="space-y-2">
                     {data.drawerCounts.map((row) => (
-                      <div key={row.id} className="rounded border border-slate-800 bg-slate-900/70 p-2 text-sm">
+                      <div key={row.id} className="rounded border border-white/8 bg-[var(--card)] p-2 text-sm">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="font-medium text-slate-100">{row.countType.toUpperCase()} Count</div>
                           <div className="text-xs text-slate-400">{fmtDateTime(row.countedAt)}</div>
@@ -775,7 +775,7 @@ export default function AdminShiftDetailPage() {
                             Drawer (cents)
                             <input
                               type="number"
-                              className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                              className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                               value={drawerForm[row.id]?.drawerCents ?? ""}
                               onChange={(e) =>
                                 setDrawerForm((prev) => ({
@@ -798,7 +798,7 @@ export default function AdminShiftDetailPage() {
                             Change Count (cents)
                             <input
                               type="number"
-                              className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                              className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                               value={drawerForm[row.id]?.changeCount ?? ""}
                               onChange={(e) =>
                                 setDrawerForm((prev) => ({
@@ -866,7 +866,7 @@ export default function AdminShiftDetailPage() {
                         <label className="block mt-1">
                           Note:
                           <input
-                            className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                            className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                             value={drawerForm[row.id]?.note ?? ""}
                             onChange={(e) =>
                               setDrawerForm((prev) => ({
@@ -892,7 +892,7 @@ export default function AdminShiftDetailPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="border-white/8 bg-[var(--card)]">
               <CardHeader className="pb-2">
                 <CardTitle>Sales / X-Report</CardTitle>
                 <CardDescription>Daily sales linkage and shift-level sales entries.</CardDescription>
@@ -905,7 +905,7 @@ export default function AdminShiftDetailPage() {
                     Open X Report (cents):
                     <input
                       type="number"
-                      className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                      className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                       value={dailySalesForm.openXReportCents}
                       onChange={(e) =>
                         setDailySalesForm((prev) => ({
@@ -919,7 +919,7 @@ export default function AdminShiftDetailPage() {
                     Close Sales (cents):
                     <input
                       type="number"
-                      className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                      className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                       value={dailySalesForm.closeSalesCents}
                       onChange={(e) =>
                         setDailySalesForm((prev) => ({
@@ -933,7 +933,7 @@ export default function AdminShiftDetailPage() {
                     Z Report (cents):
                     <input
                       type="number"
-                      className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                      className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                       value={dailySalesForm.zReportCents}
                       onChange={(e) =>
                         setDailySalesForm((prev) => ({
@@ -948,7 +948,7 @@ export default function AdminShiftDetailPage() {
                 <label className="block">
                   Daily Sales Review Note:
                   <input
-                    className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                    className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                     value={dailySalesForm.reviewNote}
                     onChange={(e) =>
                       setDailySalesForm((prev) => ({ ...prev, reviewNote: e.target.value }))
@@ -961,7 +961,7 @@ export default function AdminShiftDetailPage() {
                 ) : (
                   <div className="space-y-1">
                     {data.shiftSalesEntries.map((entry) => (
-                      <div key={entry.id} className="rounded border border-slate-800 bg-slate-900/70 p-2">
+                      <div key={entry.id} className="rounded border border-white/8 bg-[var(--card)] p-2">
                         <div className="flex items-center justify-between gap-2">
                           <div>
                             <b>{entry.entryType}</b> - {fmtMoney(entry.amountCents)}
@@ -976,7 +976,7 @@ export default function AdminShiftDetailPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="border-white/8 bg-[var(--card)]">
               <CardHeader className="pb-2">
                 <CardTitle>Safe Closeout</CardTitle>
                 <CardDescription>Closeout payload tied directly to this shift.</CardDescription>
@@ -1015,7 +1015,7 @@ export default function AdminShiftDetailPage() {
                       ) : (
                         <div className="mt-1 space-y-1">
                           {data.safeCloseout.expenses.map((row) => (
-                            <div key={row.id} className="rounded border border-slate-800 bg-slate-900/70 p-2">
+                            <div key={row.id} className="rounded border border-white/8 bg-[var(--card)] p-2">
                               {row.category} - {fmtMoney(row.amountCents)}{row.note ? ` - ${row.note}` : ""}
                             </div>
                           ))}
@@ -1029,7 +1029,7 @@ export default function AdminShiftDetailPage() {
           </div>
 
           <div className="space-y-4">
-            <Card>
+            <Card className="border-white/8 bg-[var(--card)]">
               <CardHeader className="pb-2">
                 <CardTitle>Admin Actions</CardTitle>
                 <CardDescription>Edit/Delete paths stay centralized until Phase 2 write UI lands.</CardDescription>
@@ -1038,7 +1038,7 @@ export default function AdminShiftDetailPage() {
                 <label className="block text-sm">
                   Edit Reason (required to save):
                   <textarea
-                    className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                    className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                     rows={2}
                     value={editReason}
                     onChange={(e) => setEditReason(e.target.value)}
@@ -1052,7 +1052,7 @@ export default function AdminShiftDetailPage() {
                 >
                   {saving ? "Saving..." : "Save All Changes"}
                 </button>
-                <Link href="/admin/shifts" className="block rounded border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800">
+                <Link href="/admin/shifts" className="block rounded border border-white/8 px-3 py-2 text-sm hover:bg-white/5">
                   Open Shifts Admin (edit/remove)
                 </Link>
                 <Link
@@ -1061,11 +1061,11 @@ export default function AdminShiftDetailPage() {
                       ? `/admin/safe-ledger?actionId=money-${data.safeCloseout.id}&source=dashboard`
                       : prefilledSafeLedgerHref
                   }
-                  className="block rounded border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800"
+                  className="block rounded border border-white/8 px-3 py-2 text-sm hover:bg-white/5"
                 >
                   {data.safeCloseout ? "Open Safe Ledger Review" : "Add Safe Closeout"}
                 </Link>
-                <Link href="/admin/open-shifts" className="block rounded border border-slate-700 px-3 py-2 text-sm hover:bg-slate-800">
+                <Link href="/admin/open-shifts" className="block rounded border border-white/8 px-3 py-2 text-sm hover:bg-white/5">
                   Open Open-Shifts Queue
                 </Link>
                 <button
@@ -1078,7 +1078,7 @@ export default function AdminShiftDetailPage() {
                 <label className="block text-sm">
                   Soft Delete Reason:
                   <input
-                    className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                    className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                     value={deleteReason}
                     onChange={(e) => setDeleteReason(e.target.value)}
                     placeholder="Reason for soft delete"
@@ -1087,7 +1087,7 @@ export default function AdminShiftDetailPage() {
                 <label className="block text-sm">
                   Hard Delete Reason:
                   <input
-                    className="mt-1 w-full rounded border border-slate-700 bg-slate-900 px-2 py-1"
+                    className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                     value={hardDeleteReason}
                     onChange={(e) => setHardDeleteReason(e.target.value)}
                     placeholder="Required, minimum 8 chars"
@@ -1103,7 +1103,7 @@ export default function AdminShiftDetailPage() {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="border-white/8 bg-[var(--card)]">
               <CardHeader className="pb-2">
                 <CardTitle>Audit History</CardTitle>
                 <CardDescription>Most recent admin edits/deletes with reason.</CardDescription>
@@ -1113,7 +1113,7 @@ export default function AdminShiftDetailPage() {
                   <div className="text-sm text-slate-400">No audit history yet.</div>
                 ) : (
                   data.auditLogs.map((log) => (
-                    <div key={log.id} className="rounded border border-slate-800 bg-slate-900/70 p-2 text-sm">
+                    <div key={log.id} className="rounded border border-white/8 bg-[var(--card)] p-2 text-sm">
                       <div className="flex items-center justify-between gap-2">
                         <Badge variant={log.action === "hard_delete" ? "destructive" : "outline"}>
                           {log.action}
