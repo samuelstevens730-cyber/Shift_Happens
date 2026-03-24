@@ -33,19 +33,33 @@ Two goals tackled together in one sprint:
 - `src/components/AdminSidebar.tsx` — Desktop sidebar nav component
 - `src/components/AdminBottomNav.tsx` — Mobile bottom nav component
 
+### `ClientHeader` Retirement (Phase 1)
+`src/app/clientheader.tsx` currently renders **only on admin routes** (`if (!isAdminRoute) return null`). It is the existing admin top bar. Once `admin/layout.tsx` provides `AdminSidebar` and `AdminBottomNav`, `ClientHeader` is fully redundant.
+
+**Action in Phase 1:** Remove `<ClientHeader />` from `src/app/layout.tsx`. The component itself can remain in the file for now but will effectively be dead code. This eliminates the structural collision between the old admin bar and the new shell.
+
 ### `admin/layout.tsx` Responsibilities
-- **Auth check** at layout level: validates Supabase manager session, redirects to `/login?next=/admin` if not authenticated. This replaces the per-page inline auth redirects (those can be removed from individual pages once the layout is in place).
-- **Background**: same CSS as employee shell — `--bg0` base color, radial gradient overlays via pseudo-elements, noise texture at 0.025 opacity. Uses the existing `app-shell` class or equivalent.
-- **Layout structure**: `flex` row on desktop (sidebar + content area), stacked on mobile with bottom nav fixed at bottom.
-- Renders `<AdminSidebar />` on `lg+` screens, `<AdminBottomNav />` on mobile.
+- **`"use client"` — Client Component.** `@supabase/ssr` is not installed; server-side cookie-based session reads are not available. The layout uses the same client-side auth pattern already used across all admin pages: calls `supabase.auth.getSession()` on mount, redirects to `/login?next=/admin` if no session. This is consistent with current behavior — API-level enforcement via `getManagerStoreIds()` remains the real security guard.
+- Per-page inline auth redirect logic can be removed page by page **after Phase 1 layout auth is confirmed working** — not before.
+- **Background**: same CSS as employee shell — `--bg0` base color, radial gradient overlays via pseudo-elements, noise texture at 0.025 opacity.
+- **Layout structure**: `flex` row — `AdminSidebar` (fixed, 224px) + scrollable content `div` that fills remaining width. This uses a flexbox container rather than global `padding-left` hacks, so it does not interfere with the existing `.employee-desktop-sidebar` push rules in `globals.css`.
+- Renders `<AdminSidebar />` on `lg+` screens (hidden on mobile via `hidden lg:flex`), `<AdminBottomNav />` on mobile (visible below `lg`).
 - Does **not** impose a max-width on content — each page controls its own.
+- The content area div gets `overflow-y: auto` and `flex: 1 1 0` so full-width pages (scheduler, reports) still fill correctly.
 
 ### `AdminSidebar.tsx`
 - Always visible on `lg+` screens
 - Grouped nav with section labels, uses `usePathname()` for active state
 - Active link: green accent (`var(--green)`), left border highlight, subtle green background tint
 - Badge counts on: Requests (pending count), Variances (unreviewed count)
-- Badge data fetched once on mount, not polling
+- **Badge data source:** One new lightweight endpoint: `GET /api/admin/badge-counts`
+  - Returns `{ pendingRequests: number, unreviewedVariances: number }`
+  - `pendingRequests`: count of rows across `shift_swap_requests`, `time_off_requests`, `timesheet_change_requests` where `status = 'pending'`, scoped by `managerStoreIds`
+  - `unreviewedVariances`: count of `shift_drawer_counts` where `notified_manager = true` AND `reviewed_at IS NULL`, scoped by store via shift join
+  - This endpoint must follow the standard admin auth pattern: `getBearerToken` → `getUser` → `getManagerStoreIds`
+  - Do NOT call `/api/admin/dashboard` for badge counts — that endpoint is expensive (full sales + health + action items)
+  - New file: `src/app/api/admin/badge-counts/route.ts`
+- Badge data fetched once on mount, intentionally stale until next page load (known tradeoff — not a bug)
 
 **5-group structure:**
 ```
@@ -86,9 +100,9 @@ Two goals tackled together in one sprint:
 ### `AdminBottomNav.tsx`
 - Fixed at bottom on mobile, `z-50`
 - 5 tabs: Home · Requests (badged) · Schedule · Payroll · More
-- "More" opens a slide-up sheet containing the full sidebar nav structure
 - Active state: green accent, same as employee `EmployeeBottomNav` pattern
 - Mirrors the structure and CSS of `src/components/EmployeeBottomNav.tsx`
+- **"More" tab:** Opens a slide-up panel using the shadcn `Sheet` component (`side="bottom"`). **`sheet.tsx` is not currently installed** — install it as the first step of Phase 1 before building `AdminBottomNav`: `npx shadcn@latest add sheet`. The sheet renders the full 5-group sidebar nav structure (same links as `AdminSidebar`). Sheet closes on: navigate to a link, tap the backdrop scrim, or tap a close button in the sheet header. Sheet sits at `z-[60]` (above the `z-50` bottom nav).
 
 ---
 
@@ -154,7 +168,7 @@ Every page under `/admin` gets for free:
 - Per-page inline auth redirect logic once layout-level auth is confirmed working (remove cautiously, page by page)
 
 **Visual updates:**
-- Page title: Barlow Condensed, same weight/size as employee page headers (`font-[family-name:var(--font-barlow)] text-2xl font-bold uppercase tracking-tight` or equivalent — match whatever class is used on employee pages)
+- Page title: Barlow Condensed using `font-[family-name:var(--font-display)]` (the CSS variable is `--font-display`, registered in `src/app/layout.tsx` — NOT `--font-barlow`). Apply `text-2xl font-bold uppercase tracking-tight text-[var(--text)]`, consistent with employee page headers.
 - `Card` border: replace default shadcn card border with `border-white/8` and `bg-[var(--card)]`
 - Accent colors on values only: green (`var(--green)`) for positive/sales, purple (`var(--purple)`) for counts/neutral, amber/orange for pending/warning, red (`var(--danger)`) for errors — no glow box-shadows on data cards
 - Buttons: existing `.btn-primary`, `.btn-secondary`, `.btn-danger` classes carry over unchanged
@@ -185,11 +199,14 @@ Highest-leverage phase — every admin page instantly gets the background, sideb
 
 Full Command Center merged into `/admin`. All dashboard logic, data, and UI blocks carried over. Visual treatment updated per Section 3 rules.
 
+**Sequencing requirement:** The `dashboard/page.tsx` → `redirect('/admin')` conversion happens in Phase 2, **only after Phase 1 layout auth is confirmed working** (test: open `/admin` in an incognito tab, confirm redirect to `/login`). Converting the redirect before the layout auth is reliable risks a redirect loop on `/admin` if auth hasn't fired yet.
+
 ### Phase 3 — Live Ops Pages
 **Pages:** Requests, Variances, Open Shifts, Overrides, Coverage Shifts (5 pages)
+Note: `src/app/admin/shifts/[shiftId]/page.tsx` is a nested detail page (not in sidebar nav). It receives the same visual treatment (Barlow Condensed header, updated card borders, remove back-to-hub link) but is converted in Phase 4 alongside the Shifts page.
 
 ### Phase 4 — Scheduling + Payroll & Finance
-**Pages:** Scheduler, Shifts, Employee Schedules, Assignments, Payroll, Reconciliation, Safe Ledger, Shift Sales (8 pages)
+**Pages:** Scheduler, Shifts, `shifts/[shiftId]` (detail), Employee Schedules, Assignments, Payroll, Reconciliation, Safe Ledger, Shift Sales (9 pages)
 
 ### Phase 5 — Reports + People & Config
 **Pages:** Store Sales, Performance Summary, Scoreboard, Cleaning Report, Employees, Reviews, Cleaning Tasks, Settings (8 pages)
