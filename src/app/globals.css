@@ -1549,7 +1549,7 @@ body::after {
 
 .employee-header-title {
   font-family: var(--font-display), "Barlow Condensed", "Oswald", sans-serif;
-  font-size: 1.05rem;
+  font-size: 1.25rem;
   font-weight: 900;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -1557,7 +1557,7 @@ body::after {
 }
 
 .employee-header-subtitle {
-  font-size: 1.15rem;
+  font-size: 0.78rem;
   font-weight: 700;
   color: var(--text-strong);
 }
