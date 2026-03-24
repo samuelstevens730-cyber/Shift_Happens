@@ -21,6 +21,16 @@ type ShiftRow = {
   stores?: { name: string } | null;
 };
 
+type CoverageRow = {
+  id: string;
+  coverage_store_id: string;
+  shift_date: string;
+  time_in: string;
+  time_out: string;
+  notes: string | null;
+  stores?: { name: string } | null;
+};
+
 const PIN_TOKEN_KEY = "sh_pin_token";
 const PIN_PROFILE_KEY = "sh_pin_profile_id";
 
@@ -89,6 +99,7 @@ export default function EmployeeShiftsPage() {
   const [managerProfileId, setManagerProfileId] = useState("");
   const [pinToken, setPinToken] = useState<string | null>(null);
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
+  const [coverageShifts, setCoverageShifts] = useState<CoverageRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [filterStore, setFilterStore] = useState<string>("all");
   const [filterPeriod, setFilterPeriod] = useState<string>("all");
@@ -198,6 +209,29 @@ export default function EmployeeShiftsPage() {
         return;
       }
       setShifts(data ?? []);
+
+      // Fetch approved coverage shifts — mirror the EXACT same auth branching above
+      let coverageData: CoverageRow[] = [];
+      if (pinToken === "manager") {
+        // Manager Supabase session — use `supabase` client + explicit profile_id filter
+        const { data: covData } = await supabase
+          .from("coverage_shift_requests")
+          .select("id, coverage_store_id, shift_date, time_in, time_out, notes, stores:coverage_store_id(name)")
+          .eq("profile_id", managerProfileId)
+          .eq("status", "approved")
+          .order("time_in", { ascending: false });
+        coverageData = (covData ?? []) as unknown as CoverageRow[];
+      } else {
+        // Employee PIN auth — createEmployeeSupabase embeds the PIN JWT
+        const client = createEmployeeSupabase(pinToken!);
+        const { data: covData } = await client
+          .from("coverage_shift_requests")
+          .select("id, coverage_store_id, shift_date, time_in, time_out, notes, stores:coverage_store_id(name)")
+          .eq("status", "approved")
+          .order("time_in", { ascending: false });
+        coverageData = (covData ?? []) as unknown as CoverageRow[];
+      }
+      if (alive) setCoverageShifts(coverageData);
     })();
     return () => {
       alive = false;
@@ -236,8 +270,16 @@ export default function EmployeeShiftsPage() {
       const key = getPayPeriodKey(new Date(s.planned_start_at ?? s.started_at));
       totals.set(key, (totals.get(key) ?? 0) + hours);
     });
+    coverageShifts.forEach(c => {
+      const start = new Date(c.time_in);
+      const end   = new Date(c.time_out);
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
+      const hours = (end.getTime() - start.getTime()) / 3_600_000;
+      const key   = getPayPeriodKey(new Date(c.time_in));
+      totals.set(key, (totals.get(key) ?? 0) + hours);
+    });
     return totals;
-  }, [filteredShifts]);
+  }, [filteredShifts, coverageShifts]);
 
   // Check if user is manager for HomeHeader
   const [isManager, setIsManager] = useState(false);
@@ -384,6 +426,25 @@ export default function EmployeeShiftsPage() {
           {!filteredShifts.length && (
             <div className="card card-pad text-sm muted">No shifts found.</div>
           )}
+          {coverageShifts.map(c => (
+            <div key={c.id} className="card card-pad space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="text-xs rounded-full px-2 py-0.5 bg-blue-500/20 text-blue-300 font-semibold">
+                  Coverage
+                </span>
+                <span className="text-sm font-medium">{c.stores?.name ?? "Other store"}</span>
+              </div>
+              <div className="text-sm muted">{c.shift_date}</div>
+              <div className="text-sm muted">
+                {new Date(c.time_in).toLocaleTimeString("en-US", { timeZone: "America/Chicago", hour: "numeric", minute: "2-digit" })}
+                {" – "}
+                {new Date(c.time_out).toLocaleTimeString("en-US", { timeZone: "America/Chicago", hour: "numeric", minute: "2-digit" })}
+                {" · "}
+                {((new Date(c.time_out).getTime() - new Date(c.time_in).getTime()) / 3_600_000).toFixed(1)} hrs
+              </div>
+              {c.notes && <div className="text-xs muted italic">{c.notes}</div>}
+            </div>
+          ))}
         </div>
       </div>
 
