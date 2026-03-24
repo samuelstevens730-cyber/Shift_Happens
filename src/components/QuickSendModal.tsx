@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Send } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import {
@@ -37,9 +37,19 @@ export default function QuickSendModal({ open, onClose, stores, users }: Props) 
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
 
-  const activeUsers = targetType === "store"
-    ? users.filter((u) => u.active)
-    : users.filter((u) => u.active && u.storeIds.includes(targetStoreId));
+  const activeUsers = users.filter((u) => u.active);
+
+  useEffect(() => {
+    if (!open) {
+      setType("message");
+      setTargetType("store");
+      setTargetStoreId(stores[0]?.id ?? "");
+      setTargetProfileId("");
+      setMessage("");
+      setError(null);
+      setSent(false);
+    }
+  }, [open, stores]);
 
   async function handleSend() {
     if (!message.trim()) { setError("Message is required."); return; }

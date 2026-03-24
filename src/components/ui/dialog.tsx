@@ -12,18 +12,20 @@ export function Dialog({
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50 bg-black/70 p-4" onClick={() => onOpenChange(false)}>
-      <div
-        className="mx-auto mt-10 max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-cyan-400/30 bg-[#0b1220] text-slate-100 shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {children}
-      </div>
+      {children}
     </div>
   );
 }
 
 export function DialogContent({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={`p-4${className ? ` ${className}` : ""}`}>{children}</div>;
+  return (
+    <div
+      className={`mx-auto mt-10 max-h-[90vh] w-full max-w-4xl overflow-y-auto rounded-xl border border-cyan-400/30 bg-[#0b1220] p-4 text-slate-100 shadow-xl${className ? ` ${className}` : ""}`}
+      onClick={(e) => e.stopPropagation()}
+    >
+      {children}
+    </div>
+  );
 }
 
 export function DialogHeader({ children }: { children: ReactNode }) {
