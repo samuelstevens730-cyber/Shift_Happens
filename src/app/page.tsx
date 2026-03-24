@@ -21,6 +21,7 @@ import HomeHeader from "@/components/HomeHeader";
 import RevealOnScroll from "@/components/RevealOnScroll";
 import { ArrowRight, Calendar, ChevronDown, ChevronUp, Clock, FileText, Shield, Star, Timer, Trophy, X } from "lucide-react";
 import type { EmployeePublicScoreboardResponse } from "@/types/employeePublicScoreboard";
+import AdminHomeCard from "@/components/AdminHomeCard";
 
 // Storage keys (match PinGate.tsx)
 const PIN_TOKEN_KEY = "sh_pin_token";
@@ -705,6 +706,12 @@ function HomePageInner() {
                 </div>
               </Link>
             </RevealOnScroll>
+
+            {showAdmin && (
+              <RevealOnScroll delayMs={30}>
+                <AdminHomeCard />
+              </RevealOnScroll>
+            )}
 
             <RevealOnScroll delayMs={60}>
               <section className="employee-panel">

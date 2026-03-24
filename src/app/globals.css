@@ -1939,6 +1939,221 @@ body::after {
     inset 0 0 0 1px rgba(255, 255, 255, 0.03);
 }
 
+/* ── Admin Home Card ────────────────────────────────────────────────────── */
+
+.admin-home-card {
+  padding: 16px 18px;
+  border-radius: 20px;
+  border: 1.5px solid rgba(32, 240, 138, 0.28);
+  background:
+    linear-gradient(160deg, rgba(32, 240, 138, 0.04) 0%, transparent 50%),
+    linear-gradient(180deg, rgba(18, 21, 20, 0.97), rgba(10, 12, 11, 0.99));
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.28),
+    0 0 20px rgba(32, 240, 138, 0.06),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.admin-home-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.admin-home-card-label {
+  font-family: var(--font-display), "Barlow Condensed", sans-serif;
+  font-size: 0.8rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--green);
+}
+
+.admin-home-card-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  transition: color 150ms ease;
+}
+
+.admin-home-card-link:hover {
+  color: var(--text);
+}
+
+.admin-home-card-sales {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.admin-home-stat {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.admin-home-stat-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: rgba(180, 112, 255, 0.12);
+  color: var(--purple);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.admin-home-stat-icon--green {
+  background: rgba(32, 240, 138, 0.12);
+  color: var(--green);
+}
+
+.admin-home-stat-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.admin-home-stat-label {
+  font-size: 0.66rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.admin-home-stat-value {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.admin-home-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-home-section-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.admin-home-coverage-badge {
+  margin-left: auto;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(32, 240, 138, 0.12);
+  color: var(--green);
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.admin-home-empty {
+  font-size: 0.78rem;
+  color: var(--muted);
+  padding: 2px 0;
+}
+
+.admin-home-person-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.admin-home-person-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.admin-home-person-row:last-child {
+  border-bottom: none;
+}
+
+.admin-home-person-name {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.admin-home-person-meta {
+  font-size: 0.72rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.admin-home-actions-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.admin-home-actions-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.admin-home-action-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.admin-home-pill {
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+
+.admin-home-pill--clear {
+  background: rgba(32, 240, 138, 0.12);
+  color: var(--green);
+}
+
+.admin-home-pill--requests {
+  background: rgba(180, 112, 255, 0.14);
+  color: var(--purple);
+}
+
+.admin-home-pill--variance {
+  background: rgba(255, 92, 107, 0.14);
+  color: var(--danger);
+}
+
 .employee-rank-row {
   display: grid;
   grid-template-columns: repeat(2, minmax(80px, 1fr));
