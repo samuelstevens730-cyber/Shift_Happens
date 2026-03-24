@@ -259,6 +259,16 @@ export default function EmployeeShiftsPage() {
     });
   }, [shifts, filterStore, filterPeriod]);
 
+  // Coverage entries are at a different store by definition, so filterStore is intentionally
+  // NOT applied here. Only filterPeriod is respected.
+  const filteredCoverageShifts = useMemo(() => {
+    if (filterPeriod === "all") return coverageShifts;
+    return coverageShifts.filter(c => {
+      const dt = new Date(c.time_in);
+      return !Number.isNaN(dt.getTime()) && getPayPeriodKey(dt) === filterPeriod;
+    });
+  }, [coverageShifts, filterPeriod]);
+
   const periodTotals = useMemo(() => {
     const totals = new Map<string, number>();
     filteredShifts.forEach(s => {
@@ -270,7 +280,7 @@ export default function EmployeeShiftsPage() {
       const key = getPayPeriodKey(new Date(s.planned_start_at ?? s.started_at));
       totals.set(key, (totals.get(key) ?? 0) + hours);
     });
-    coverageShifts.forEach(c => {
+    filteredCoverageShifts.forEach(c => {
       const start = new Date(c.time_in);
       const end   = new Date(c.time_out);
       if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
@@ -279,7 +289,7 @@ export default function EmployeeShiftsPage() {
       totals.set(key, (totals.get(key) ?? 0) + hours);
     });
     return totals;
-  }, [filteredShifts, coverageShifts]);
+  }, [filteredShifts, filteredCoverageShifts]);
 
   // Check if user is manager for HomeHeader
   const [isManager, setIsManager] = useState(false);
@@ -426,7 +436,7 @@ export default function EmployeeShiftsPage() {
           {!filteredShifts.length && (
             <div className="card card-pad text-sm muted">No shifts found.</div>
           )}
-          {coverageShifts.map(c => (
+          {filteredCoverageShifts.map(c => (
             <div key={c.id} className="card card-pad space-y-1">
               <div className="flex items-center gap-2">
                 <span className="text-xs rounded-full px-2 py-0.5 bg-blue-500/20 text-blue-300 font-semibold">
