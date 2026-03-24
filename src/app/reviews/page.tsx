@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import HomeHeader from "@/components/HomeHeader";
 
 const PIN_TOKEN_KEY = "sh_pin_token";
 const PIN_STORE_KEY = "sh_pin_store_id";
+const PIN_PROFILE_KEY = "sh_pin_profile_id";
 
 type ReviewScoreRow = {
   profileId: string;
@@ -72,6 +74,8 @@ export default function ReviewsPage() {
   const router = useRouter();
 
   const [authToken, setAuthToken] = useState<string | null>(null);
+  const [isManager, setIsManager] = useState(false);
+  const [navProfileId, setNavProfileId] = useState<string | null>(null);
   const [month] = useState(() => cstMonthKey());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -134,6 +138,22 @@ export default function ReviewsPage() {
         }
         if (!alive) return;
         setAuthToken(token);
+
+        // Check manager status (supabase session = manager)
+        const { data: { session } } = await supabase.auth.getSession();
+        const adminAuthed = !!session?.user;
+        setIsManager(adminAuthed);
+
+        const pinProfileId = typeof window !== "undefined" ? sessionStorage.getItem(PIN_PROFILE_KEY) : null;
+        if (pinProfileId) {
+          setNavProfileId(pinProfileId);
+        } else if (adminAuthed && session?.access_token) {
+          const res = await fetch("/api/me/profile", { headers: { Authorization: `Bearer ${session.access_token}` } });
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.profileId) setNavProfileId(data.profileId);
+          }
+        }
 
         const storedStoreId = sessionStorage.getItem(PIN_STORE_KEY);
         const initialStoreId = storedStoreId && storedStoreId !== "null" ? storedStoreId : "all";
@@ -284,13 +304,16 @@ export default function ReviewsPage() {
   }
 
   return (
-    <div className="app-shell">
-      <div className="mx-auto max-w-4xl space-y-4">
-        <div className="flex items-center justify-between gap-2">
-          <h1 className="text-2xl font-semibold">⭐ Reviews — {monthLabel(month)}</h1>
-          <button className="btn-secondary px-3 py-1.5" onClick={() => router.push("/")}>
-            Back Home
-          </button>
+    <div className="bento-shell">
+      <HomeHeader
+        isManager={isManager}
+        isAuthenticated={true}
+        profileId={navProfileId}
+      />
+      <main className="mx-auto max-w-2xl px-4 pt-4 space-y-4">
+        <div className="clock-page-intro-card">
+          <h2 className="clock-page-intro-title">Reviews</h2>
+          <p className="clock-page-intro-desc">{monthLabel(month)}</p>
         </div>
 
         <div className="card card-pad">
@@ -443,7 +466,7 @@ export default function ReviewsPage() {
           {formMessage && <div className="text-sm text-emerald-300">{formMessage}</div>}
           {formError && <div className="text-sm text-red-300">{formError}</div>}
         </div>
-      </div>
+      </main>
     </div>
   );
 }
