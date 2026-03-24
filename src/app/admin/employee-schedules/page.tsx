@@ -485,7 +485,7 @@ export default function AdminEmployeeSchedulesPage() {
       <div className="max-w-4xl mx-auto space-y-4 px-4 py-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold">Employee Schedules</h1>
+            <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Employee Schedules</h1>
             <p className="text-sm muted">Filter by store, employee, and pay period. Tap a day to expand details.</p>
           </div>
           <button
