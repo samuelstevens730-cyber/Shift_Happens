@@ -203,7 +203,7 @@ function AdminRequestsContent() {
       <div className="mx-auto max-w-4xl space-y-6">
         <header className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold">Requests</h1>
+            <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Requests</h1>
             <p className="text-sm muted">Review and approve employee requests.</p>
           </div>
           <div className="inline-flex rounded-full border border-white/10 bg-white/5 p-1">
