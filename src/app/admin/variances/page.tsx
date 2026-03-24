@@ -276,7 +276,7 @@ export default function VarianceReviewPage() {
   return (
     <div className="app-shell">
       <div className="max-w-5xl mx-auto space-y-6">
-        <h1 className="text-2xl font-semibold">Variance Review</h1>
+        <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Variance Review</h1>
 
         {error && <div className="banner banner-error text-sm">{error}</div>}
 
