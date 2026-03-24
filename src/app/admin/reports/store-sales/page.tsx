@@ -688,7 +688,7 @@ export default function StoreReportPage() {
   }, [from, summaries, to]);
 
   return (
-    <div className="mx-auto min-h-screen max-w-6xl space-y-6 bg-[var(--bg1)] p-4 text-[var(--text)] md:p-6">
+    <div className="mx-auto min-h-screen max-w-6xl space-y-6 p-4 text-[var(--text)] md:p-6">
       <header>
         <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Store Report</h1>
         <p className="mt-1 text-sm text-zinc-500">

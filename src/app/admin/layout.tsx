@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import AdminSidebar from "@/components/AdminSidebar";
 import AdminBottomNav from "@/components/AdminBottomNav";
+import AdminMobileHeader from "@/components/AdminMobileHeader";
+import EmployeeShellFX from "@/components/EmployeeShellFX";
 
 type Store = { id: string; name: string };
 type User = { id: string; name: string; active: boolean; storeIds: string[] };
@@ -63,10 +65,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   if (!authed) return null; // auth redirect in progress
 
   return (
-    <div className="flex min-h-screen">
+    <div className="admin-shell min-h-screen">
+      <EmployeeShellFX />
       <AdminSidebar stores={stores} users={users} />
-      {/* Content area — fills remaining width via flex-1; overflow-y: auto so full-width pages scroll correctly */}
-      <div className="flex-1 min-h-0 overflow-y-auto pb-20 lg:pb-0">
+      {/* Content area — offset by fixed sidebar width on desktop */}
+      <div className="lg:ml-[224px] min-h-screen pb-20 lg:pb-0">
+        <AdminMobileHeader />
         {children}
       </div>
       <AdminBottomNav stores={stores} users={users} pendingRequests={pendingRequests} />

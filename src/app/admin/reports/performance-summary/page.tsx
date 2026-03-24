@@ -649,7 +649,7 @@ export default function PerformanceSummaryPage() {
         }
       `}</style>
 
-      <div className="min-h-screen bg-[var(--bg1)] text-[var(--text)] pb-24">
+      <div className="min-h-screen text-[var(--text)] pb-24">
         <div className="max-w-5xl mx-auto px-4 py-8">
 
           {/* ── Page header ── */}
