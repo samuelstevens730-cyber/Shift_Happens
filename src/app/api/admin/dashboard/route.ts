@@ -366,6 +366,20 @@ export async function GET(req: Request) {
       if (r.error) return NextResponse.json({ error: r.error.message }, { status: 500 });
     }
 
+    const { data: coveragePending } = await supabaseServer
+      .from("coverage_shift_requests")
+      .select(`
+        id,
+        shift_date,
+        created_at,
+        profiles ( name ),
+        coverage_store:stores ( name )
+      `)
+      .eq("status", "pending")
+      .in("coverage_store_id", managerStoreIds)
+      .order("created_at", { ascending: true })
+      .limit(10);
+
     const overrideActions: DashboardActionItem[] = (peopleRowsRes.data ?? []).map((row) => ({
       id: `people-override-${row.id}`,
       category: "people" as const,
@@ -454,6 +468,15 @@ export async function GET(req: Request) {
         title: "Pending timesheet correction",
         description: `Status: ${row.status}`,
         store_id: row.store_id,
+        created_at: row.created_at,
+      })),
+      ...(coveragePending ?? []).map((row) => ({
+        id: `approval-coverage-${row.id}`,
+        category: "approvals" as DashboardActionCategory,
+        severity: "medium" as const,
+        title: `Coverage shift — ${(row.profiles as unknown as { name: string } | null)?.name ?? "Unknown"}`,
+        description: `At ${(row.coverage_store as unknown as { name: string } | null)?.name ?? "?"} on ${row.shift_date}`,
+        store_id: null,
         created_at: row.created_at,
       })),
     ]
