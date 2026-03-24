@@ -70,6 +70,7 @@ type EmployeeSummary = {
   lv1_hours: number;
   lv2_hours: number;
   total_hours: number;
+  coverage_hours?: number;
 };
 
 function calcMinutes(start: string, end: string) {
@@ -264,15 +265,39 @@ export async function GET(req: Request) {
       }
     }
 
+    // Fetch approved coverage shifts for this pay period
+    // coverage_hours is kept SEPARATE from total_hours to avoid corrupting store reconciliation
+    const { data: coverageRows } = await supabaseServer
+      .from("coverage_shift_requests")
+      .select("profile_id, time_in, time_out")
+      .eq("status", "approved")
+      .gte("shift_date", from ?? "")
+      .lte("shift_date", to ?? "");
+
+    const coverageByProfile: Record<string, number> = {};
+    for (const row of coverageRows ?? []) {
+      const mins = (new Date(row.time_out).getTime() - new Date(row.time_in).getTime()) / 60_000;
+      const hrs = roundMinutes(mins);
+      coverageByProfile[row.profile_id] = (coverageByProfile[row.profile_id] ?? 0) + hrs;
+    }
+
+    const byEmployeeArr = Array.from(byEmployee.values()).sort((a, b) =>
+      (a.full_name || "Unknown").localeCompare(b.full_name || "Unknown")
+    );
+
+    // Attach as separate field — DO NOT add to total_hours
+    for (const emp of byEmployeeArr) {
+      emp.coverage_hours = coverageByProfile[emp.user_id] ?? 0;
+      // NOTE: emp.total_hours is intentionally NOT modified
+    }
+
     return NextResponse.json({
       rows,
       page,
       pageSize,
       total: summaryTotal,
       summary: {
-        byEmployee: Array.from(byEmployee.values()).sort((a, b) =>
-          (a.full_name || "Unknown").localeCompare(b.full_name || "Unknown")
-        ),
+        byEmployee: byEmployeeArr,
         totals: {
           lv1_hours: totalLv1Hours,
           lv2_hours: totalLv2Hours,

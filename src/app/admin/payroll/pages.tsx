@@ -115,6 +115,7 @@ type PayrollResponse =
           lv1_hours: number;
           lv2_hours: number;
           total_hours: number;
+          coverage_hours?: number;
         }[];
         totals: { lv1_hours: number; lv2_hours: number; total_hours: number };
       };
@@ -463,6 +464,7 @@ export default function PayrollAdminPage() {
       lv1_hours: number;
       lv2_hours: number;
       total_hours: number;
+      coverage_hours?: number;
     }[];
     totals: { lv1_hours: number; lv2_hours: number; total_hours: number };
   } | null>(null);
@@ -1120,6 +1122,7 @@ export default function PayrollAdminPage() {
                       <th className="text-right px-3 py-2">LV1</th>
                       <th className="text-right px-3 py-2">LV2</th>
                       <th className="text-right px-3 py-2">Total</th>
+                      <th className="text-right px-3 py-2">Coverage</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1129,6 +1132,7 @@ export default function PayrollAdminPage() {
                         <td className="px-3 py-2 text-right">{row.lv1_hours}</td>
                         <td className="px-3 py-2 text-right">{row.lv2_hours}</td>
                         <td className="px-3 py-2 text-right font-medium">{row.total_hours}</td>
+                        <td className="px-3 py-2 text-right">{(row.coverage_hours ?? 0).toFixed(1)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1138,6 +1142,7 @@ export default function PayrollAdminPage() {
                       <td className="px-3 py-2 text-right">{summary.totals.lv1_hours}</td>
                       <td className="px-3 py-2 text-right">{summary.totals.lv2_hours}</td>
                       <td className="px-3 py-2 text-right">{summary.totals.total_hours}</td>
+                      <td className="px-3 py-2 text-right">{summary.byEmployee.reduce((s, e) => s + (e.coverage_hours ?? 0), 0).toFixed(1)}</td>
                     </tr>
                   </tfoot>
                 </table>
