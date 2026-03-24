@@ -14,7 +14,7 @@ type SubmitStatus = "pass" | "warn" | "fail";
 type Props = {
   open: boolean;
   mode: SafeCloseoutMode;
-  authToken: string | null;
+  resolveAuthToken: () => Promise<string | null>;
   storeId: string | null;
   shiftId: string | null;
   businessDate: string | null;
@@ -55,7 +55,7 @@ function buildExpenseRows(context: SafeCloseoutContext | null): ExpenseDraftRow[
 export default function SafeCloseoutWizard({
   open,
   mode,
-  authToken,
+  resolveAuthToken,
   storeId,
   shiftId,
   businessDate,
@@ -181,6 +181,7 @@ export default function SafeCloseoutWizard({
   const countWithinTolerance = Math.abs(denomTotalCents - requiredDepositCents) <= denomTolerance;
 
   async function saveDraft() {
+    const authToken = await resolveAuthToken();
     if (!authToken || !storeId || !shiftId || !businessDate) {
       throw new Error("Missing shift or auth context.");
     }
@@ -223,6 +224,7 @@ export default function SafeCloseoutWizard({
   }
 
   async function uploadPhoto(file: File): Promise<string> {
+    const authToken = await resolveAuthToken();
     if (!authToken) throw new Error("Missing auth token.");
     const signRes = await fetch("/api/closeout/upload-url", {
       method: "POST",
@@ -335,6 +337,7 @@ export default function SafeCloseoutWizard({
   async function submitCloseout() {
     setErr(null);
     setStatusNote(null);
+    const authToken = await resolveAuthToken();
     if (!authToken) {
       setErr("❌ Session expired. Please refresh.");
       return;
@@ -575,9 +578,11 @@ export default function SafeCloseoutWizard({
                     <input
                       type="file"
                       accept="image/*"
-                      capture="environment"
+                      className="block w-full text-sm text-slate-200 file:mr-3 file:rounded-lg file:border file:border-emerald-400/40 file:bg-emerald-500/15 file:px-3 file:py-2 file:text-sm file:font-medium file:text-emerald-100"
                       onChange={(e) => setDepositFile(e.target.files?.[0] ?? null)}
                     />
+                    <div className="text-xs text-slate-400">Choose Camera or Photo Library when prompted.</div>
+                    {depositFile && <div className="text-xs text-emerald-300">Ready: {depositFile.name}</div>}
                     {depositPath && <div className="text-xs text-emerald-300">✅ Deposit slip uploaded.</div>}
                   </div>
                   <div className="space-y-1">
@@ -585,9 +590,11 @@ export default function SafeCloseoutWizard({
                     <input
                       type="file"
                       accept="image/*"
-                      capture="environment"
+                      className="block w-full text-sm text-slate-200 file:mr-3 file:rounded-lg file:border file:border-cyan-400/40 file:bg-cyan-500/15 file:px-3 file:py-2 file:text-sm file:font-medium file:text-cyan-100"
                       onChange={(e) => setPosFile(e.target.files?.[0] ?? null)}
                     />
+                    <div className="text-xs text-slate-400">Choose Camera or Photo Library when prompted.</div>
+                    {posFile && <div className="text-xs text-cyan-300">Ready: {posFile.name}</div>}
                     {posPath && <div className="text-xs text-emerald-300">✅ Z-report uploaded.</div>}
                   </div>
                   {salesNeedsCeilingConfirm && (

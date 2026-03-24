@@ -1367,7 +1367,7 @@ export default function ShiftPage() {
           <SafeCloseoutWizard
             open={safeCloseout.isOpen}
             mode={safeCloseout.mode}
-            authToken={safeCloseoutToken}
+            resolveAuthToken={resolveAuthToken}
             storeId={state.store.id}
             shiftId={shiftId}
             businessDate={shiftBusinessDate}
