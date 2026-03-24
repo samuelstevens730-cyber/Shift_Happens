@@ -856,7 +856,7 @@ export default function PayrollAdminPage() {
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-2xl font-semibold">Payroll</h1>
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Payroll</h1>
           <div className="flex gap-2">
             {payrollReport && (
               <button
