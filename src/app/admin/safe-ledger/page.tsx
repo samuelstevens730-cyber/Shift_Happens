@@ -963,7 +963,7 @@ function SafeLedgerDashboardContent() {
   return (
     <div className="space-y-4 p-6 text-slate-100">
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <h1 className="text-2xl font-semibold">Safe Ledger Dashboard</h1>
+        <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Safe Ledger Dashboard</h1>
         <div className="flex items-center gap-2">
           <Button className="bg-cyan-600 text-white hover:bg-cyan-700" onClick={() => setIsAddOpen(true)}>Add Manual Closeout</Button>
           <Button className="bg-amber-600 text-white hover:bg-amber-700" onClick={() => setIsPickupOpen(true)}>Record Full Pickup</Button>
