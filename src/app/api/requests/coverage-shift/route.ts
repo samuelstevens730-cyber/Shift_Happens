@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { authenticateShiftRequest } from "@/lib/shiftAuth";
 import { submitCoverageShiftSchema } from "@/schemas/requests";
+import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
 
 const CHICAGO = "America/Chicago";
 
@@ -106,4 +107,35 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ requestId: data.id }, { status: 201 });
+}
+
+export async function GET(req: Request) {
+  const token = getBearerToken(req);
+  if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const { data: { user }, error: authErr } = await supabaseServer.auth.getUser(token);
+  if (authErr || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  const managerStoreIds = await getManagerStoreIds(user.id);
+  if (managerStoreIds.length === 0) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const { data, error } = await supabaseServer
+    .from("coverage_shift_requests")
+    .select(`
+      id, shift_date, time_in, time_out, notes, status, denial_reason, created_at,
+      profiles ( name ),
+      coverage_store:stores ( name )
+    `)
+    .in("coverage_store_id", managerStoreIds)
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  if (error) {
+    console.error("Coverage shift list error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ requests: data ?? [] });
 }
