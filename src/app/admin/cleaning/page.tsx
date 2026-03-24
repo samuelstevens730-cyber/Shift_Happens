@@ -231,7 +231,7 @@ export default function AdminCleaningPage() {
       <div className="mx-auto max-w-6xl space-y-6">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold">Cleaning Tasks</h1>
+            <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Cleaning Tasks</h1>
             <div className="text-sm muted">Store/day/shift matrix</div>
           </div>
           <Link href="/admin/cleaning/report" className="btn-secondary px-4 py-2 text-sm">
