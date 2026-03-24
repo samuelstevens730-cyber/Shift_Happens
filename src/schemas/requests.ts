@@ -52,3 +52,13 @@ export const submitAdvanceSchema = z.object({
   cashAmountDollars: z.number().nonnegative().optional().nullable(),
   note: z.string().trim().optional().nullable(),
 });
+
+export const submitCoverageShiftSchema = z.object({
+  coverageStoreId: z.string().uuid(),
+  shiftDate:       z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"),
+  timeIn:          z.string().regex(/^\d{2}:\d{2}$/, "Use HH:MM"),
+  timeOut:         z.string().regex(/^\d{2}:\d{2}$/, "Use HH:MM"),
+  notes:           z.string().trim().max(500).optional().nullable(),
+});
+
+export type SubmitCoverageShiftInput = z.infer<typeof submitCoverageShiftSchema>;

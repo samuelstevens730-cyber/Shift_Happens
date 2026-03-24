@@ -1,7 +1,7 @@
 # REPO_CONTEXT.md
 
 System map for engineers and AI agents. Based entirely on code and existing docs.
-Last updated: 2026-03-04.
+Last updated: 2026-03-24.
 
 ---
 
@@ -489,6 +489,73 @@ From `AGENTS.md`:
 | Reference tables | `clock_windows`, `cleaning_tasks`, and similar config tables have no RLS by design — any authenticated client can read them. |
 | Clock-in store listing | `/api/start-shift` and the clock page allow unauthenticated access to list stores and profiles for the PIN entry flow. Flagged for future tightening. |
 | Vercel timeout | 10-second API timeout on Hobby tier. Routes that do multiple sequential DB calls (e.g., `/api/end-shift`) are close to this limit and could fail under load. |
+
+---
+
+## Cross-Store Shift Coverage
+
+Employees can submit hours worked at a store other than their home store. Managers review and approve/deny these requests. Approved hours appear in payroll as a separate column and are never merged into `total_hours`.
+
+### Database Table: `coverage_shift_requests`
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `profile_id` | FK → `profiles` | Submitting employee |
+| `coverage_store_id` | FK → `stores` | Store where the coverage shift was worked |
+| `shift_date` | date | CST calendar date |
+| `time_in` | timestamptz | UTC (converted server-side from HH:MM + America/Chicago) |
+| `time_out` | timestamptz | UTC (converted server-side from HH:MM + America/Chicago) |
+| `notes` | text | Optional employee note |
+| `status` | enum | `pending` / `approved` / `denied` |
+| `reviewed_by` | FK → `app_users` | Manager who acted on the request |
+| `reviewed_at` | timestamptz | |
+| `denial_reason` | text | Populated on deny |
+| `created_at` / `updated_at` | timestamptz | |
+
+**RLS:**
+- Employees can read and insert their own rows (scoped via PIN JWT `profile_id` claim)
+- Managers can read rows where `coverage_store_id` matches a store they manage
+
+**Migration:** `supabase/migrations/20260324_coverage_shift_requests.sql`
+
+### API Routes
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `POST /api/requests/coverage-shift` | `authenticateShiftRequest` (PIN JWT or Supabase) | Employee submits a coverage shift request |
+| `GET /api/requests/coverage-shift` | Supabase session (manager) | Admin lists requests for their managed stores |
+| `POST /api/requests/coverage-shift/[id]/approve` | Supabase session (manager) | Approve a pending request |
+| `POST /api/requests/coverage-shift/[id]/deny` | Supabase session (manager) | Deny a pending request with optional reason |
+
+All admin routes scope queries by `coverage_store_id` using `getManagerStoreIds()`.
+
+### Timezone Handling
+
+The client submits a plain `shiftDate` (YYYY-MM-DD) and `timeIn` / `timeOut` (HH:MM strings). The server converts both to UTC using `Intl.DateTimeFormat` with `America/Chicago` — this handles CST/CDT offset changes automatically. The resulting UTC timestamps are stored as `timestamptz`.
+
+Input validation uses `submitCoverageShiftSchema` in `src/schemas/requests.ts` (HH:MM time strings, YYYY-MM-DD date).
+
+### Pages
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `/coverage-shift/new` | Employee (PIN or Supabase) | Submission form — bento-shell + HomeHeader |
+| `/admin/coverage-shifts` | Manager (Supabase) | Review queue with approve/deny workflow, store-scoped |
+
+### Integration Points
+
+- **Home page** (`src/app/page.tsx`) — "Coverage Shift" entry added to Quick Actions
+- **Admin hub** (`src/app/admin/page.tsx`) — "Coverage Shifts" tile added to the navigation grid
+- **Command Center** (`src/app/api/admin/dashboard/route.ts`) — pending coverage requests appear in the approvals feed, scoped by manager's stores
+- **My Shifts timecard** (`src/app/dashboard/shifts/page.tsx`) — approved coverage entries merged into the employee's shift list with a blue "Coverage" badge
+- **Payroll** (`src/app/api/admin/payroll/route.ts` + `src/app/admin/payroll/pages.tsx`) — approved coverage hours fetched and surfaced as a `coverage_hours` column in the payroll table
+
+### Payroll Reconciliation Rule
+
+`coverage_hours` is a **separate column** in payroll output. It is **never added to `total_hours`**.
+
+Store reconciliation (hours open = total scheduled at that store = `total_hours`) must not include coverage shifts from another store. Coverage hours are displayed alongside `total_hours` for pay calculation purposes only — they reflect work at the coverage store, not the employee's home store.
 
 ---
 
