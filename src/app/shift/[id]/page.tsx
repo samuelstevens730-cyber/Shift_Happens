@@ -804,7 +804,7 @@ export default function ShiftPage() {
     : "an earlier time";
 
   return (
-    <div className="min-h-screen">
+    <div className="bento-shell">
       <HomeHeader
         isManager={managerSession}
         isAuthenticated={managerSession || Boolean(pinToken)}
@@ -1047,9 +1047,9 @@ export default function ShiftPage() {
             {checklistExpanded && (
               <div className="mt-3 space-y-2">
                 {(state.checklistGroups || []).length === 0 ? (
-                  <div className="text-sm border border-cyan-400/30 rounded p-3 bg-slate-900/50">No checklist items found.</div>
+                  <div className="text-sm border border-cyan-400/30 rounded p-3 bg-slate-900">No checklist items found.</div>
                 ) : (
-                  <ul className="border border-cyan-400/30 rounded divide-y divide-cyan-400/20 bg-slate-900/50">
+                  <ul className="border border-cyan-400/30 rounded divide-y divide-cyan-400/20 bg-slate-900">
                     {state.checklistGroups.map(g => {
                       const isDone = done.has(g.norm);
                       return (
@@ -1094,7 +1094,7 @@ export default function ShiftPage() {
               <div className="space-y-2">
                 <label className="text-sm">Prior X Report ($)</label>
                 <input
-                  className="w-full border border-cyan-400/30 bg-slate-900/50 text-slate-100 rounded p-2"
+                  className="w-full border border-cyan-400/30 bg-slate-900 text-slate-100 rounded p-2"
                   inputMode="decimal"
                   value={closeCheckpointPriorX}
                   onChange={e => setCloseCheckpointPriorX(e.target.value)}
@@ -1102,7 +1102,7 @@ export default function ShiftPage() {
                 />
                 <label className="text-sm">Z Report Total ($)</label>
                 <input
-                  className="w-full border border-cyan-400/30 bg-slate-900/50 text-slate-100 rounded p-2"
+                  className="w-full border border-cyan-400/30 bg-slate-900 text-slate-100 rounded p-2"
                   inputMode="decimal"
                   value={closeCheckpointZ}
                   onChange={e => setCloseCheckpointZ(e.target.value)}
@@ -1176,14 +1176,14 @@ export default function ShiftPage() {
                   Completion is mandatory: failure to complete these tasks, or marking them complete when they were not done, may result in disciplinary action up to and including termination. If a task cannot be completed, document the reason in the app so it can be reviewed and approved by a manager.
                 </div>
 
-                {cleaningLoading && <div className="text-sm border border-cyan-400/30 rounded p-3 bg-slate-900/50">Loading cleaning tasks...</div>}
+                {cleaningLoading && <div className="text-sm border border-cyan-400/30 rounded p-3 bg-slate-900">Loading cleaning tasks...</div>}
                 {!cleaningLoading && cleaningTasks.length === 0 && (
-                  <div className="text-sm border border-cyan-400/30 rounded p-3 bg-slate-900/50">No cleaning tasks scheduled for this shift.</div>
+                  <div className="text-sm border border-cyan-400/30 rounded p-3 bg-slate-900">No cleaning tasks scheduled for this shift.</div>
                 )}
 
                 {!cleaningLoading && cleaningTasks.length > 0 && (
                   <>
-                    <ul className="border border-cyan-400/30 rounded divide-y divide-cyan-400/20 bg-slate-900/50">
+                    <ul className="border border-cyan-400/30 rounded divide-y divide-cyan-400/20 bg-slate-900">
                       {cleaningTasks.map(task => {
                         const isCompleted = task.status === "completed";
                         const isSkipped = task.status === "skipped";
@@ -1524,7 +1524,7 @@ function StartDrawerCapturePanel({
     (!(outOfThreshold || changeNot200) || notify);
 
   return (
-    <div className="card card-pad rounded-2xl border-amber-400/50 bg-amber-950/20 text-amber-100 space-y-3">
+    <div className="card card-pad rounded-2xl border-amber-400/50 bg-amber-950/90 text-amber-100 space-y-3">
       <div className="text-sm font-semibold">Step 1: Enter Start Drawer</div>
       <div className="text-xs text-amber-200">
         This must be completed before checklist/tasks/clock-out actions are unlocked.

@@ -462,7 +462,7 @@ export default function SafeCloseoutWizard({
                 <div className="space-y-2">
                   <div className="text-sm font-semibold">1) Shift Context</div>
                   <label className="text-sm">Prior X Report Total ($)</label>
-                  <input className="w-full rounded border border-cyan-400/30 bg-slate-900/50 p-2" inputMode="decimal" value={priorX} onChange={(e) => setPriorX(e.target.value)} />
+                  <input className="w-full rounded border border-cyan-400/30 bg-slate-900 p-2" inputMode="decimal" value={priorX} onChange={(e) => setPriorX(e.target.value)} />
                 </div>
               )}
 
@@ -470,15 +470,15 @@ export default function SafeCloseoutWizard({
                 <div className="space-y-3">
                   <div className="text-sm font-semibold">2) The Command (Financials)</div>
                   <label className="text-sm">Cash Sales ($)</label>
-                  <input className="w-full rounded border border-cyan-400/30 bg-slate-900/50 p-2" inputMode="decimal" value={cashSales} onChange={(e) => setCashSales(e.target.value)} />
+                  <input className="w-full rounded border border-cyan-400/30 bg-slate-900 p-2" inputMode="decimal" value={cashSales} onChange={(e) => setCashSales(e.target.value)} />
                   <label className="text-sm">Card Sales ($)</label>
-                  <input className="w-full rounded border border-cyan-400/30 bg-slate-900/50 p-2" inputMode="decimal" value={cardSales} onChange={(e) => setCardSales(e.target.value)} />
+                  <input className="w-full rounded border border-cyan-400/30 bg-slate-900 p-2" inputMode="decimal" value={cardSales} onChange={(e) => setCardSales(e.target.value)} />
                   <div className="space-y-2">
                     <div className="text-sm font-medium">Expenses</div>
                     {expenses.map((row, index) => (
                       <div key={row.id} className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_2fr_auto]">
                         <input
-                          className="rounded border border-cyan-400/30 bg-slate-900/50 p-2"
+                          className="rounded border border-cyan-400/30 bg-slate-900 p-2"
                           inputMode="decimal"
                           placeholder="Amount ($)"
                           value={row.amount}
@@ -487,7 +487,7 @@ export default function SafeCloseoutWizard({
                           }}
                         />
                         <input
-                          className="rounded border border-cyan-400/30 bg-slate-900/50 p-2"
+                          className="rounded border border-cyan-400/30 bg-slate-900 p-2"
                           placeholder="Note"
                           value={row.note}
                           onChange={(e) => {
@@ -521,7 +521,7 @@ export default function SafeCloseoutWizard({
                     <div key={key} className="grid grid-cols-[90px_1fr] items-center gap-2">
                       <label className="text-sm">${key} bills</label>
                       <input
-                        className="w-full rounded border border-cyan-400/30 bg-slate-900/50 p-2"
+                        className="w-full rounded border border-cyan-400/30 bg-slate-900 p-2"
                         inputMode="numeric"
                         placeholder="0"
                         value={denoms[key]}
@@ -547,7 +547,7 @@ export default function SafeCloseoutWizard({
                       </button>
                       {varianceOverride && (
                         <textarea
-                          className="w-full rounded border border-red-400/40 bg-slate-900/60 p-2 text-sm"
+                          className="w-full rounded border border-red-400/40 bg-slate-900 p-2 text-sm"
                           rows={2}
                           value={varianceReason}
                           onChange={(e) => setVarianceReason(e.target.value)}
@@ -563,7 +563,7 @@ export default function SafeCloseoutWizard({
                 <div className="space-y-2">
                   <div className="text-sm font-semibold">4) The Remainder</div>
                   <label className="text-sm">Drawer Count ($)</label>
-                  <input className="w-full rounded border border-cyan-400/30 bg-slate-900/50 p-2" inputMode="decimal" value={drawerCount} onChange={(e) => setDrawerCount(e.target.value)} />
+                  <input className="w-full rounded border border-cyan-400/30 bg-slate-900 p-2" inputMode="decimal" value={drawerCount} onChange={(e) => setDrawerCount(e.target.value)} />
                 </div>
               )}
 
