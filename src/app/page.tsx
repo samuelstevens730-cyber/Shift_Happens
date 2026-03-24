@@ -697,7 +697,7 @@ function HomePageInner() {
           <div className="admin-home-layout">
 
             {/* Top row */}
-            <div className="admin-home-top-row grid lg:grid-cols-2 gap-4 items-stretch">
+            <div className="admin-home-top-row grid lg:grid-cols-2 gap-4 items-start">
               <RevealOnScroll delayMs={0}>
                 <AdminHomeCard />
               </RevealOnScroll>
