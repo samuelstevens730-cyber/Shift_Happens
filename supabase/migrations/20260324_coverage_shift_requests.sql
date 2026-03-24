@@ -79,5 +79,5 @@ create index if not exists coverage_shift_requests_profile_idx
 create index if not exists coverage_shift_requests_store_idx
   on public.coverage_shift_requests (coverage_store_id);
 
-create index if not exists coverage_shift_requests_date_idx
+create index if not exists coverage_shift_requests_shift_date_idx
   on public.coverage_shift_requests (shift_date);
