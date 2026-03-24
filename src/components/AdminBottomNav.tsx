@@ -108,7 +108,7 @@ export default function AdminBottomNav({ stores, users, pendingRequests }: Props
                 href={href}
                 onClick={() => setMoreOpen(false)}
                 className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
-                  pathname === href || pathname?.startsWith(`${href}/`)
+                  isActive(href)
                     ? "text-[var(--green)] bg-[rgba(32,240,138,0.07)]"
                     : "text-[var(--muted)] hover:text-[var(--text)] hover:bg-white/5"
                 }`}
