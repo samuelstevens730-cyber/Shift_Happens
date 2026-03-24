@@ -693,18 +693,237 @@ function HomePageInner() {
         )}
 
         {showAdmin ? (
-          /* ── Admin layout: flat 2-col grid ── */
-          <div className="grid lg:grid-cols-2 gap-4 items-start">
+          /*
+           * Admin layout — flat grid, each card is a direct grid item.
+           * DOM order   = mobile stacking order
+           * lg:col-start = desktop column assignment (auto-placement fills rows)
+           *
+           * Desktop:  Left col [Snapshot, Rankings, Advance, QA]
+           *           Right col [Clock, Schedule, Hours, Reviews]
+           * Mobile:   Snapshot, Clock, Schedule, Hours, Rankings, Quick Actions, Advance, Reviews
+           */
+          <>
+            <div className="grid gap-4 items-start lg:hidden">
+              {/* 1 – Snapshot */}
+              <div className="order-1">
+                <RevealOnScroll delayMs={0}><AdminHomeCard /></RevealOnScroll>
+              </div>
 
-            {/* Left col: Snapshot → Rankings → Advance → Quick Actions */}
-            <div className="grid gap-4 items-start content-start">
+              {/* 2 – Clock */}
+              <div className="order-2">
+                <RevealOnScroll delayMs={0}>
+                  <Link href={heroState.href} className={`employee-time-hero employee-time-hero-${heroState.mode}`}>
+                    <div className="employee-time-label">Time Clock</div>
+                    <div className="employee-time-state">{heroState.statusLabel}</div>
+                    <div className="employee-time-meta">{heroState.detail}</div>
+                    <div className="employee-time-cta">
+                      {heroState.ctaLabel ?? heroState.label}
+                      <ArrowRight className="h-4 w-4" />
+                    </div>
+                  </Link>
+                </RevealOnScroll>
+              </div>
 
-              <RevealOnScroll delayMs={0}>
-                <AdminHomeCard />
-              </RevealOnScroll>
+              {/* 3 – Schedule */}
+              <div className="order-3">
+                <RevealOnScroll delayMs={10}>
+                  <ExpandableCard
+                    title="MY SCHEDULE"
+                    icon={Calendar}
+                    iconColor="text-[var(--accent-purple)]"
+                    borderColor="bento-my-schedule"
+                    disabled={!showMySchedule}
+                    fullViewLink={scheduleHref}
+                    fullViewText="Full schedule"
+                    collapsedContent={
+                      <div className="employee-schedule-triptych">
+                        {[
+                          { label: "Yesterday", shifts: yesterdayShifts },
+                          { label: "Today", shifts: todayShifts },
+                          { label: "Tomorrow", shifts: tomorrowShifts },
+                        ].map((day) => (
+                          <div key={day.label} className="employee-mini-day">
+                            <span className="employee-mini-day-label">{day.label}</span>
+                            <strong>{getShiftTimeRange(day.shifts)}</strong>
+                            <span>{getStoreLabel(day.shifts)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    }
+                    expandedContent={
+                      <div className="space-y-2">
+                        {expandedKeys.slice(0, 5).map((key) => {
+                          const shiftsForDay = scheduleShifts.filter((s) => s.shift_date === key);
+                          const isToday = key === todayKey;
+                          return (
+                            <div key={key} className={`employee-schedule-row ${isToday ? "employee-schedule-row-active" : ""}`}>
+                              <span className="text-sm font-medium w-24">{formatCstLabel(key)}</span>
+                              <span className="text-sm text-gray-300">{getShiftTimeRange(shiftsForDay)}</span>
+                              <span className="text-xs text-gray-500">{getStoreLabel(shiftsForDay)}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    }
+                  />
+                </RevealOnScroll>
+              </div>
 
-              <RevealOnScroll delayMs={20}>
-                <section className="employee-panel employee-rank-card">
+              {/* 4 – Hours */}
+              <div className="order-4">
+                <RevealOnScroll delayMs={20}>
+                  <ExpandableCard
+                    title="CURRENT HOURS"
+                    icon={Timer}
+                    iconColor="text-[var(--accent-gold)]"
+                    borderColor="bento-hours"
+                    disabled={!showMySchedule}
+                    fullViewLink={shiftsHref}
+                    fullViewText="Full timecard"
+                    collapsedContent={
+                      <div className="employee-hours-collapsed">
+                        <div className="employee-hours-stat">
+                          <p className="employee-metric-value">{currentPeriodHours.toFixed(1)}</p>
+                          <p className="text-sm text-[var(--accent-gold)]">hours</p>
+                        </div>
+                        <div className="employee-hours-divider" />
+                        <div className="employee-hours-stat">
+                          <p className="employee-metric-value">{timeEntries.length}</p>
+                          <p className="text-sm text-[var(--accent-gold)]">shifts</p>
+                        </div>
+                        <p className="employee-metric-meta employee-hours-period">
+                          {payPeriodRange.start
+                            ? `${new Date(payPeriodRange.start).toLocaleDateString("en-US", { month: "short", day: "numeric" })} â€“ ${new Date(payPeriodRange.end).toLocaleDateString("en-US", { month: "short", day: "numeric" })}`
+                            : "Current pay period"}
+                        </p>
+                      </div>
+                    }
+                    expandedContent={
+                      <div className="space-y-3">
+                        <div className="flex justify-between items-center pb-2 border-b border-white/10">
+                          <span className="text-sm text-gray-400">Period Total</span>
+                          <span className="text-xl font-bold text-[var(--accent-gold)]">{currentPeriodHours.toFixed(2)} hrs</span>
+                        </div>
+                        <div className="space-y-2 max-h-[42vh] overflow-y-auto pr-1">
+                          {timeEntries.map((entry) => (
+                            <div key={entry.id} className="employee-hours-row">
+                              <div>
+                                <p className="text-sm font-medium">
+                                  {new Date(entry.started_at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                                </p>
+                                <p className="text-xs text-gray-400">
+                                  {new Date(entry.started_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })} -{" "}
+                                  {entry.ended_at
+                                    ? new Date(entry.ended_at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })
+                                    : "--"}
+                                </p>
+                              </div>
+                              <span className="text-sm font-bold text-white">{entry.hours.toFixed(1)}h</span>
+                            </div>
+                          ))}
+                        </div>
+                        {timeEntries.length === 0 ? (
+                          <p className="text-center text-gray-400 py-4">No hours logged this period.</p>
+                        ) : null}
+                      </div>
+                    }
+                  />
+                </RevealOnScroll>
+              </div>
+
+              {/* 5 – Rankings */}
+              <div className="order-5">
+                <RevealOnScroll delayMs={10}>
+                  <section className="employee-panel employee-rank-card">
+                  <div className="employee-panel-header">
+                    <div>
+                      <div className="employee-section-kicker">Rankings</div>
+                      <h2>Scoreboard</h2>
+                    </div>
+                    <Trophy className="h-5 w-5 text-[var(--accent-gold)]" />
+                  </div>
+                  <div className="employee-rank-row">
+                    <div>
+                      <span className="employee-rank-label">Your Rank</span>
+                      <strong>{scoreboardPreview?.rank ? `#${scoreboardPreview.rank}` : "Unranked"}</strong>
+                    </div>
+                    <div>
+                      <span className="employee-rank-label">Score</span>
+                      <strong>{scoreboardPreview?.score != null ? scoreboardPreview.score.toFixed(1) : "--"}</strong>
+                    </div>
+                    <Link href="/scoreboard" className="employee-inline-link employee-rank-link">
+                      Full scoreboard
+                    </Link>
+                  </div>
+                  </section>
+                </RevealOnScroll>
+              </div>
+
+              {/* 6 – Quick Actions */}
+              <div className="order-6">
+                <RevealOnScroll delayMs={30}>
+                  <section className="employee-panel">
+                  <div className="employee-panel-header">
+                    <div><h2>Quick Actions</h2></div>
+                    {immediateActions.length > 4 ? (
+                      <button
+                        type="button"
+                        className="employee-inline-toggle"
+                        onClick={() => setShowMoreActions((prev) => !prev)}
+                      >
+                        {showMoreActions ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="employee-panel-stack">
+                    {visibleActions.map((action) => (
+                      <Link key={action.href} href={action.href} className="employee-link-row">
+                        <div>
+                          <strong>{action.label}</strong>
+                          {action.detail ? <span>{action.detail}</span> : null}
+                        </div>
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    ))}
+                  </div>
+                  </section>
+                </RevealOnScroll>
+              </div>
+
+              {showRequests ? (
+                <div className="order-7">
+                  <RevealOnScroll delayMs={20}>
+                    <Link href="/dashboard/requests?tab=advances" className="employee-lower-card">
+                      <div className="employee-section-kicker">Advance Request</div>
+                      <div className="employee-lower-row">
+                        <strong>Submit Advance</strong>
+                        <ArrowRight className="h-4 w-4" />
+                      </div>
+                    </Link>
+                  </RevealOnScroll>
+                </div>
+              ) : null}
+
+              {showRequests ? (
+                <div className="order-8">
+                  <RevealOnScroll delayMs={30}>
+                    <Link href="/reviews" className="employee-lower-card">
+                      <div className="employee-section-kicker">Reviews</div>
+                      <div className="employee-lower-row">
+                        <strong>Open Reviews</strong>
+                        <ArrowRight className="h-4 w-4" />
+                      </div>
+                    </Link>
+                  </RevealOnScroll>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="hidden lg:grid lg:grid-cols-2 lg:gap-4 lg:items-start">
+              <div className="grid gap-4 content-start">
+                <RevealOnScroll delayMs={0}><AdminHomeCard /></RevealOnScroll>
+                <RevealOnScroll delayMs={10}>
+                  <section className="employee-panel employee-rank-card">
                 <div className="employee-panel-header">
                   <div>
                     <div className="employee-section-kicker">Rankings</div>
@@ -726,66 +945,60 @@ function HomePageInner() {
                   </Link>
                 </div>
                 </section>
-              </RevealOnScroll>
-
-              {showRequests ? (
+                </RevealOnScroll>
+                {showRequests ? (
+                  <RevealOnScroll delayMs={20}>
+                    <Link href="/dashboard/requests?tab=advances" className="employee-lower-card">
+                      <div className="employee-section-kicker">Advance Request</div>
+                      <div className="employee-lower-row">
+                        <strong>Submit Advance</strong>
+                        <ArrowRight className="h-4 w-4" />
+                      </div>
+                    </Link>
+                  </RevealOnScroll>
+                ) : null}
                 <RevealOnScroll delayMs={30}>
-                  <Link href="/dashboard/requests?tab=advances" className="employee-lower-card">
-                    <div className="employee-section-kicker">Advance Request</div>
-                    <div className="employee-lower-row">
-                      <strong>Submit Advance</strong>
+                  <section className="employee-panel">
+                  <div className="employee-panel-header">
+                    <div><h2>Quick Actions</h2></div>
+                    {immediateActions.length > 4 ? (
+                      <button
+                        type="button"
+                        className="employee-inline-toggle"
+                        onClick={() => setShowMoreActions((prev) => !prev)}
+                      >
+                        {showMoreActions ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </button>
+                    ) : null}
+                  </div>
+                  <div className="employee-panel-stack">
+                    {visibleActions.map((action) => (
+                      <Link key={action.href} href={action.href} className="employee-link-row">
+                        <div>
+                          <strong>{action.label}</strong>
+                          {action.detail ? <span>{action.detail}</span> : null}
+                        </div>
+                        <ArrowRight className="h-4 w-4" />
+                      </Link>
+                    ))}
+                  </div>
+                  </section>
+                </RevealOnScroll>
+              </div>
+
+              <div className="grid gap-4 content-start">
+                <RevealOnScroll delayMs={0}>
+                  <Link href={heroState.href} className={`employee-time-hero employee-time-hero-${heroState.mode}`}>
+                    <div className="employee-time-label">Time Clock</div>
+                    <div className="employee-time-state">{heroState.statusLabel}</div>
+                    <div className="employee-time-meta">{heroState.detail}</div>
+                    <div className="employee-time-cta">
+                      {heroState.ctaLabel ?? heroState.label}
                       <ArrowRight className="h-4 w-4" />
                     </div>
                   </Link>
                 </RevealOnScroll>
-              ) : null}
-
-              <RevealOnScroll delayMs={40}>
-                <section className="employee-panel">
-                <div className="employee-panel-header">
-                  <div><h2>Quick Actions</h2></div>
-                  {immediateActions.length > 4 ? (
-                    <button
-                      type="button"
-                      className="employee-inline-toggle"
-                      onClick={() => setShowMoreActions((prev) => !prev)}
-                    >
-                      {showMoreActions ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                    </button>
-                  ) : null}
-                </div>
-                <div className="employee-panel-stack">
-                  {visibleActions.map((action) => (
-                    <Link key={action.href} href={action.href} className="employee-link-row">
-                      <div>
-                        <strong>{action.label}</strong>
-                        {action.detail ? <span>{action.detail}</span> : null}
-                      </div>
-                      <ArrowRight className="h-4 w-4" />
-                    </Link>
-                  ))}
-                </div>
-                </section>
-              </RevealOnScroll>
-
-            </div>{/* end left col */}
-
-            {/* Right col: Clock In → Schedule → Hours → Reviews */}
-            <div className="grid gap-4 items-start content-start">
-
-              <RevealOnScroll delayMs={0}>
-                <Link href={heroState.href} className={`employee-time-hero employee-time-hero-${heroState.mode}`}>
-                  <div className="employee-time-label">Time Clock</div>
-                  <div className="employee-time-state">{heroState.statusLabel}</div>
-                  <div className="employee-time-meta">{heroState.detail}</div>
-                  <div className="employee-time-cta">
-                    {heroState.ctaLabel ?? heroState.label}
-                    <ArrowRight className="h-4 w-4" />
-                  </div>
-                </Link>
-              </RevealOnScroll>
-
-              <RevealOnScroll delayMs={20}>
+                <RevealOnScroll delayMs={10}>
                 <ExpandableCard
                   title="MY SCHEDULE"
                   icon={Calendar}
@@ -825,9 +1038,8 @@ function HomePageInner() {
                     </div>
                   }
                 />
-              </RevealOnScroll>
-
-              <RevealOnScroll delayMs={30}>
+                </RevealOnScroll>
+                <RevealOnScroll delayMs={20}>
                 <ExpandableCard
                   title="CURRENT HOURS"
                   icon={Timer}
@@ -884,10 +1096,9 @@ function HomePageInner() {
                     </div>
                   }
                 />
-              </RevealOnScroll>
-
-              {showRequests ? (
-                <RevealOnScroll delayMs={40}>
+                </RevealOnScroll>
+                {showRequests ? (
+                  <RevealOnScroll delayMs={30}>
                   <Link href="/reviews" className="employee-lower-card">
                     <div className="employee-section-kicker">Reviews</div>
                     <div className="employee-lower-row">
@@ -895,17 +1106,16 @@ function HomePageInner() {
                       <ArrowRight className="h-4 w-4" />
                     </div>
                   </Link>
-                </RevealOnScroll>
-              ) : null}
-
-            </div>{/* end right col */}
-
-          </div>
+                  </RevealOnScroll>
+                ) : null}
+              </div>
+            </div>
+          </>
 
         ) : (
           <div className="employee-desktop-grid">
-            <div className="employee-col-primary">
-              <RevealOnScroll delayMs={0}>
+            <div className="contents">
+              <RevealOnScroll delayMs={0} className="order-1 lg:col-start-1">
                 <Link href={heroState.href} className={`employee-time-hero employee-time-hero-${heroState.mode}`}>
                   <div className="employee-time-label">Time Clock</div>
                   <div className="employee-time-state">{heroState.statusLabel}</div>
@@ -916,7 +1126,7 @@ function HomePageInner() {
                   </div>
                 </Link>
               </RevealOnScroll>
-              <RevealOnScroll delayMs={60}>
+              <RevealOnScroll delayMs={60} className="order-5 lg:col-start-1">
                 <section className="employee-panel">
                 <div className="employee-panel-header">
                   <div><h2>Quick Actions</h2></div>
@@ -945,8 +1155,8 @@ function HomePageInner() {
               </RevealOnScroll>
             </div>
 
-            <div className="employee-col-planning">
-              <RevealOnScroll delayMs={30}>
+            <div className="contents">
+              <RevealOnScroll delayMs={30} className="order-2 lg:col-start-2">
                 <ExpandableCard
                   title="MY SCHEDULE"
                   icon={Calendar}
@@ -987,7 +1197,7 @@ function HomePageInner() {
                   }
                 />
               </RevealOnScroll>
-              <RevealOnScroll delayMs={50}>
+              <RevealOnScroll delayMs={50} className="order-3 lg:col-start-2">
                 <ExpandableCard
                   title="CURRENT HOURS"
                   icon={Timer}
@@ -1047,8 +1257,8 @@ function HomePageInner() {
               </RevealOnScroll>
             </div>
 
-            <div className="employee-col-secondary">
-              <RevealOnScroll delayMs={40}>
+            <div className="contents">
+              <RevealOnScroll delayMs={40} className="order-4 lg:col-start-3">
                 <section className="employee-panel employee-rank-card">
                 <div className="employee-panel-header">
                   <div>
@@ -1073,7 +1283,7 @@ function HomePageInner() {
                 </section>
               </RevealOnScroll>
               {showRequests ? (
-                <RevealOnScroll delayMs={60}>
+                <RevealOnScroll delayMs={60} className="order-6 lg:col-start-3">
                   <Link href="/dashboard/requests?tab=advances" className="employee-lower-card">
                     <div className="employee-section-kicker">Advance Request</div>
                     <div className="employee-lower-row">
@@ -1084,7 +1294,7 @@ function HomePageInner() {
                 </RevealOnScroll>
               ) : null}
               {showRequests ? (
-                <RevealOnScroll delayMs={80}>
+                <RevealOnScroll delayMs={80} className="order-7 lg:col-start-3">
                   <Link href="/reviews" className="employee-lower-card">
                     <div className="employee-section-kicker">Reviews</div>
                     <div className="employee-lower-row">

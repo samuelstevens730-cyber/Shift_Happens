@@ -8,7 +8,8 @@
       "Bash(grep -A 20 \"CREATE TABLE.*stores\" src/app/sql/*.sql)",
       "Bash(xargs grep -l \"rollover\")",
       "Bash(xargs grep -l \"rollover\\\\|shift_sales_counts\\\\|daily_sales_records\")",
-      "Bash(grep -l \"daily_sales_records\" \"/c/Users/samue/Desktop/Shift_Happens/Shift_Happens_08-12-2025/src/app/sql\"/*.sql)"
+      "Bash(grep -l \"daily_sales_records\" \"/c/Users/samue/Desktop/Shift_Happens/Shift_Happens_08-12-2025/src/app/sql\"/*.sql)",
+      "Bash(npx tsc:*)"
     ]
   }
 }
