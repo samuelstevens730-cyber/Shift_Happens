@@ -22,16 +22,16 @@ export function Dialog({
   );
 }
 
-export function DialogContent({ children }: { children: ReactNode }) {
-  return <div className="p-4">{children}</div>;
+export function DialogContent({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={`p-4${className ? ` ${className}` : ""}`}>{children}</div>;
 }
 
 export function DialogHeader({ children }: { children: ReactNode }) {
   return <div className="mb-4 border-b border-cyan-400/20 pb-3">{children}</div>;
 }
 
-export function DialogTitle({ children }: { children: ReactNode }) {
-  return <h2 className="text-lg font-semibold">{children}</h2>;
+export function DialogTitle({ children, className }: { children: ReactNode; className?: string }) {
+  return <h2 className={`text-lg font-semibold${className ? ` ${className}` : ""}`}>{children}</h2>;
 }
 
 export function DialogDescription({ children }: { children: ReactNode }) {
