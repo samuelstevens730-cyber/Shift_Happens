@@ -109,15 +109,7 @@ export default function AdminEmployeeScoreboardPage() {
     <div className="app-shell">
       <div className="mx-auto max-w-7xl space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-2xl font-semibold">Employee Scoreboard (Beta)</h1>
-          <div className="flex items-center gap-2">
-            <Link href="/admin/dashboard" className="btn-secondary px-3 py-1.5">
-              Command Center
-            </Link>
-            <Link href="/admin" className="btn-secondary px-3 py-1.5">
-              Back to Admin
-            </Link>
-          </div>
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Employee Scoreboard (Beta)</h1>
         </div>
 
         <div className="banner">
