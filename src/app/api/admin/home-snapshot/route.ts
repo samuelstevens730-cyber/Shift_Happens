@@ -50,7 +50,14 @@ type OpenShiftRow = {
   id: string;
   started_at: string | null;
   store: { name: string } | null;
+  profile: { id: string; name: string | null } | null;
+};
+
+type ScheduledRow = {
+  profile_id: string;
+  store_id: string;
   profile: { name: string | null } | null;
+  store: { name: string | null } | null;
 };
 
 // ── Route ──────────────────────────────────────────────────────────────────
@@ -101,21 +108,21 @@ export async function GET(req: Request) {
       // Currently clocked in
       supabaseServer
         .from("shifts")
-        .select("id, started_at, store:store_id(name), profile:profile_id(name)")
+        .select("id, started_at, store:store_id(name), profile:profile_id(id, name)")
         .in("store_id", storeIds)
         .is("ended_at", null)
         .neq("last_action", "removed")
         .order("started_at", { ascending: true })
         .returns<OpenShiftRow[]>(),
 
-      // Distinct employees scheduled today (published schedules only)
-      // Select profile_id rows, then dedupe in JS — avoids double-counting doubles
+      // Employees scheduled today (published) with names — deduped in JS
       supabaseServer
         .from("schedule_shifts")
-        .select("profile_id, schedules!inner(status)")
+        .select("profile_id, store_id, schedules!inner(status), profile:profile_id(name), store:store_id(name)")
         .in("store_id", storeIds)
         .eq("shift_date", today)
-        .eq("schedules.status", "published"),
+        .eq("schedules.status", "published")
+        .returns<ScheduledRow[]>(),
 
       // Pending swap requests
       supabaseServer
@@ -164,15 +171,32 @@ export async function GET(req: Request) {
       since: r.started_at ?? "",
     }));
 
-    // Dedupe by profile_id so doubles don't inflate the count
-    const scheduledToday = new Set(
-      (scheduledTodayRes.data ?? []).map((r: { profile_id: string }) => r.profile_id)
-    ).size;
+    // Build set of profile IDs currently clocked in
+    const clockedInProfileIds = new Set(
+      (openShiftsRes.data ?? []).map((r) => r.profile?.id).filter(Boolean)
+    );
+
+    // Dedupe scheduled rows by profile_id, then subtract clocked-in
+    const scheduledMap = new Map<string, { name: string; storeName: string }>();
+    for (const r of (scheduledTodayRes.data ?? [])) {
+      if (!scheduledMap.has(r.profile_id)) {
+        scheduledMap.set(r.profile_id, {
+          name: r.profile?.name ?? "Unknown",
+          storeName: r.store?.name ?? "",
+        });
+      }
+    }
+
+    const scheduledToday = scheduledMap.size;
+    const notClockedIn = [...scheduledMap.entries()]
+      .filter(([profileId]) => !clockedInProfileIds.has(profileId))
+      .map(([, v]) => v);
 
     return NextResponse.json({
       yesterdaySales: sumSales(yesterdaySalesRes.data ?? null),
       weeklySales: sumSales(weeklySalesRes.data ?? null),
       clockedIn,
+      notClockedIn,
       scheduledToday,
       pendingRequests:
         (swapsRes.count ?? 0) + (timeOffRes.count ?? 0) + (timesheetRes.count ?? 0),

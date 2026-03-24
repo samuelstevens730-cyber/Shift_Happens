@@ -15,6 +15,7 @@ import {
   DollarSign,
   TrendingUp,
   Users,
+  UserX,
   AlertCircle,
 } from "lucide-react";
 
@@ -26,10 +27,16 @@ type ClockedInPerson = {
   since: string;
 };
 
+type ScheduledPerson = {
+  name: string;
+  storeName: string;
+};
+
 type Snapshot = {
   yesterdaySales: number | null;
   weeklySales: number | null;
   clockedIn: ClockedInPerson[];
+  notClockedIn: ScheduledPerson[];
   scheduledToday: number;
   pendingRequests: number;
   unreviewedVariances: number;
@@ -152,6 +159,24 @@ export default function AdminHomeCard() {
           </ul>
         )}
       </div>
+
+      {/* Not Clocked In — only shown if someone is scheduled but missing */}
+      {snapshot.notClockedIn.length > 0 && (
+        <div className="admin-home-section">
+          <div className="admin-home-section-header">
+            <UserX className="h-3.5 w-3.5 text-[var(--danger)]" />
+            <span className="text-[var(--danger)]">Not Clocked In</span>
+          </div>
+          <ul className="admin-home-person-list">
+            {snapshot.notClockedIn.map((p, i) => (
+              <li key={i} className="admin-home-person-row">
+                <span className="admin-home-person-name">{p.name}</span>
+                <span className="admin-home-person-meta">{p.storeName}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* Pending Actions */}
       <Link href="/admin" className="admin-home-actions-row">
