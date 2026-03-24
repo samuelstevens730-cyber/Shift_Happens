@@ -115,7 +115,7 @@ export default function CleaningAuditPage() {
       <div className="mx-auto max-w-6xl space-y-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-semibold">Cleaning Audit</h1>
+            <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Cleaning Audit</h1>
             <div className="text-sm muted">Completed and skipped cleaning tasks by store</div>
           </div>
           <Link href="/admin/cleaning" className="btn-secondary px-4 py-2 text-sm">
