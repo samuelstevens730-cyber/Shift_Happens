@@ -87,7 +87,7 @@ function downloadBlob(blob: Blob, filename: string) {
 
 function BlockA({ summary }: { summary: StorePeriodSummary }) {
   return (
-    <div className="rounded border border-white/8 p-4">
+    <div className="admin-report-card p-4">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
         Top-Line Velocity
       </p>
@@ -168,7 +168,7 @@ function BlockA({ summary }: { summary: StorePeriodSummary }) {
 function BlockB({ summary }: { summary: StorePeriodSummary }) {
   const hasCloseoutData = summary.cashPct != null || summary.cashRisk.totalVarianceCents != null;
   return (
-    <div className="rounded border border-white/8 p-4">
+    <div className="admin-report-card p-4">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
         Risk And Cash Flow
       </p>
@@ -229,7 +229,7 @@ function BlockB({ summary }: { summary: StorePeriodSummary }) {
 function VolatilityCard({ summary }: { summary: StorePeriodSummary }) {
   const volatility = summary.volatility;
   return (
-    <div className="rounded border border-white/8 p-4">
+    <div className="admin-report-card p-4">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
         Distribution And Volatility
       </p>
@@ -265,7 +265,7 @@ function VolatilityCard({ summary }: { summary: StorePeriodSummary }) {
 
 function WeatherSummaryCard({ summary }: { summary: StorePeriodSummary }) {
   return (
-    <div className="rounded border border-white/8 p-4">
+    <div className="admin-report-card p-4">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">
         Weather Summary
       </p>
@@ -314,7 +314,7 @@ function WeatherSummaryCard({ summary }: { summary: StorePeriodSummary }) {
 
 function VelocityCard({ summary }: { summary: StorePeriodSummary }) {
   return (
-    <div className="rounded border border-white/8 p-4">
+    <div className="admin-report-card p-4">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-zinc-400">Velocity Map</p>
       {summary.bestDay || summary.bestShiftType ? (
         <div className="space-y-1 text-sm">
@@ -348,7 +348,7 @@ function VelocityCard({ summary }: { summary: StorePeriodSummary }) {
 function DailyTrendChart({ summary }: { summary: StorePeriodSummary }) {
   if (summary.dailyTrend.length === 0) {
     return (
-      <div className="rounded border border-white/8 p-4">
+      <div className="admin-report-card p-4">
         <p className="text-sm italic text-zinc-500">No daily trend data available.</p>
       </div>
     );
@@ -362,7 +362,7 @@ function DailyTrendChart({ summary }: { summary: StorePeriodSummary }) {
   }));
 
   return (
-    <div className="rounded border border-white/8 p-4">
+    <div className="admin-report-card p-4">
       <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">
         Daily Sales Trend
       </p>
@@ -408,7 +408,7 @@ function DailyTrendChart({ summary }: { summary: StorePeriodSummary }) {
 
 function DayOfWeekTable({ summary }: { summary: StorePeriodSummary }) {
   return (
-    <div className="rounded border border-white/8 p-4">
+    <div className="admin-report-card p-4">
       <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">
         Day-of-Week Averages
       </p>
@@ -449,7 +449,7 @@ function DayOfWeekTable({ summary }: { summary: StorePeriodSummary }) {
 function TopPerformersCard({ summary }: { summary: StorePeriodSummary }) {
   const { volume, efficiency } = summary.topPerformers;
   return (
-    <div className="rounded border border-white/8 p-4">
+    <div className="admin-report-card p-4">
       <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">
         Top Performers
       </p>
@@ -491,7 +491,7 @@ function TopPerformersCard({ summary }: { summary: StorePeriodSummary }) {
 
 function ShiftTypeBreakdownTable({ summary }: { summary: StorePeriodSummary }) {
   return (
-    <div className="rounded border border-white/8 p-4">
+    <div className="admin-report-card p-4">
       <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-zinc-400">
         Shift-Type Breakdown
       </p>
@@ -565,8 +565,8 @@ function DataIntegrityCard({ summary }: { summary: StorePeriodSummary }) {
 
 function StoreCard({ summary }: { summary: StorePeriodSummary }) {
   return (
-    <section className="overflow-hidden rounded-lg border border-white/8">
-      <header className="flex flex-wrap items-center gap-2 border-b border-white/8 bg-[var(--card)] px-4 py-3">
+    <section className="admin-report-surface overflow-hidden">
+      <header className="flex flex-wrap items-center gap-2 border-b border-white/8 bg-[rgba(17,21,19,0.94)] px-4 py-3">
         <h2 className="text-lg font-semibold">{summary.storeName}</h2>
         <p className="text-xs text-zinc-500">
           {summary.periodFrom} - {summary.periodTo}
@@ -688,15 +688,15 @@ export default function StoreReportPage() {
   }, [from, summaries, to]);
 
   return (
-    <div className="mx-auto min-h-screen max-w-6xl space-y-6 p-4 text-[var(--text)] md:p-6">
+    <div className="relative z-10 mx-auto min-h-screen max-w-6xl space-y-6 p-4 text-[var(--text)] md:p-6">
       <header>
-        <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Store Report</h1>
-        <p className="mt-1 text-sm text-zinc-500">
+        <h1 className="admin-report-title font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight">Store Report</h1>
+        <p className="admin-report-copy mt-1 text-sm">
           Rollover-aware store performance, weather summary, trend chart, and top performers.
         </p>
       </header>
 
-      <section className="rounded-lg border border-white/8 p-4">
+      <section className="admin-report-surface p-4">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
           <label className="text-sm">
             <span className="mb-1 block text-xs text-zinc-500">From</span>
@@ -773,7 +773,7 @@ export default function StoreReportPage() {
           {llmText && (
             <section className="space-y-2">
               <div className="flex items-center justify-between">
-                <p className="text-sm font-medium text-zinc-500">LLM Export</p>
+                <p className="admin-report-copy text-sm font-medium">LLM Export</p>
                 <button
                   type="button"
                   onClick={handleCopy}
@@ -794,7 +794,7 @@ export default function StoreReportPage() {
       )}
 
       {summaries && summaries.length === 0 && (
-        <div className="rounded border border-white/8 p-6 text-center text-sm text-zinc-500">
+        <div className="admin-report-surface p-6 text-center text-sm admin-report-copy">
           No data found for the selected filters.
         </div>
       )}

@@ -2044,6 +2044,39 @@ body::after {
   color: var(--text);
 }
 
+.admin-report-surface {
+  border-radius: 24px;
+  border: 1px solid rgba(212, 166, 90, 0.18);
+  background:
+    linear-gradient(180deg, rgba(18, 22, 20, 0.96), rgba(10, 13, 12, 0.98));
+  box-shadow:
+    0 18px 42px rgba(0, 0, 0, 0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.admin-report-card {
+  border-radius: 20px;
+  border: 1px solid rgba(141, 255, 175, 0.12);
+  background:
+    linear-gradient(180deg, rgba(22, 27, 25, 0.96), rgba(13, 16, 15, 0.98));
+  box-shadow:
+    0 14px 30px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.admin-report-title {
+  color: var(--text-strong);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.28);
+}
+
+.admin-report-copy {
+  color: rgba(212, 219, 213, 0.78);
+}
+
+.admin-report-muted {
+  color: rgba(212, 219, 213, 0.58);
+}
+
 .admin-home-card-sales {
   display: flex;
   align-items: flex-start;

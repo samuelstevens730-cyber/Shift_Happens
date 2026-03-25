@@ -135,9 +135,9 @@ function EmployeeCard({
   const trend = delta ? trendBadge(delta.trending) : null;
 
   return (
-    <div className="rounded-xl border border-white/8 bg-[var(--card)] overflow-hidden print:break-before-page print:border-0 print:shadow-none">
+    <div className="admin-report-surface overflow-hidden print:break-before-page print:border-0 print:shadow-none">
       {/* ── Card header ── */}
-      <div className="px-5 py-4 flex flex-wrap items-center justify-between gap-3 border-b border-white/8 bg-[var(--card)]">
+      <div className="px-5 py-4 flex flex-wrap items-center justify-between gap-3 border-b border-white/8 bg-[rgba(17,21,19,0.94)]">
         <div>
           <p className="text-base font-semibold text-zinc-100 tracking-wide">
             {summary.employeeName}
@@ -649,19 +649,19 @@ export default function PerformanceSummaryPage() {
         }
       `}</style>
 
-      <div className="min-h-screen text-[var(--text)] pb-24">
+      <div className="relative z-10 min-h-screen text-[var(--text)] pb-24">
         <div className="max-w-5xl mx-auto px-4 py-8">
 
           {/* ── Page header ── */}
           <div className="mb-8 no-print">
-            <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Sales Performance Report</h1>
-            <p className="text-sm text-zinc-400 mt-1">
+            <h1 className="admin-report-title font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight">Sales Performance Report</h1>
+            <p className="admin-report-copy text-sm mt-1">
               Analyze employee sales by period. Generate, review, and export reports for sales meetings.
             </p>
           </div>
 
           {/* ── Controls ── */}
-          <div className="rounded-xl border border-white/8 bg-[var(--card)] p-5 mb-6 no-print">
+          <div className="admin-report-surface p-5 mb-6 no-print">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
               {/* Date range */}
               <div>
@@ -936,7 +936,7 @@ export default function PerformanceSummaryPage() {
 
           {/* ── Empty state ── */}
           {!report && !loading && !error && (
-            <div className="text-center text-zinc-500 py-16 no-print">
+            <div className="text-center admin-report-copy py-16 no-print">
               <p className="text-4xl mb-3">📊</p>
               <p className="text-sm">Set your filters above and click <strong className="text-zinc-300">Generate Report</strong> to begin.</p>
             </div>
