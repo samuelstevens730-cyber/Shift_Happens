@@ -9,7 +9,9 @@
       "Bash(xargs grep -l \"rollover\")",
       "Bash(xargs grep -l \"rollover\\\\|shift_sales_counts\\\\|daily_sales_records\")",
       "Bash(grep -l \"daily_sales_records\" \"/c/Users/samue/Desktop/Shift_Happens/Shift_Happens_08-12-2025/src/app/sql\"/*.sql)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(grep -r \"firebase\\\\|FCM\\\\|push.*notif\\\\|cloud.*messaging\" C:UserssamueDesktopShift_HappensShift_Happens_08-12-2025/src --include=*.ts --include=*.tsx --include=*.js --include=*.json)",
+      "Bash(grep -l \"variance\\\\|notified_manager\\\\|flag\\\\|alert\" \"C:\\\\Users\\\\samue\\\\Desktop\\\\Shift_Happens\\\\Shift_Happens_08-12-2025/supabase/migrations\"/*.sql)"
     ]
   }
 }

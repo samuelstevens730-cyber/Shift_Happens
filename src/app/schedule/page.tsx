@@ -1,12 +1,13 @@
 import { redirect } from "next/navigation";
 
-export default function ScheduleRedirect({
+export default async function ScheduleRedirect({
   searchParams,
 }: {
-  searchParams: Record<string, string | string[] | undefined>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const resolvedSearchParams = searchParams ? await searchParams : {};
   const params = new URLSearchParams();
-  for (const [key, value] of Object.entries(searchParams)) {
+  for (const [key, value] of Object.entries(resolvedSearchParams)) {
     if (Array.isArray(value)) {
       value.forEach(v => params.append(key, v));
     } else if (value) {
