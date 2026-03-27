@@ -46,6 +46,23 @@ function toLocalInputValue(d = new Date()) {
   return `${yyyy}-${MM}-${dd}T${hh}:${mm}`;
 }
 
+function buildScheduledEndLocalInput(
+  shiftDate: string | null | undefined,
+  scheduledStart: string | null | undefined,
+  scheduledEnd: string | null | undefined
+) {
+  if (!shiftDate || !scheduledEnd) return null;
+  const startMinutes = scheduledStart ? Number(scheduledStart.split(":")[0]) * 60 + Number(scheduledStart.split(":")[1]) : null;
+  const endMinutes = Number(scheduledEnd.split(":")[0]) * 60 + Number(scheduledEnd.split(":")[1]);
+  if (!Number.isFinite(endMinutes)) return null;
+  const [year, month, day] = shiftDate.split("-").map(Number);
+  const dt = new Date(year, (month ?? 1) - 1, day ?? 1, Math.floor(endMinutes / 60), endMinutes % 60, 0, 0);
+  if (startMinutes != null && endMinutes < startMinutes) {
+    dt.setDate(dt.getDate() + 1);
+  }
+  return toLocalInputValue(dt);
+}
+
 function roundTo30Minutes(d: Date) {
   const nd = new Date(d.getTime());
   const mins = nd.getMinutes();
@@ -197,6 +214,11 @@ export default function ClockPageClient() {
     store_id: string | null;
     store_name: string | null;
     expected_drawer_cents: number | null;
+    scheduled_window?: {
+      shift_date: string;
+      scheduled_start: string;
+      scheduled_end: string;
+    } | null;
   } | null>(null);
   const [openShiftKey, setOpenShiftKey] = useState<string>("");
   const [staleShiftPrompt, setStaleShiftPrompt] = useState(false);
@@ -544,6 +566,7 @@ export default function ClockPageClient() {
           store_id: json.storeId ?? null,
           store_name: json.storeName ?? null,
           expected_drawer_cents: json.expectedDrawerCents ?? null,
+          scheduled_window: json.scheduledWindow ?? null,
         });
         setOpenShiftPrompt(true);
         setStaleShiftPrompt(false);
@@ -642,6 +665,7 @@ export default function ClockPageClient() {
                 store_id: openJson.storeId ?? null,
                 store_name: openJson.storeName ?? null,
                 expected_drawer_cents: openJson.expectedDrawerCents ?? null,
+                scheduled_window: openJson.scheduledWindow ?? null,
               });
               setOpenShiftPrompt(true);
               setStaleShiftPrompt(true);
@@ -676,6 +700,20 @@ export default function ClockPageClient() {
       setSubmitting(false);
     }
   }
+
+  const staleScheduledEndLocal = useMemo(
+    () => buildScheduledEndLocalInput(
+      openShiftInfo?.scheduled_window?.shift_date,
+      openShiftInfo?.scheduled_window?.scheduled_start,
+      openShiftInfo?.scheduled_window?.scheduled_end
+    ),
+    [openShiftInfo]
+  );
+
+  useEffect(() => {
+    if (!staleShiftPrompt) return;
+    setStaleEndLocal(staleScheduledEndLocal ?? toLocalInputValue());
+  }, [staleShiftPrompt, staleScheduledEndLocal]);
 
   if (loading) return <div className="app-shell">Loading...</div>;
 
@@ -962,6 +1000,9 @@ export default function ClockPageClient() {
                 onChange={e => setStaleEndLocal(e.target.value)}
                 disabled={staleSaving}
               />
+              <div className="text-xs muted">
+                Defaults to the scheduled end time when available. Exceptions should be handled through review or timesheet correction.
+              </div>
             </div>
 
             <div className="space-y-2">

@@ -16,13 +16,26 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { authenticateShiftRequest } from "@/lib/shiftAuth";
 import { getManagerStoreIds } from "@/lib/adminAuth";
+import { collapseScheduledCoverage } from "@/lib/shiftOverride";
 
 type StoreRow = { id: string; name: string; expected_drawer_cents: number };
 type ShiftRow = {
   id: string;
   started_at: string | null;
   shift_type: string | null;
+  planned_start_at: string;
+  schedule_shift_id: string | null;
+  profile_id: string;
+  store_id: string;
   store: { id: string; name: string; expected_drawer_cents: number } | null;
+};
+
+type ScheduleShiftRow = {
+  id: string;
+  shift_date: string;
+  scheduled_start: string;
+  scheduled_end: string;
+  shift_type: string | null;
 };
 
 export async function GET(req: Request) {
@@ -75,7 +88,7 @@ export async function GET(req: Request) {
     // Employee: only their own shifts, Manager: all shifts in managed stores
     let shiftQuery = supabaseServer
       .from("shifts")
-      .select("id, started_at, shift_type, store:store_id(id, name, expected_drawer_cents), profile_id")
+      .select("id, started_at, shift_type, planned_start_at, schedule_shift_id, profile_id, store_id, store:store_id(id, name, expected_drawer_cents)")
       .in("store_id", targetStoreIds)
       .is("ended_at", null)
       .neq("last_action", "removed")
@@ -88,6 +101,40 @@ export async function GET(req: Request) {
     if (shiftErr) return NextResponse.json({ error: shiftErr.message }, { status: 500 });
     if (!shift?.id) return NextResponse.json({}, { status: 200 });
 
+    let scheduledWindow: {
+      shift_date: string;
+      scheduled_start: string;
+      scheduled_end: string;
+    } | null = null;
+    const shiftDate = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Chicago",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date(shift.planned_start_at));
+    const { data: scheduleRows, error: scheduleErr } = await supabaseServer
+      .from("schedule_shifts")
+      .select("id, shift_date, scheduled_start, scheduled_end, shift_type")
+      .eq("store_id", shift.store_id)
+      .eq("profile_id", shift.profile_id)
+      .eq("shift_date", shiftDate)
+      .returns<ScheduleShiftRow[]>();
+    if (scheduleErr) return NextResponse.json({ error: scheduleErr.message }, { status: 500 });
+    const sameDayRows = scheduleRows ?? [];
+    if (sameDayRows.length > 0) {
+      const sortedRows = sameDayRows
+        .slice()
+        .sort((a, b) => a.scheduled_start.localeCompare(b.scheduled_start));
+      const coverage = collapseScheduledCoverage(sortedRows);
+      if (coverage) {
+        scheduledWindow = {
+          shift_date: coverage.shiftDate,
+          scheduled_start: sortedRows[0]!.scheduled_start,
+          scheduled_end: sortedRows[sortedRows.length - 1]!.scheduled_end,
+        };
+      }
+    }
+
     return NextResponse.json({
       shiftId: shift.id,
       startedAt: shift.started_at,
@@ -95,6 +142,7 @@ export async function GET(req: Request) {
       storeId: shift.store?.id ?? null,
       storeName: shift.store?.name ?? null,
       expectedDrawerCents: shift.store?.expected_drawer_cents ?? null,
+      scheduledWindow,
     });
   } catch (e: unknown) {
     return NextResponse.json(

@@ -235,6 +235,7 @@ type AuthContext = {
 The shift hub page manages:
 - **Drawer counts** — START (on clock-in), CHANGEOVER (doubles only), END (on clock-out)
   - Variance > $5 under or > $15 over triggers manager notification flag + alarm
+- **Clock-out end time default** — when same-day schedule coverage exists, the end-shift form defaults to the scheduled end boundary (including doubles collapsed to one window); exceptions stay editable and flow through review/timesheet correction
 - **Checklist** — required items gate clock-out; optional items tracked but non-blocking
 - **Tasks and messages** — all assignments must be acknowledged/completed before clock-out
 - **Cleaning tasks** — complete or skip with reason

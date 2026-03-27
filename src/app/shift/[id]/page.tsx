@@ -44,6 +44,11 @@ type ShiftState = {
     started_at: string;
     ended_at: string | null;
   };
+  scheduledWindow?: {
+    shift_date: string;
+    scheduled_start: string;
+    scheduled_end: string;
+  } | null;
   employee: string | null;
   counts: {
     count_type: "start" | "changeover" | "end";
@@ -114,6 +119,23 @@ type SalesContextState = {
 function toLocalInputValue(d = new Date()) {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function buildScheduledEndLocalInput(
+  shiftDate: string | null | undefined,
+  scheduledStart: string | null | undefined,
+  scheduledEnd: string | null | undefined
+) {
+  if (!shiftDate || !scheduledEnd) return null;
+  const startMinutes = scheduledStart ? Number(scheduledStart.split(":")[0]) * 60 + Number(scheduledStart.split(":")[1]) : null;
+  const endMinutes = Number(scheduledEnd.split(":")[0]) * 60 + Number(scheduledEnd.split(":")[1]);
+  if (!Number.isFinite(endMinutes)) return null;
+  const [year, month, day] = shiftDate.split("-").map(Number);
+  const dt = new Date(year, (month ?? 1) - 1, day ?? 1, Math.floor(endMinutes / 60), endMinutes % 60, 0, 0);
+  if (startMinutes != null && endMinutes < startMinutes) {
+    dt.setDate(dt.getDate() + 1);
+  }
+  return toLocalInputValue(dt);
 }
 
 function getCstOffsetMinutes(isoLike: string) {
@@ -1363,6 +1385,7 @@ export default function ShiftPage() {
             storeName={state.store.name}
             shiftType={state.shift.shift_type}
             plannedStartAt={state.shift.planned_start_at}
+            scheduledWindow={state.scheduledWindow ?? null}
             isOther={shiftType === "other"}
             onClose={() => setShowClockOut(false)}
             onSuccess={() => {
@@ -1827,6 +1850,7 @@ function ClockOutModal({
   storeName,
   shiftType,
   plannedStartAt,
+  scheduledWindow,
   isOther,
   onClose,
   onSuccess,
@@ -1843,6 +1867,7 @@ function ClockOutModal({
   storeName: string;
   shiftType: ShiftType;
   plannedStartAt: string;
+  scheduledWindow: ShiftState["scheduledWindow"];
   isOther: boolean;
   pinToken: string | null;
   managerAccessToken: string | null;
@@ -1852,7 +1877,11 @@ function ClockOutModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const [endLocal, setEndLocal] = useState(toLocalInputValue());
+  const scheduledEndLocal = useMemo(
+    () => buildScheduledEndLocalInput(scheduledWindow?.shift_date, scheduledWindow?.scheduled_start, scheduledWindow?.scheduled_end),
+    [scheduledWindow]
+  );
+  const [endLocal, setEndLocal] = useState(() => scheduledEndLocal ?? toLocalInputValue());
   const [drawer, setDrawer] = useState("200");
   const [changeDrawer, setChangeDrawer] = useState("200");
   const [confirm, setConfirm] = useState(false);
@@ -1899,6 +1928,10 @@ function ClockOutModal({
 
   const authToken = managerSession ? managerAccessToken : pinToken;
   const businessDate = getCstDateKey(plannedStartAt);
+
+  useEffect(() => {
+    setEndLocal(scheduledEndLocal ?? toLocalInputValue());
+  }, [scheduledEndLocal, shiftId]);
 
   useEffect(() => {
     let alive = true;
@@ -1976,7 +2009,6 @@ function ClockOutModal({
     (!salesNeedsConfirm || salesConfirmChecked) &&
     (outOfThreshold ? confirm : true) &&
     (changeNot200 ? notify : true);
-
   if (showRolloverPrompt) {
     const rolloverCents = parseMoneyInputToCents(rolloverAmount);
     return (
@@ -2082,6 +2114,9 @@ function ClockOutModal({
           value={endLocal}
           onChange={e => setEndLocal(e.target.value)}
         />
+        <div className="shift-section-meta text-xs">
+          Defaults to the scheduled end time when available. Extra time should only be used for real exceptions.
+        </div>
 
         <label className="shift-field-label">Ending drawer count ($){isOther ? " (optional)" : ""}</label>
         <input

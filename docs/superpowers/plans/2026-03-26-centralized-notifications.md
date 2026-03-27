@@ -67,7 +67,7 @@ The following `notification_type` values and their priorities are the contract f
 |---|---|
 | `src/app/api/admin/assignments/route.ts` | POST: for `type='message'`, create a `notifications` record instead of a `shift_assignments` record |
 | `src/app/api/messages/[id]/dismiss/route.ts` | Redirect: now dismisses from `notifications` table, not `shift_assignments` |
-| `src/app/api/end-shift/route.ts` | Remove message-blocking from clock-out check; tasks only |
+| `src/app/api/end-shift/route.ts` | Clock-out blocking: checks pending tasks (`shift_assignments`) AND unread manager messages (`notifications`); both block clock-out |
 | `src/app/page.tsx` | Home banner: query `notifications` table instead of `shift_assignments` |
 | `src/app/shift/[id]/page.tsx` | Tasks from `shift_assignments`; notifications from `notifications`; tasks read-only in bell |
 | `src/components/HomeHeader.tsx` | Add `<NotificationBell />` |
@@ -192,14 +192,9 @@ WHERE type = 'message'
   AND target_profile_id IS NOT NULL  -- profile-targeted only
   AND deleted_at IS NULL;
 
--- ── SOFT-DELETE MIGRATED MESSAGES FROM shift_assignments ─────────────────────
--- Prevents double-display in any legacy UI that still queries shift_assignments
--- for type='message' rows before Task 11 lands.
-UPDATE public.shift_assignments
-SET deleted_at = now(),
-    deleted_by = NULL
-WHERE type = 'message'
-  AND deleted_at IS NULL;
+-- Soft-delete of migrated profile-targeted messages is intentionally deferred
+-- to Task 18 (final cleanup), after all app reads have been cut over to the
+-- notifications table. Do NOT add a soft-delete here.
 ```
 
 - [ ] **Step 2: Apply the migration**
@@ -1071,8 +1066,8 @@ git commit -m "feat: update home page notification banner to use notifications t
 
 The shift detail page currently fetches assignments with `delivered_shift_id = shiftId` for both tasks and messages. We need to:
 1. Keep fetching **tasks** from `shift_assignments` (those delivered to this shift)
-2. Replace message fetching with **all undismissed notifications** for the employee
-3. Remove the message-based clock-out block from the UI (still enforced for tasks)
+2. Replace message fetching with **all undismissed notifications** for the employee (from `notifications` table)
+3. **Update** the clock-out block to check **both** pending tasks AND unread `manager_message` notifications — both must be resolved before the employee can clock out (see Task 9 Step 4 and Task 10 for full implementation)
 
 - [ ] **Step 1: Read the relevant section**
 
@@ -1283,13 +1278,13 @@ Update the import at the top of the file:
 import { createNotification, createStoreNotification } from '@/lib/notifications';
 ```
 
-Then in the POST handler, branch on whether the message targets a profile or a store:
+Then in the POST handler, branch on message type:
 
 ```typescript
 // In the POST handler, after validating the body:
 if (body.type === 'message') {
   if (body.target_profile_id) {
-    // Direct message to a specific employee
+    // Direct message to a specific employee → notifications table (immediate delivery)
     await createNotification({
       recipientProfileId: body.target_profile_id,
       notificationType:   'manager_message',
@@ -1298,29 +1293,24 @@ if (body.type === 'message') {
       body:               body.message,
       createdBy:          user.id,
     });
-  } else if (body.target_store_id) {
-    // Store-wide message — fan-out to all employees/managers at the store
-    await createStoreNotification({
-      storeId:          body.target_store_id,
-      notificationType: 'manager_message',
-      priority:         'high',
-      title:            'Message from manager',
-      body:             body.message,
-      createdBy:        user.id,
-    });
+    return NextResponse.json({ success: true });
   }
 
-  return NextResponse.json({ success: true });
+  // Store-targeted messages keep their existing "lazy delivery" semantics:
+  // they are delivered to the next employee who clocks in at that store.
+  // These stay in shift_assignments — fall through to the existing insert logic below.
 }
 
-// type === 'task' — unchanged, still goes to shift_assignments
+// type === 'task', OR type === 'message' with target_store_id → shift_assignments (unchanged)
 const { data, error } = await supabaseServer
   .from('shift_assignments')
   .insert({ ...taskData })
   .select()
   .single();
-// ... rest of existing task insert logic
+// ... rest of existing insert logic
 ```
+
+> **Note:** Only the `createNotification` import is needed here — `createStoreNotification` is not used in this route.
 
 - [ ] **Step 4: Verify in admin panel**
 
@@ -2015,12 +2005,16 @@ All reads have now been migrated to the notifications table. Safe to clean up th
 
 ```sql
 -- supabase/migrations/20260327_cleanup_migrated_messages.sql
--- Soft-delete remaining message rows from shift_assignments.
--- Profile-targeted ones were migrated to notifications in 20260326_notifications.sql.
--- Store-targeted ones are legacy data and were intentionally left.
+-- Soft-delete profile-targeted message rows that were migrated to the notifications
+-- table in 20260326_notifications.sql.
+--
+-- Store-targeted messages (target_store_id IS NOT NULL) are intentionally NOT touched
+-- here — they retain their "lazy delivery on clock-in" semantics and are still read
+-- and delivered via shift_assignments by the clock-in logic.
 UPDATE public.shift_assignments
 SET deleted_at = now()
 WHERE type = 'message'
+  AND target_profile_id IS NOT NULL
   AND deleted_at IS NULL;
 ```
 
@@ -2031,8 +2025,19 @@ npx supabase db push
 
 Verify:
 ```sql
-SELECT COUNT(*) FROM shift_assignments WHERE type = 'message' AND deleted_at IS NULL;
+-- Profile-targeted messages should all be soft-deleted
+SELECT COUNT(*) FROM shift_assignments
+WHERE type = 'message'
+  AND target_profile_id IS NOT NULL
+  AND deleted_at IS NULL;
 -- Expected: 0
+
+-- Store-targeted messages should be untouched
+SELECT COUNT(*) FROM shift_assignments
+WHERE type = 'message'
+  AND target_store_id IS NOT NULL
+  AND deleted_at IS NULL;
+-- Expected: whatever existed before (no change)
 ```
 
 - [ ] **Step 7: Final commit**

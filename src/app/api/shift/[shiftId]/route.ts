@@ -10,6 +10,7 @@ import { supabaseServer } from "@/lib/supabaseServer";
 import { ShiftType } from "@/lib/kioskRules";
 import { authenticateShiftRequest } from "@/lib/shiftAuth";
 import { getManagerStoreIds } from "@/lib/adminAuth";
+import { collapseScheduledCoverage } from "@/lib/shiftOverride";
 
 type ChecklistItemRow = {
   id: string;
@@ -24,6 +25,14 @@ type TemplateRow = {
   store_id: string | null;
   shift_type: string;
   name: string;
+};
+
+type ScheduleShiftRow = {
+  id: string;
+  shift_date: string;
+  scheduled_start: string;
+  scheduled_end: string;
+  shift_type: string | null;
 };
 
 function templatesForShiftType(st: ShiftType) {
@@ -75,7 +84,7 @@ export async function GET(
   // 2) Fetch shift root record
   const { data: shift, error: shiftErr } = await supabaseServer
     .from("shifts")
-    .select("id, store_id, profile_id, shift_type, planned_start_at, started_at, ended_at, last_action")
+    .select("id, store_id, profile_id, shift_type, planned_start_at, started_at, ended_at, last_action, schedule_shift_id")
     .eq("id", shiftId)
     .maybeSingle();
 
@@ -264,9 +273,48 @@ export async function GET(
       .filter(g => g.itemIds.every(id => checkedSet.has(id)))
       .map(g => g.label);
 
+    let scheduledWindow: {
+      shift_date: string;
+      scheduled_start: string;
+      scheduled_end: string;
+    } | null = null;
+    const shiftDate = shift.planned_start_at
+      ? new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Chicago",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(new Date(shift.planned_start_at))
+      : null;
+    if (shiftDate) {
+      const { data: scheduleRows, error: scheduleErr } = await supabaseServer
+        .from("schedule_shifts")
+        .select("id, shift_date, scheduled_start, scheduled_end, shift_type")
+        .eq("store_id", shift.store_id)
+        .eq("profile_id", shift.profile_id)
+        .eq("shift_date", shiftDate)
+        .returns<ScheduleShiftRow[]>();
+      if (scheduleErr) throw new Error(scheduleErr.message);
+      const sameDayRows = scheduleRows ?? [];
+      if (sameDayRows.length > 0) {
+        const sortedRows = sameDayRows
+          .slice()
+          .sort((a, b) => a.scheduled_start.localeCompare(b.scheduled_start));
+        const coverage = collapseScheduledCoverage(sortedRows);
+        if (coverage) {
+          scheduledWindow = {
+            shift_date: coverage.shiftDate,
+            scheduled_start: sortedRows[0]!.scheduled_start,
+            scheduled_end: sortedRows[sortedRows.length - 1]!.scheduled_end,
+          };
+        }
+      }
+    }
+
     return NextResponse.json({
       store,
       shift,
+      scheduledWindow,
       employee: profileResult?.name ?? null,
       counts: countsResult,
       checklistItems: checklistResult.items,
@@ -280,4 +328,3 @@ export async function GET(
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
-
