@@ -269,6 +269,8 @@ export async function GET(req: Request) {
       { worked_hours: 0, projected_hours: 0, advances_hours: 0, submitted_hours: 0 }
     );
 
+    const grossHours = totals.worked_hours + totals.projected_hours;
+
     const whatsappLines = [
       "LV1&2 Hours:",
       "",
@@ -280,15 +282,13 @@ export async function GET(req: Request) {
         return `${row.full_name || "Unknown"}: ${row.submit_hours}`;
       }),
       "",
-      `Total hours: ${totals.submitted_hours}`,
+      `Gross Hours: ${grossHours}`,
       "",
       "Total hours open:",
       `LV1: ${openTotals.lv1_hours}`,
       `LV2: ${openTotals.lv2_hours}`,
       `Total: ${openTotals.total_hours}`,
     ];
-
-    const grossHours = totals.worked_hours + totals.projected_hours;
 
     return NextResponse.json({
       employees: employeeRows,

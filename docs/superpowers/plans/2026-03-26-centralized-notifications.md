@@ -4,7 +4,9 @@
 
 **Goal:** Replace ad-hoc shift-scoped message delivery with a `notifications` table that powers a persistent bell icon for both employees and managers, with all notification types priority-categorized for future FCM push notification support.
 
-**Architecture:** A new `notifications` table is the source of truth for all informational notifications. `shift_assignments` is cleaned up to manager-assigned tasks only (ad-hoc tasks assigned by managers, distinct from the shift checklist and cleaning_task_completions). A `createNotification()` server utility is the single insertion point. Store-targeted notifications fan-out at write time — one row per manager — so every row always has `recipient_profile_id` set and per-user read/dismiss state is never shared. All notification API routes use `authenticateShiftRequest()` which handles both employee PIN JWT (no Supabase auth account) and manager Supabase JWT. Clock-out continues to block on pending tasks AND unread manager messages; the shift detail page and end-shift route check both sources.
+**Architecture:** A new `notifications` table is the source of truth for all per-recipient, informational notifications (messages, approvals, operational alerts). `shift_assignments` is retained for two purposes: (1) manager-assigned tasks (ad-hoc checklist items distinct from `cleaning_task_completions`), and (2) store-targeted lazy-delivery messages — assignments created with `target_store_id` that are held undelivered until the next employee clocks in at that store. Only profile-targeted `type='message'` records migrate out of `shift_assignments` into `notifications`; store-targeted messages remain in `shift_assignments` and continue to use existing clock-in delivery logic unchanged.
+
+A `createNotification()` server utility handles per-recipient inserts; `createStoreNotification()` fans out to all managers at a store (one row per manager, so `recipient_profile_id` is always set and read/dismiss state is never shared). All notification API routes use `authenticateShiftRequest()` which handles both employee PIN JWT (no Supabase auth account) and manager Supabase JWT. Clock-out blocks on both pending tasks (from `shift_assignments`) AND unread manager messages (from `notifications`); the shift detail page and end-shift route check both sources.
 
 **Tech Stack:** Next.js 16 App Router, Supabase (PostgreSQL), TypeScript, shadcn/ui
 
@@ -65,7 +67,7 @@ The following `notification_type` values and their priorities are the contract f
 ### Modified Files
 | File | Change |
 |---|---|
-| `src/app/api/admin/assignments/route.ts` | POST: for `type='message'`, create a `notifications` record instead of a `shift_assignments` record |
+| `src/app/api/admin/assignments/route.ts` | POST: for `type='message'` with `target_profile_id` → create a `notifications` record (immediate delivery); for `type='message'` with `target_store_id` → unchanged, stays in `shift_assignments` (lazy delivery on clock-in) |
 | `src/app/api/messages/[id]/dismiss/route.ts` | Redirect: now dismisses from `notifications` table, not `shift_assignments` |
 | `src/app/api/end-shift/route.ts` | Clock-out blocking: checks pending tasks (`shift_assignments`) AND unread manager messages (`notifications`); both block clock-out |
 | `src/app/page.tsx` | Home banner: query `notifications` table instead of `shift_assignments` |
@@ -1254,7 +1256,7 @@ git commit -m "feat: clock-out blocks on pending tasks and unread manager messag
 **Files:**
 - Modify: `src/app/api/admin/assignments/route.ts`
 
-Currently, when an admin POSTs a new assignment with `type='message'`, it creates a `shift_assignments` record. Change this: `type='message'` now creates a `notifications` record instead. `type='task'` is unchanged.
+Currently, when an admin POSTs a new assignment with `type='message'`, it always creates a `shift_assignments` record. Change this for **profile-targeted messages only**: if `target_profile_id` is set, create a `notifications` record for immediate delivery instead. Store-targeted messages (`target_store_id`) keep their existing `shift_assignments` insert unchanged — they use lazy "next clock-in" delivery. `type='task'` is always unchanged.
 
 - [ ] **Step 1: Read the POST handler**
 
@@ -1264,21 +1266,14 @@ sed -n '280,310p' src/app/api/admin/assignments/route.ts
 
 - [ ] **Step 2: Add the import**
 
-At the top of the file:
+At the top of the file — only `createNotification` is needed, not `createStoreNotification`:
 ```typescript
 import { createNotification } from '@/lib/notifications';
 ```
 
 - [ ] **Step 3: Update the POST handler**
 
-Find where the route inserts into `shift_assignments`. Wrap it with a type check:
-
-Update the import at the top of the file:
-```typescript
-import { createNotification, createStoreNotification } from '@/lib/notifications';
-```
-
-Then in the POST handler, branch on message type:
+Find where the route inserts into `shift_assignments`. Branch on message target:
 
 ```typescript
 // In the POST handler, after validating the body:

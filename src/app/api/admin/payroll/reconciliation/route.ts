@@ -641,6 +641,8 @@ export async function GET(req: Request) {
       warnings.push(`${unexplainedVariances.length} shift(s) have drift above threshold without override note.`);
     }
 
+    const grossHours = totals.worked_hours + totals.projected_hours;
+
     const whatsappLines = [
       "LV1&2 Hours:",
       "",
@@ -652,7 +654,7 @@ export async function GET(req: Request) {
         return `${row.full_name || "Unknown"}: ${row.submit_hours}`;
       }),
       "",
-      `Total hours: ${totals.submitted_hours}`,
+      `Gross Hours: ${grossHours}`,
       "",
       "Total hours open:",
       `LV1: ${openTotals.lv1_hours}`,
