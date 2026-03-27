@@ -228,6 +228,7 @@ export default function NotificationBell() {
         (item): item is BellNotificationItem => !item.is_task && item.id === id
       );
       const headers = await getAuthHeaders(true);
+      if (!headers) return;
       const response = await fetch(`/api/notifications/${id}`, {
         method: "PATCH",
         headers,
@@ -258,6 +259,7 @@ export default function NotificationBell() {
 
     try {
       const headers = await getAuthHeaders(true);
+      if (!headers) return;
       const response = await fetch("/api/notifications", {
         method: "PATCH",
         headers,
