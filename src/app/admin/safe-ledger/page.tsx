@@ -54,6 +54,15 @@ type SafePickup = {
   created_at: string;
 };
 
+type SafeCloseoutExpenseListRow = {
+  closeout_id: string;
+  business_date: string;
+  amount_cents: number;
+  category: string;
+  note: string | null;
+  created_at: string;
+};
+
 type DetailResponse = {
   closeout: ListRow & {
     employee_name: string | null;
@@ -169,6 +178,7 @@ function SafeLedgerDashboardContent() {
   const [rows, setRows] = useState<ListRow[]>([]);
   const [stores, setStores] = useState<Store[]>([]);
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [expenses, setExpenses] = useState<SafeCloseoutExpenseListRow[]>([]);
   const [pickups, setPickups] = useState<SafePickup[]>([]);
   const [currentSafeBalanceByStore, setCurrentSafeBalanceByStore] = useState<Record<string, number>>({});
   const [storeId, setStoreId] = useState<string>("all");
@@ -348,6 +358,7 @@ function SafeLedgerDashboardContent() {
     const json = await res.json();
     if (!res.ok) throw new Error(json?.error || "Failed to load safe ledger.");
     setRows((json?.rows ?? []) as ListRow[]);
+    setExpenses((json?.expenses ?? []) as SafeCloseoutExpenseListRow[]);
     setPickups((json?.pickups ?? []) as SafePickup[]);
     setCurrentSafeBalanceByStore((json?.current_safe_balance_by_store ?? {}) as Record<string, number>);
   }
@@ -464,6 +475,35 @@ function SafeLedgerDashboardContent() {
     if (!showIssuesOnly) return rows;
     return rows.filter((r) => r.requires_manager_review || r.status === "warn" || r.status === "fail");
   }, [rows, showIssuesOnly]);
+
+  const filteredRowIds = useMemo(() => new Set(filteredRows.map((row) => row.id)), [filteredRows]);
+
+  const filteredExpenses = useMemo(() => {
+    const ordered = expenses
+      .filter((expense) => filteredRowIds.has(expense.closeout_id))
+      .slice();
+    ordered.sort((a, b) =>
+      a.business_date.localeCompare(b.business_date) ||
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    );
+    return ordered;
+  }, [expenses, filteredRowIds]);
+
+  const expenseSummaryByCloseoutId = useMemo(() => {
+    const byCloseout = new Map<string, string>();
+    const grouped = new Map<string, string[]>();
+    for (const expense of filteredExpenses) {
+      const label = expense.note?.trim() || expense.category.trim();
+      if (!label) continue;
+      const current = grouped.get(expense.closeout_id) ?? [];
+      current.push(label);
+      grouped.set(expense.closeout_id, current);
+    }
+    for (const [closeoutId, labels] of grouped.entries()) {
+      byCloseout.set(closeoutId, labels.join("; "));
+    }
+    return byCloseout;
+  }, [filteredExpenses]);
 
   useEffect(() => {
     if (source !== "dashboard" || hasAppliedDeepLink) return;
@@ -667,6 +707,16 @@ function SafeLedgerDashboardContent() {
     const lines = ["NOTE\tQTY"];
     for (const key of keys) {
       lines.push(`${key}\t${totals[key]}`);
+    }
+    return lines.join("\n");
+  }
+
+  function buildExpensesTsv() {
+    const lines = ["DATE\tAMOUNT\tREASON"];
+    for (const expense of filteredExpenses) {
+      lines.push(
+        `${expense.business_date}\t${(expense.amount_cents / 100).toFixed(2)}\t${expense.note?.trim() || expense.category.trim()}`
+      );
     }
     return lines.join("\n");
   }
@@ -969,6 +1019,7 @@ function SafeLedgerDashboardContent() {
           <Button className="bg-amber-600 text-white hover:bg-amber-700" onClick={() => setIsPickupOpen(true)}>Record Full Pickup</Button>
           <Button className="bg-purple-600 text-white hover:bg-purple-700" onClick={() => void copyText(buildSalesTsv(), "Copied Sales TSV")}>Copy Sales TSV</Button>
           <Button className="bg-purple-600 text-white hover:bg-purple-700" onClick={() => void copyText(buildDenomTsv(), "Copied Denom TSV")}>Copy Denom TSV</Button>
+          <Button className="bg-purple-600 text-white hover:bg-purple-700" onClick={() => void copyText(buildExpensesTsv(), "Copied Expenses TSV")}>Copy Expenses TSV</Button>
         </div>
       </div>
 
@@ -1090,6 +1141,8 @@ function SafeLedgerDashboardContent() {
                 <TableHead>Store</TableHead>
                 <TableHead>Closer</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Expenses</TableHead>
+                <TableHead>Expense Note</TableHead>
                 <TableHead>Variance ($)</TableHead>
                 <TableHead>Edited By</TableHead>
                 <TableHead>Date Edited</TableHead>
@@ -1106,6 +1159,10 @@ function SafeLedgerDashboardContent() {
                   <TableCell>{row.store_name ?? "--"}</TableCell>
                   <TableCell>{row.employee_name ?? "--"}</TableCell>
                   <TableCell>{statusChip(row)}</TableCell>
+                  <TableCell>{money(row.expense_total_cents)}</TableCell>
+                  <TableCell className="max-w-64 whitespace-normal text-sm text-slate-300">
+                    {expenseSummaryByCloseoutId.get(row.id) ?? "--"}
+                  </TableCell>
                   <TableCell>{money(row.variance_cents)}</TableCell>
                   <TableCell>{row.edited_by_name ?? row.edited_by ?? "--"}</TableCell>
                   <TableCell>{row.edited_at ? new Date(row.edited_at).toLocaleString() : "--"}</TableCell>
@@ -1116,7 +1173,7 @@ function SafeLedgerDashboardContent() {
               ))}
               {filteredRows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center text-slate-400">No closeouts for selected filters.</TableCell>
+                  <TableCell colSpan={10} className="text-center text-slate-400">No closeouts for selected filters.</TableCell>
                 </TableRow>
               )}
             </TableBody>

@@ -11,7 +11,9 @@
       "Bash(grep -l \"daily_sales_records\" \"/c/Users/samue/Desktop/Shift_Happens/Shift_Happens_08-12-2025/src/app/sql\"/*.sql)",
       "Bash(npx tsc:*)",
       "Bash(grep -r \"firebase\\\\|FCM\\\\|push.*notif\\\\|cloud.*messaging\" C:UserssamueDesktopShift_HappensShift_Happens_08-12-2025/src --include=*.ts --include=*.tsx --include=*.js --include=*.json)",
-      "Bash(grep -l \"variance\\\\|notified_manager\\\\|flag\\\\|alert\" \"C:\\\\Users\\\\samue\\\\Desktop\\\\Shift_Happens\\\\Shift_Happens_08-12-2025/supabase/migrations\"/*.sql)"
+      "Bash(grep -l \"variance\\\\|notified_manager\\\\|flag\\\\|alert\" \"C:\\\\Users\\\\samue\\\\Desktop\\\\Shift_Happens\\\\Shift_Happens_08-12-2025/supabase/migrations\"/*.sql)",
+      "Bash(grep -n \"swap_offer_accepted\\\\|swap_offer_declined\" C:UserssamueDesktopShift_HappensShift_Happens_08-12-2025/src/app/api/requests/shift-swap/[id]/select/route.ts)",
+      "Bash(cat C:UserssamueDesktopShift_HappensShift_Happens_08-12-2025/src/app/api/requests/shift-swap/[id]/select/route.ts)"
     ]
   }
 }

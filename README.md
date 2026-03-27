@@ -150,7 +150,7 @@ src/
 │   │   │   ├── performance-summary/   # Cross-employee performance report
 │   │   │   └── store-sales/           # Store sales summary report
 │   │   ├── requests/                  # Shift swap / time-off / timesheet queue
-│   │   ├── safe-ledger/               # Safe closeout ledger and pickup log
+│   │   ├── safe-ledger/               # Safe closeout ledger, TSV exports, and pickup log
 │   │   ├── scheduler/                 # Visual weekly schedule builder
 │   │   ├── settings/                  # Store and checklist configuration
 │   │   ├── shift-export/              # Shift data export
@@ -173,7 +173,7 @@ src/
 │   │   │   ├── overrides/             # Long shift approval
 │   │   │   ├── payroll/               # Payroll data, advances, reconciliation, report
 │   │   │   ├── reports/               # Performance and store sales reports
-│   │   │   ├── safe-ledger/           # Closeout review, pickup management, upload URLs
+│   │   │   ├── safe-ledger/           # Closeout review, expense exports, pickup management, upload URLs
 │   │   │   ├── schedules/             # Schedule CRUD, publish, batch assign, totals
 │   │   │   ├── settings/              # Store config and checklist templates
 │   │   │   ├── shift-sales/           # Admin sales entry

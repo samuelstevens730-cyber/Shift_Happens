@@ -55,6 +55,14 @@ type SafePickupRow = {
   created_at: string;
 };
 
+type SafeCloseoutExpenseListRow = {
+  closeout_id: string;
+  amount_cents: number;
+  category: string;
+  note: string | null;
+  created_at: string;
+};
+
 function isDateOnly(value: string | null): value is string {
   return Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
 }
@@ -181,16 +189,25 @@ export async function GET(req: Request) {
 
     const closeoutIds = rows.map((row) => row.id);
     const expenseTotalByCloseoutId = new Map<string, number>();
+    const expenseRows: Array<SafeCloseoutExpenseListRow & { business_date: string }> = [];
     if (closeoutIds.length > 0) {
       const { data: expenses, error: expensesErr } = await supabaseServer
         .from("safe_closeout_expenses")
-        .select("closeout_id, amount_cents")
+        .select("closeout_id, amount_cents, category, note, created_at")
         .in("closeout_id", closeoutIds)
-        .returns<Array<{ closeout_id: string; amount_cents: number }>>();
+        .order("created_at", { ascending: true })
+        .returns<SafeCloseoutExpenseListRow[]>();
       if (expensesErr) return NextResponse.json({ error: expensesErr.message }, { status: 500 });
+      const businessDateByCloseoutId = new Map(rows.map((row) => [row.id, row.business_date]));
       for (const expense of expenses ?? []) {
         const prev = expenseTotalByCloseoutId.get(expense.closeout_id) ?? 0;
         expenseTotalByCloseoutId.set(expense.closeout_id, prev + Number(expense.amount_cents ?? 0));
+        const businessDate = businessDateByCloseoutId.get(expense.closeout_id);
+        if (!businessDate) continue;
+        expenseRows.push({
+          ...expense,
+          business_date: businessDate,
+        });
       }
     }
 
@@ -281,6 +298,7 @@ export async function GET(req: Request) {
         ...row,
         expense_total_cents: expenseTotalByCloseoutId.get(row.id) ?? 0,
       })),
+      expenses: expenseRows,
       pickups: (pickupRows ?? []).map((pickup) => ({
         ...pickup,
         store_name: storeNameById.get(pickup.store_id) ?? null,

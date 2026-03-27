@@ -84,7 +84,7 @@ Workforce management application for two retail stores (**LV1**, **LV2**).
 | `/admin/shifts` | Shift CRUD with filtering |
 | `/admin/overrides` | Scheduled shift variation review queue with bulk clear, approval, and per-shift review drawer |
 | `/admin/requests` | Swap/time-off/timesheet approval queue |
-| `/admin/safe-ledger` | Safe closeout audit, evidence review, export |
+| `/admin/safe-ledger` | Safe closeout audit, evidence review, sales/denomination/expense TSV export |
 | `/admin/shift-sales` | Per-shift AM/PM sales, rollover entries |
 | `/admin/employee-scoreboard` | Weighted employee ranking (manager view) |
 | `/admin/reports/performance-summary` | Employee performance report (period analysis, benchmarks) |
