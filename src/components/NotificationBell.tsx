@@ -300,7 +300,12 @@ export default function NotificationBell() {
           setOpen((current) => {
             if (!current && bellRef.current) {
               const rect = bellRef.current.getBoundingClientRect();
-              setPanelPos({ top: rect.bottom + 8, left: rect.left });
+              const PANEL_W = 320; // 20rem
+              const margin = 8;
+              // Right-align panel to bell button, then clamp within viewport
+              const idealLeft = rect.right - PANEL_W;
+              const left = Math.max(margin, Math.min(idealLeft, window.innerWidth - PANEL_W - margin));
+              setPanelPos({ top: rect.bottom + 8, left });
             }
             return !current;
           });
