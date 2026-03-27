@@ -63,6 +63,14 @@ type ShiftAuditRow = {
   is_mismatch: boolean;
 };
 
+type ResolvedScheduleWindow = {
+  rows: ScheduledRow[];
+  shift_date: string;
+  scheduled_start: string;
+  scheduled_end: string;
+  scheduled_minutes: number;
+};
+
 function calcScheduledMinutes(start: string, end: string) {
   const [sh, sm] = start.split(":").map(Number);
   const [eh, em] = end.split(":").map(Number);
@@ -173,6 +181,29 @@ function parseTimeToMinutes(value: string): number | null {
   return (hh * 60) + mm;
 }
 
+function buildResolvedScheduleWindow(rows: ScheduledRow[]): ResolvedScheduleWindow | null {
+  if (!rows.length) return null;
+  const sortedRows = rows
+    .slice()
+    .sort((a, b) => {
+      const aStart = parseTimeToMinutes(a.scheduled_start) ?? 0;
+      const bStart = parseTimeToMinutes(b.scheduled_start) ?? 0;
+      return aStart - bStart;
+    });
+  const first = sortedRows[0];
+  const last = sortedRows[sortedRows.length - 1];
+  return {
+    rows: sortedRows,
+    shift_date: first.shift_date,
+    scheduled_start: first.scheduled_start,
+    scheduled_end: last.scheduled_end,
+    scheduled_minutes: sortedRows.reduce(
+      (total, row) => total + calcScheduledMinutes(row.scheduled_start, row.scheduled_end),
+      0
+    ),
+  };
+}
+
 export async function GET(req: Request) {
   try {
     const token = getBearerToken(req);
@@ -246,6 +277,14 @@ export async function GET(req: Request) {
       .returns<ScheduledRow[]>();
     if (scheduledErr) return NextResponse.json({ error: scheduledErr.message }, { status: 500 });
     const scheduledRows = scheduledRowsRaw ?? [];
+    const scheduledByProfileStoreDay = new Map<string, ScheduledRow[]>();
+    for (const row of scheduledRows) {
+      if (!row.profile_id) continue;
+      const key = `${row.profile_id}|${row.store_id}|${row.shift_date}`;
+      const current = scheduledByProfileStoreDay.get(key) ?? [];
+      current.push(row);
+      scheduledByProfileStoreDay.set(key, current);
+    }
 
     const { data: shiftRowsRaw, error: shiftErr } = await supabaseServer
       .from("shifts")
@@ -276,6 +315,32 @@ export async function GET(req: Request) {
     }
 
     const scheduledById = new Map(scheduledRows.map(r => [r.id, r]));
+    const resolveScheduledWindow = (shift: ShiftRow): ResolvedScheduleWindow | null => {
+      const shiftDate = getCstDateKey(shift.planned_start_at);
+      const key = `${shift.profile_id}|${shift.store_id}|${shiftDate}`;
+      const sameDayRows = scheduledByProfileStoreDay.get(key) ?? [];
+
+      if (shift.shift_type === "double") {
+        const splitDoubleRows = sameDayRows.filter(
+          (row) => row.shift_type === "open" || row.shift_type === "close"
+        );
+        if (splitDoubleRows.length > 0) {
+          return buildResolvedScheduleWindow(splitDoubleRows);
+        }
+      }
+
+      const scheduledByLink = shift.schedule_shift_id ? scheduledById.get(shift.schedule_shift_id) ?? null : null;
+      if (scheduledByLink) {
+        return buildResolvedScheduleWindow([scheduledByLink]);
+      }
+
+      const typeMatchedRows = sameDayRows.filter((row) => row.shift_type === shift.shift_type);
+      if (typeMatchedRows.length > 0) {
+        return buildResolvedScheduleWindow(typeMatchedRows);
+      }
+
+      return null;
+    };
     const shiftsWorkedThrough = shiftRows.filter(r => {
       const shiftDate = getCstDateKey(r.planned_start_at);
       return shiftDate <= safeAsOf;
@@ -338,26 +403,25 @@ export async function GET(req: Request) {
     const openShifts = filteredShiftsWorkedThrough.filter(r => !r.ended_at);
 
     const unexplainedVariances = filteredShiftsWorkedThrough
-      .filter(r => Boolean(r.schedule_shift_id) && Boolean(r.ended_at))
+      .filter(r => Boolean(r.ended_at))
       .map(r => {
-        const scheduled = r.schedule_shift_id ? scheduledById.get(r.schedule_shift_id) : null;
+        const scheduled = resolveScheduledWindow(r);
         if (!scheduled || !r.ended_at) return null;
         const actualMinutes = calcActualMinutes(r.planned_start_at, r.ended_at);
-        const scheduledMinutes = calcScheduledMinutes(scheduled.scheduled_start, scheduled.scheduled_end);
+        const scheduledMinutes = scheduled.scheduled_minutes;
         const diffHours = Math.abs(actualMinutes - scheduledMinutes) / 60;
         return { shift: r, scheduled, diffHours };
       })
-      .filter((x): x is { shift: ShiftRow; scheduled: ScheduledRow; diffHours: number } => Boolean(x))
+      .filter((x): x is { shift: ShiftRow; scheduled: ResolvedScheduleWindow; diffHours: number } => Boolean(x))
       .filter(x => x.diffHours >= shiftDriftThresholdHours && !(x.shift.override_note || "").trim().length);
 
     const shiftAuditAllRows = filteredShiftsWorkedThrough
       .filter((r): r is ShiftRow & { ended_at: string } => Boolean(r.ended_at))
-      .filter(r => Boolean(r.schedule_shift_id))
       .map((shift) => {
-        const scheduled = shift.schedule_shift_id ? scheduledById.get(shift.schedule_shift_id) : null;
+        const scheduled = resolveScheduledWindow(shift);
         if (!scheduled) return null;
 
-        const scheduledMinutes = calcScheduledMinutes(scheduled.scheduled_start, scheduled.scheduled_end);
+        const scheduledMinutes = scheduled.scheduled_minutes;
         const actualMinutes = calcActualMinutes(shift.planned_start_at, shift.ended_at);
         const scheduledStartMinutes = parseTimeToMinutes(scheduled.scheduled_start);
         const scheduledEndMinutes = parseTimeToMinutes(scheduled.scheduled_end);
