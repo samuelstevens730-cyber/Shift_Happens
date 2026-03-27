@@ -39,6 +39,7 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { ShiftType } from "@/lib/kioskRules";
 import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
+import { createNotification } from "@/lib/notifications";
 
 type ShiftRow = {
   id: string;
@@ -79,7 +80,7 @@ export async function PATCH(
     if (shift.last_action === "removed") return NextResponse.json({ error: "Shift removed." }, { status: 400 });
     if (!managerStoreIds.includes(shift.store_id)) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
 
-    const body = (await req.json()) as {
+    let body: {
       shiftType?: ShiftType;
       plannedStartAt?: string;
       startedAt?: string;
@@ -87,10 +88,17 @@ export async function PATCH(
       manualCloseReview?: "approved" | "edited";
       reason?: string;
     };
+    try {
+      body = (await req.json()) as typeof body;
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    }
     const reason = (body.reason ?? "").trim();
     if (!reason) {
       return NextResponse.json({ error: "Edit reason is required." }, { status: 400 });
     }
+    const isScheduleChange =
+      body.shiftType !== undefined || body.plannedStartAt !== undefined || body.endedAt !== undefined;
 
     const update: Record<string, string | null> = {};
     if (body.shiftType) update.shift_type = body.shiftType;
@@ -187,6 +195,31 @@ export async function PATCH(
       });
     if (auditErr) return NextResponse.json({ error: auditErr.message }, { status: 500 });
 
+    if (isScheduleChange && shift.profile_id) {
+      const changedFields: string[] = [];
+      if (body.plannedStartAt !== undefined) changedFields.push("start time");
+      if (body.endedAt !== undefined) changedFields.push("end time");
+      if (body.shiftType !== undefined) changedFields.push("shift type");
+
+      const created = await createNotification({
+        recipientProfileId: shift.profile_id,
+        sourceStoreId: shift.store_id,
+        notificationType: "schedule_change",
+        priority: "high",
+        title: "Your shift was updated",
+        body: changedFields.length
+          ? `A manager updated your shift (${changedFields.join(", ")}).`
+          : "A manager made changes to your shift.",
+        entityType: "shift",
+        entityId: shift.id,
+        createdBy: user.id,
+      });
+
+      if (!created) {
+        console.error("Failed to create shift update notification.", { shiftId });
+      }
+    }
+
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Failed to update shift." }, { status: 500 });
@@ -212,15 +245,20 @@ export async function DELETE(
 
     const { data: shift, error: shiftErr } = await supabaseServer
       .from("shifts")
-      .select("id, store_id, last_action, manual_closed")
+      .select("id, store_id, profile_id, last_action, manual_closed")
       .eq("id", shiftId)
       .maybeSingle()
-      .returns<{ id: string; store_id: string; last_action: string | null; manual_closed: boolean | null }>();
+      .returns<{ id: string; store_id: string; profile_id: string | null; last_action: string | null; manual_closed: boolean | null }>();
     if (shiftErr) return NextResponse.json({ error: shiftErr.message }, { status: 500 });
     if (!shift) return NextResponse.json({ error: "Shift not found." }, { status: 404 });
     if (shift.last_action === "removed") return NextResponse.json({ ok: true });
     if (!managerStoreIds.includes(shift.store_id)) return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-    const body = (await req.json().catch(() => ({}))) as { reason?: string };
+    let body: { reason?: string };
+    try {
+      body = (await req.json()) as { reason?: string };
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    }
     const reason = (body.reason ?? "").trim();
     if (!reason) {
       return NextResponse.json({ error: "Delete reason is required." }, { status: 400 });
@@ -251,6 +289,24 @@ export async function DELETE(
         },
       });
     if (auditErr) return NextResponse.json({ error: auditErr.message }, { status: 500 });
+
+    if (shift.profile_id) {
+      const created = await createNotification({
+        recipientProfileId: shift.profile_id,
+        sourceStoreId: shift.store_id,
+        notificationType: "schedule_change",
+        priority: "high",
+        title: "Your shift was removed",
+        body: "A manager removed a shift from your schedule. Please check your schedule.",
+        entityType: "shift",
+        entityId: shiftId,
+        createdBy: user.id,
+      });
+
+      if (!created) {
+        console.error("Failed to create shift removal notification.", { shiftId });
+      }
+    }
 
     return NextResponse.json({ ok: true });
   } catch (e: unknown) {

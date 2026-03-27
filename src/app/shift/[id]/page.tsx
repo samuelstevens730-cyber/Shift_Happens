@@ -5,12 +5,12 @@
  * - Store and employee info
  * - Drawer counts (start, changeover for doubles, end)
  * - Shift checklist with required/optional items
- * - Manager assignments (tasks and messages)
+ * - Shift tasks and employee notifications
  *
  * Clock-out is blocked until:
  * - All required checklist items are completed
- * - All messages are acknowledged
- * - All tasks are marked complete
+ * - All delivered tasks are marked complete
+ * - All unread manager-message notifications are addressed
  * - Changeover drawer count recorded (for double shifts)
  *
  * Automatically redirects to /shift/[id]/done when shift has ended.
@@ -86,6 +86,16 @@ type ShiftState = {
     acknowledged_at: string | null;
     completed_at: string | null;
   }[];
+};
+
+type PendingNotification = {
+  id: string;
+  notification_type: string;
+  title: string;
+  body: string;
+  read_at: string | null;
+  dismissed_at: string | null;
+  created_at: string;
 };
 
 type CleaningTaskStatus = "pending" | "completed" | "skipped";
@@ -254,6 +264,10 @@ export default function ShiftPage() {
   const [salesContext, setSalesContext] = useState<SalesContextState | null>(null);
   const [salesContextLoading, setSalesContextLoading] = useState(false);
   const [salesContextErr, setSalesContextErr] = useState<string | null>(null);
+  const [pendingNotifications, setPendingNotifications] = useState<PendingNotification[]>([]);
+  const [notificationsLoading, setNotificationsLoading] = useState(false);
+  const [notificationsErr, setNotificationsErr] = useState<string | null>(null);
+  const [dismissingNotificationId, setDismissingNotificationId] = useState<string | null>(null);
   const [closeCheckpointPriorX, setCloseCheckpointPriorX] = useState("");
   const [closeCheckpointZ, setCloseCheckpointZ] = useState("");
 
@@ -362,6 +376,37 @@ export default function ShiftPage() {
     }
     return null;
   }, [managerAccessToken, pinToken]);
+
+  const loadNotifications = useCallback(async () => {
+    if (!profileId) {
+      setPendingNotifications([]);
+      setNotificationsErr(null);
+      return;
+    }
+
+    setNotificationsLoading(true);
+    setNotificationsErr(null);
+    try {
+      const authToken = await resolveAuthToken();
+      if (!authToken) {
+        throw new Error(
+          managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN."
+        );
+      }
+
+      const res = await fetch("/api/notifications", {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error || "Failed to load notifications.");
+
+      setPendingNotifications((json?.notifications ?? []) as PendingNotification[]);
+    } catch (e: unknown) {
+      setNotificationsErr(e instanceof Error ? e.message : "Failed to load notifications.");
+    } finally {
+      setNotificationsLoading(false);
+    }
+  }, [managerSession, profileId, resolveAuthToken]);
 
   const reloadShift = useCallback(async (): Promise<boolean> => {
     if (loadInFlightRef.current) return loadInFlightRef.current;
@@ -519,6 +564,11 @@ export default function ShiftPage() {
   }, [authBootstrapped, state?.shift?.id, loadSalesContext]);
 
   useEffect(() => {
+    if (!authBootstrapped) return;
+    void loadNotifications();
+  }, [authBootstrapped, loadNotifications]);
+
+  useEffect(() => {
     if (!salesContext) return;
     if (typeof salesContext.priorXReportCents === "number") {
       setCloseCheckpointPriorX((salesContext.priorXReportCents / 100).toFixed(2));
@@ -612,15 +662,44 @@ export default function ShiftPage() {
   }, [state, done]);
   const checklistIncompleteCount = checklistTotalCount - checklistCompletedCount;
 
-  // Messages that haven't been acknowledged yet
-  const pendingMessages = useMemo(() => {
-    return (state?.assignments || []).filter(a => a.type === "message" && !a.acknowledged_at);
-  }, [state]);
-
   // Tasks that haven't been completed yet
   const pendingTasks = useMemo(() => {
     return (state?.assignments || []).filter(a => a.type === "task" && !a.completed_at);
   }, [state]);
+  const legacyPendingMessages = useMemo(() => {
+    return (state?.assignments || []).filter(a => a.type === "message" && !a.acknowledged_at);
+  }, [state]);
+  const unreadManagerNotifications = useMemo(() => {
+    return pendingNotifications.filter(
+      notification => notification.notification_type === "manager_message" && !notification.read_at
+    );
+  }, [pendingNotifications]);
+  const clockOutBlockCopy = useMemo(() => {
+    const blockers: string[] = [];
+
+    if (pendingTasks.length > 0) {
+      blockers.push(`complete ${pendingTasks.length} task${pendingTasks.length === 1 ? "" : "s"}`);
+    }
+    if (unreadManagerNotifications.length > 0) {
+      blockers.push(
+        `dismiss ${unreadManagerNotifications.length} unread manager notification${
+          unreadManagerNotifications.length === 1 ? "" : "s"
+        }`
+      );
+    }
+    if (legacyPendingMessages.length > 0) {
+      blockers.push(
+        `acknowledge ${legacyPendingMessages.length} legacy manager message${
+          legacyPendingMessages.length === 1 ? "" : "s"
+        }`
+      );
+    }
+    if (notificationsErr) {
+      blockers.push("reload notifications");
+    }
+
+    return blockers.length > 0 ? `Please ${blockers.join(" and ")} before clocking out.` : null;
+  }, [legacyPendingMessages, notificationsErr, pendingTasks, unreadManagerNotifications]);
 
   const cleaningCompletedCount = useMemo(() => {
     return cleaningTasks.filter(task => task.status === "completed").length;
@@ -695,10 +774,9 @@ export default function ShiftPage() {
   }, [state]);
 
   /**
-   * Mark an assignment as acknowledged (messages) or completed (tasks).
-   * Updates local state optimistically.
+   * Mark a delivered task assignment complete and update local state optimistically.
    */
-  async function updateAssignment(assignmentId: string, action: "ack" | "complete") {
+  async function completeTaskAssignment(assignmentId: string) {
     setErr(null);
     const authToken = await resolveAuthToken();
     if (!authToken) {
@@ -708,7 +786,7 @@ export default function ShiftPage() {
     const res = await fetch(`/api/shift/${shiftId}/assignments/${assignmentId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
-      body: JSON.stringify({ action }),
+      body: JSON.stringify({ action: "complete" }),
     });
     const json = await res.json();
     if (!res.ok) {
@@ -720,11 +798,65 @@ export default function ShiftPage() {
       if (!prev) return prev;
       const nextAssignments = (prev.assignments || []).map(a => {
         if (a.id !== assignmentId) return a;
-        if (action === "ack") return { ...a, acknowledged_at: new Date().toISOString() };
         return { ...a, completed_at: new Date().toISOString() };
       });
       return { ...prev, assignments: nextAssignments };
     });
+  }
+
+  async function acknowledgeLegacyMessage(assignmentId: string) {
+    setErr(null);
+    const authToken = await resolveAuthToken();
+    if (!authToken) {
+      setErr(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
+      return;
+    }
+    const res = await fetch(`/api/shift/${shiftId}/assignments/${assignmentId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ action: "ack" }),
+    });
+    const json = await res.json();
+    if (!res.ok) {
+      setErr(json?.error || "Failed to acknowledge message.");
+      return;
+    }
+
+    setState(prev => {
+      if (!prev) return prev;
+      const nextAssignments = (prev.assignments || []).map(a => {
+        if (a.id !== assignmentId) return a;
+        return { ...a, acknowledged_at: new Date().toISOString() };
+      });
+      return { ...prev, assignments: nextAssignments };
+    });
+  }
+
+  async function dismissNotification(notificationId: string) {
+    setNotificationsErr(null);
+    const authToken = await resolveAuthToken();
+    if (!authToken) {
+      setNotificationsErr(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
+      return;
+    }
+
+    setDismissingNotificationId(notificationId);
+    try {
+      const res = await fetch(`/api/notifications/${notificationId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+        body: JSON.stringify({ dismiss: true }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setNotificationsErr(json?.error || "Failed to dismiss notification.");
+        return;
+      }
+
+      setPendingNotifications(prev => prev.filter(notification => notification.id !== notificationId));
+    } finally {
+      setDismissingNotificationId(null);
+    }
   }
 
   /**
@@ -1275,28 +1407,51 @@ export default function ShiftPage() {
           </div>
         )}
 
-        {/* Manager assignments section */}
-        {(pendingMessages.length > 0 || pendingTasks.length > 0) && (
+        {/* Notifications and tasks section */}
+        {(pendingNotifications.length > 0 ||
+          pendingTasks.length > 0 ||
+          legacyPendingMessages.length > 0 ||
+          notificationsLoading ||
+          notificationsErr) && (
           <div className="employee-panel space-y-3">
-            {/* Messages require acknowledgment */}
-            {pendingMessages.length > 0 && (
-              <div className="space-y-2">
-                <div className="shift-status-title">Manager Messages</div>
+            <div className="space-y-2">
+              <div className="shift-status-title">Notifications</div>
+              {notificationsLoading ? (
+                <div className="shift-section-meta">Loading notifications...</div>
+              ) : pendingNotifications.length === 0 ? (
+                <div className="shift-empty-state">No notifications right now.</div>
+              ) : (
                 <div className="space-y-2">
-                  {pendingMessages.map(m => (
-                    <label key={m.id} className="shift-note flex items-start gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={Boolean(m.acknowledged_at)}
-                        disabled={requiresStartDrawerCapture}
-                        onChange={() => updateAssignment(m.id, "ack")}
-                      />
-                      <span>{m.message}</span>
-                    </label>
-                  ))}
+                  {pendingNotifications.map(notification => {
+                    const isUnreadManagerMessage =
+                      notification.notification_type === "manager_message" && !notification.read_at;
+
+                    return (
+                      <div key={notification.id} className="shift-note flex items-start justify-between gap-3 text-sm">
+                        <div className="min-w-0 space-y-1">
+                          <div className="shift-item-title">{notification.title}</div>
+                          <div className="whitespace-pre-wrap">
+                            {notification.body || "No additional details provided."}
+                          </div>
+                          <div className="shift-section-meta">
+                            {formatDateTime(notification.created_at)}
+                            {isUnreadManagerMessage ? " • Unread manager message" : ""}
+                          </div>
+                        </div>
+                        <button
+                          className="shift-button-secondary shrink-0"
+                          disabled={dismissingNotificationId === notification.id}
+                          onClick={() => void dismissNotification(notification.id)}
+                        >
+                          {dismissingNotificationId === notification.id ? "Dismissing..." : "Dismiss"}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
-            )}
+              )}
+              {notificationsErr && <div className="shift-flash shift-flash-error text-sm">{notificationsErr}</div>}
+            </div>
 
             {/* Tasks require completion */}
             {pendingTasks.length > 0 && (
@@ -1309,7 +1464,7 @@ export default function ShiftPage() {
                       <button
                         className="shift-button-secondary"
                         disabled={requiresStartDrawerCapture}
-                        onClick={() => updateAssignment(t.id, "complete")}
+                        onClick={() => completeTaskAssignment(t.id)}
                       >
                         Mark Complete
                       </button>
@@ -1318,12 +1473,31 @@ export default function ShiftPage() {
                 </div>
               </div>
             )}
+
+            {legacyPendingMessages.length > 0 && (
+              <div className="space-y-2">
+                <div className="shift-status-title">Legacy Manager Messages</div>
+                <div className="space-y-2">
+                  {legacyPendingMessages.map(message => (
+                    <label key={message.id} className="shift-note flex items-start gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(message.acknowledged_at)}
+                        disabled={requiresStartDrawerCapture}
+                        onChange={() => void acknowledgeLegacyMessage(message.id)}
+                      />
+                      <span>{message.message}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {pendingMessages.length + pendingTasks.length > 0 && (
+        {clockOutBlockCopy && (
           <div className="shift-note">
-            Please acknowledge all messages and complete all tasks before clocking out.
+            {clockOutBlockCopy}
           </div>
         )}
 
@@ -1362,9 +1536,12 @@ export default function ShiftPage() {
           <button
             className="shift-button-secondary w-full disabled:opacity-50"
             disabled={
+              notificationsLoading ||
+              Boolean(notificationsErr) ||
               requiresStartDrawerCapture ||
               (shiftType !== "other" && remainingRequired > 0) ||
-              pendingMessages.length > 0 ||
+              unreadManagerNotifications.length > 0 ||
+              legacyPendingMessages.length > 0 ||
               pendingTasks.length > 0 ||
               requiresSafeCloseoutBeforeClockOut
             }

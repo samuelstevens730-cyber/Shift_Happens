@@ -1,9 +1,16 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
+import { createNotification } from "@/lib/notifications";
 
 type DenyBody = {
   reason?: string | null;
+};
+
+type TimesheetRequestRow = {
+  id: string;
+  store_id: string;
+  requester_profile_id: string;
 };
 
 export async function POST(
@@ -27,9 +34,9 @@ export async function POST(
 
   const { data: request, error: reqErr } = await supabaseServer
     .from("timesheet_change_requests")
-    .select("store_id")
+    .select("id, store_id, requester_profile_id")
     .eq("id", requestId)
-    .maybeSingle<{ store_id: string }>();
+    .maybeSingle<TimesheetRequestRow>();
 
   if (reqErr || !request) {
     return NextResponse.json({ error: "Request not found." }, { status: 404 });
@@ -39,16 +46,40 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
-  const body = (await req.json().catch(() => null)) as DenyBody | null;
+  let body: DenyBody;
+  try {
+    body = (await req.json()) as DenyBody;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const denialReason = typeof body.reason === "string" ? body.reason.trim() : "";
 
   const { error } = await supabaseServer.rpc("deny_request", {
     p_actor_auth_user_id: user.id,
     p_request_type: "timesheet",
     p_request_id: requestId,
-    p_denial_reason: body?.reason ?? null,
+    p_denial_reason: denialReason || null,
   });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  const created = await createNotification({
+    recipientProfileId: request.requester_profile_id,
+    sourceStoreId: request.store_id,
+    notificationType: "timesheet_denied",
+    priority: "normal",
+    title: "Timesheet correction denied",
+    body: denialReason
+      ? `Your timesheet correction was denied: ${denialReason}`
+      : "Your timesheet correction request was denied.",
+    entityType: "timesheet_change_request",
+    entityId: request.id,
+    createdBy: user.id,
+  });
+
+  if (!created) {
+    console.error("Failed to create timesheet denial notification.", { requestId });
+  }
 
   return NextResponse.json({ ok: true });
 }

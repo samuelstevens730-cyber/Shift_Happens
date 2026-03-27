@@ -33,6 +33,7 @@ type User = { id: string; name: string; active: boolean };
 type Assignment = {
   id: string;
   type: "task" | "message";
+  source_kind?: "assignment" | "notification";
   message: string;
   target_profile_id: string | null;
   target_profile_name: string | null;
@@ -487,6 +488,7 @@ function AssignmentCard({
   saving: boolean;
 }) {
   const [note, setNote] = useState(assignment.audit_note || "");
+  const supportsAuditNotes = assignment.source_kind !== "notification";
 
   useEffect(() => {
     setNote(assignment.audit_note || "");
@@ -520,8 +522,9 @@ function AssignmentCard({
       </div>
 
       <div className="text-xs muted">
-        Delivered shift: {assignment.delivered_shift_id ? assignment.delivered_shift_id.slice(0, 8) : "Pending"}
-        {assignment.delivered_profile_name ? ` - ${assignment.delivered_profile_name}` : ""}
+        {assignment.source_kind === "notification"
+          ? `Delivered in app immediately${assignment.delivered_profile_name ? ` - ${assignment.delivered_profile_name}` : ""}`
+          : `Delivered shift: ${assignment.delivered_shift_id ? assignment.delivered_shift_id.slice(0, 8) : "Pending"}${assignment.delivered_profile_name ? ` - ${assignment.delivered_profile_name}` : ""}`}
       </div>
 
       <div className="text-xs muted">
@@ -532,20 +535,28 @@ function AssignmentCard({
       </div>
 
       <div className="space-y-2">
-        <label className="text-sm muted">Audit note (admin only)</label>
-        <textarea
-          className="textarea"
-          rows={2}
-          value={note}
-          onChange={e => setNote(e.target.value)}
-        />
-        <button
-          className="btn-secondary px-3 py-1.5 disabled:opacity-50"
-          onClick={() => onSaveNote(assignment.id, note)}
-          disabled={saving}
-        >
-          Save Note
-        </button>
+        {supportsAuditNotes ? (
+          <>
+            <label className="text-sm muted">Audit note (admin only)</label>
+            <textarea
+              className="textarea"
+              rows={2}
+              value={note}
+              onChange={e => setNote(e.target.value)}
+            />
+            <button
+              className="btn-secondary px-3 py-1.5 disabled:opacity-50"
+              onClick={() => onSaveNote(assignment.id, note)}
+              disabled={saving}
+            >
+              Save Note
+            </button>
+          </>
+        ) : (
+          <div className="text-xs muted">
+            Audit notes are only available for lazy-delivery shift assignments.
+          </div>
+        )}
         <button
           className="btn-secondary px-3 py-1.5 disabled:opacity-50"
           onClick={() => onDelete(assignment.id)}

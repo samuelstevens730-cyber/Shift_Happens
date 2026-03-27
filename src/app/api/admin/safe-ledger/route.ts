@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
+import { createStoreNotification } from "@/lib/notifications";
 import type { SafeCloseoutRow } from "@/types/safeLedger";
 
 type SafeCloseoutStatusFilter = "pass" | "warn" | "fail";
@@ -329,7 +330,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
 
-    const body = (await req.json().catch(() => ({}))) as ManualCreateBody;
+    let body: ManualCreateBody;
+    try {
+      body = (await req.json()) as ManualCreateBody;
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    }
     if (!body.store_id || !body.profile_id) {
       return NextResponse.json({ error: "Missing required fields: store_id, profile_id." }, { status: 400 });
     }
@@ -445,8 +451,8 @@ export async function POST(req: Request) {
         edited_at: new Date().toISOString(),
         edited_by: user.id,
       })
-      .select("id")
-      .maybeSingle<{ id: string }>();
+      .select("id, store_id, status, requires_manager_review, business_date")
+      .maybeSingle<Pick<SafeCloseoutRow, "id" | "store_id" | "status" | "requires_manager_review" | "business_date">>();
 
     if (insertErr) {
       if (insertErr.code === "23505") {
@@ -490,6 +496,36 @@ export async function POST(req: Request) {
         .from("safe_closeout_photos")
         .insert(rows);
       if (photoErr) return NextResponse.json({ error: photoErr.message }, { status: 500 });
+    }
+
+    if (inserted.status === "fail") {
+      const created = await createStoreNotification({
+        storeId: inserted.store_id,
+        notificationType: "safe_closeout_failed",
+        priority: "high",
+        title: "Safe closeout failed",
+        body: `The safe closeout for ${inserted.business_date} failed validation. Immediate review required.`,
+        entityType: "safe_closeout",
+        entityId: inserted.id,
+        createdBy: user.id,
+      });
+      if (!created) {
+        console.error("Failed to create safe closeout failure notification.", { closeoutId: inserted.id });
+      }
+    } else if (inserted.status === "warn" || inserted.requires_manager_review) {
+      const created = await createStoreNotification({
+        storeId: inserted.store_id,
+        notificationType: "safe_closeout_review",
+        priority: "normal",
+        title: "Safe closeout needs review",
+        body: `The safe closeout for ${inserted.business_date} needs manager review.`,
+        entityType: "safe_closeout",
+        entityId: inserted.id,
+        createdBy: user.id,
+      });
+      if (!created) {
+        console.error("Failed to create safe closeout review notification.", { closeoutId: inserted.id });
+      }
     }
 
     return NextResponse.json({ id: inserted.id, status, variance_cents: variance, denom_variance_cents: denomVariance });

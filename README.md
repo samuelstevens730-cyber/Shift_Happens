@@ -371,6 +371,7 @@ Scores are computed from `performance_snapshots` and displayed publicly to emplo
 | `checklist_items` | Individual items within a template |
 | `shift_checklist_checks` | Tracks completed checklist items per shift |
 | `shift_assignments` | Tasks and messages assigned to employees |
+| `notifications` | Centralized in-app notification feed with per-recipient read/dismiss state |
 | `app_users` | Admin/manager accounts linked to Supabase auth |
 | `store_managers` | Links managers to their authorized stores |
 | `employee_pins` | Hashed PIN codes for employee clock-in authentication |
@@ -429,7 +430,7 @@ The workflow in `.github/workflows/cron-requests.yml` calls:
 ## Future Roadmap
 
 - [ ] **Mobile App**: Native iOS/Android apps for employees
-- [ ] **Real-time Notifications**: Push notifications for task assignments and request updates
+- [ ] **Push Notifications**: FCM delivery for high-priority notification types
 - [ ] **SOP Library**: Standard operating procedures accessible during shifts
 - [ ] **Biometric Clock-In**: Face ID / fingerprint support for kiosk devices
 

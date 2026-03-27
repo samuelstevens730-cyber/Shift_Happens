@@ -28,7 +28,8 @@ Workforce management application for two retail stores (**LV1**, **LV2**).
 |---|---|
 | `shifts` | Clock-in/out records. Columns: `shift_type` (open/close/double/other), `planned_start_at`, `started_at`, `ended_at`, `last_action`, weather snapshots, `manual_close`, `is_unscheduled` |
 | `shift_drawer_counts` | Drawer count records per shift. `count_type`: start / changeover / end. Includes `drawer_cents`, variance flags, `notified_manager`, manager review fields |
-| `shift_assignments` | Tasks and messages assigned to employees. `type`: task / message. Lifecycle: `delivered_at` → `acknowledged_at` → `completed_at` |
+| `shift_assignments` | Manager-assigned tasks plus lazy-delivery store messages. `type`: task / message. Store-targeted messages still deliver on next clock-in; direct employee messages now live in `notifications` |
+| `notifications` | Centralized per-recipient in-app notification feed. Tracks `notification_type`, priority, read/dismiss/delete state, source entity pointers, and future push-delivery metadata |
 | `shift_checklist_checks` | Which checklist items were completed for a given shift |
 | `shift_sales_counts` | Per-shift x/z/rollover report entries (raw inputs from employees) |
 | `daily_sales_records` | Per-store, per-date sales aggregation. **Primary source for all performance reporting.** Key columns: `open_x_report_cents`, `close_sales_cents`, `z_report_cents`, `rollover_from_previous_cents`, `closer_rollover_cents`, `opener_rollover_cents`, `is_rollover_night`, `open_transaction_count`, `close_transaction_count` |
@@ -132,6 +133,7 @@ src/app/api/
     ├── shifts/           GET/POST/PATCH/DELETE  Shift management
     ├── open-shifts/      GET   Unended shifts; /[id]/end force-end
     ├── assignments/      GET/POST  Task/message management
+    ├── notifications/    GET/PATCH  In-app bell feed + read/dismiss APIs
     ├── schedules/        GET/POST  Schedule management + publish
     ├── payroll/          GET   Payroll report + reconciliation
     ├── safe-ledger/      GET/POST/PATCH  Safe closeout management
@@ -279,6 +281,14 @@ Next AM    Opener submits their version → POST /api/sales/rollover (source = "
 5. Sales data written to `daily_sales_records` (if sales tracking enabled)
 6. `ended_at` set on shift
 7. `fetchCurrentWeather()` called (fire-and-forget) — updates `end_weather_condition`, `end_temp_f`
+
+### Notifications & Bell
+
+1. `notifications` is the centralized per-recipient in-app inbox for direct employee messages, request outcomes, schedule changes, and manager system alerts.
+2. `shift_assignments` still owns manager-assigned tasks and lazy-delivery store messages that resolve on next clock-in.
+3. Employee and manager shells both mount `NotificationBell`, backed by `/api/notifications` and `/api/notifications/count`.
+4. Clock-out still blocks on incomplete tasks plus unread `manager_message` notifications.
+5. `priority`, `push_sent_at`, and `push_message_id` are scaffolding for a later FCM push phase; current delivery is in-app only.
 
 ---
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
-import { authenticateShiftRequest } from "@/lib/shiftAuth";
+import { authenticateShiftRequest, validateStoreAccess } from "@/lib/shiftAuth";
+import { createNotification, createStoreNotification } from "@/lib/notifications";
 import { submitSwapOfferSchema } from "@/schemas/requests";
 
 type OfferRow = {
@@ -19,6 +20,12 @@ type OfferBody = {
   offerType?: "cover" | "swap";
   swapScheduleShiftId?: string | null;
   note?: string | null;
+};
+
+type SwapRequestRow = {
+  id: string;
+  requester_profile_id: string;
+  store_id: string;
 };
 
 export async function GET(
@@ -81,17 +88,34 @@ export async function POST(
   const requestId = id;
   if (!requestId) return NextResponse.json({ error: "Missing request id." }, { status: 400 });
 
-  const body = (await req.json().catch(() => null)) as OfferBody | null;
+  let body: OfferBody;
+  try {
+    body = (await req.json()) as OfferBody;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
   const parsed = submitSwapOfferSchema.safeParse({
     requestId,
-    offerType: body?.offerType,
-    swapScheduleShiftId: body?.swapScheduleShiftId ?? null,
-    note: body?.note ?? null,
+    offerType: body.offerType,
+    swapScheduleShiftId: body.swapScheduleShiftId ?? null,
+    note: body.note ?? null,
   });
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.format() }, { status: 400 });
   }
   const payload = parsed.data;
+
+  const { data: requestRow, error: requestErr } = await supabaseServer
+    .from("shift_swap_requests")
+    .select("id, requester_profile_id, store_id")
+    .eq("id", requestId)
+    .maybeSingle<SwapRequestRow>();
+
+  if (requestErr) return NextResponse.json({ error: requestErr.message }, { status: 500 });
+  if (!requestRow) return NextResponse.json({ error: "Not found." }, { status: 404 });
+  if (!validateStoreAccess(auth, requestRow.store_id)) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
 
   const { data, error } = await supabaseServer.rpc("submit_shift_swap_offer", {
     p_actor_profile_id: auth.profileId,
@@ -102,6 +126,35 @@ export async function POST(
   });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  const requesterCreated = await createNotification({
+    recipientProfileId: requestRow.requester_profile_id,
+    sourceStoreId: requestRow.store_id,
+    notificationType: "swap_offer_received",
+    priority: "normal",
+    title: "Someone offered to take your shift",
+    body: "An employee has offered to take your shift. Check the swap request for details.",
+    entityType: "shift_swap_request",
+    entityId: requestId,
+  });
+
+  const managersCreated = await createStoreNotification({
+    storeId: requestRow.store_id,
+    notificationType: "swap_pending_approval",
+    priority: "high",
+    title: "Shift swap needs approval",
+    body: "A shift swap request is pending your approval.",
+    entityType: "shift_swap_request",
+    entityId: requestId,
+  });
+
+  if (!requesterCreated || !managersCreated) {
+    console.error("Failed to create swap offer notifications.", {
+      requestId,
+      requesterCreated,
+      managersCreated,
+    });
+  }
 
   return NextResponse.json({ offerId: data });
 }

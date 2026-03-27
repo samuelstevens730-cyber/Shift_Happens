@@ -38,6 +38,7 @@ import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { isOutOfThreshold, ShiftType } from "@/lib/kioskRules";
 import { authenticateShiftRequest } from "@/lib/shiftAuth";
+import { createStoreNotification } from "@/lib/notifications";
 import { actualCoverageFromTimes, collapseScheduledCoverage } from "@/lib/shiftOverride";
 import { fetchCurrentWeather } from "@/lib/weatherClient";
 
@@ -145,7 +146,12 @@ export async function POST(req: Request) {
     }
     const auth = authResult.auth;
 
-    const body = (await req.json()) as Body;
+    let body: Body;
+    try {
+      body = (await req.json()) as Body;
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    }
 
     if (!body.shiftId) return NextResponse.json({ error: "Missing shiftId." }, { status: 400 });
     if (!body.endAt) return NextResponse.json({ error: "Missing endAt." }, { status: 400 });
@@ -189,22 +195,42 @@ export async function POST(req: Request) {
       store = storeById;
     }
 
-    const { data: pendingAssignments, error: assignErr } = await supabaseServer
-      .from("shift_assignments")
-      .select("id,type,acknowledged_at,completed_at")
-      .eq("delivered_shift_id", body.shiftId)
-      .returns<{ id: string; type: "task" | "message"; acknowledged_at: string | null; completed_at: string | null }[]>();
-    if (assignErr) return NextResponse.json({ error: assignErr.message }, { status: 500 });
+    const [pendingTasksRes, unreadMessagesRes, legacyMessagesRes] = await Promise.all([
+      supabaseServer
+        .from("shift_assignments")
+        .select("id", { count: "exact", head: true })
+        .eq("delivered_shift_id", body.shiftId)
+        .eq("type", "task")
+        .is("completed_at", null)
+        .is("deleted_at", null),
+      supabaseServer
+        .from("notifications")
+        .select("id", { count: "exact", head: true })
+        .eq("recipient_profile_id", shift.profile_id)
+        .eq("notification_type", "manager_message")
+        .is("read_at", null)
+        .is("deleted_at", null),
+      supabaseServer
+        .from("shift_assignments")
+        .select("id", { count: "exact", head: true })
+        .eq("delivered_shift_id", body.shiftId)
+        .eq("type", "message")
+        .is("acknowledged_at", null)
+        .is("deleted_at", null),
+    ]);
+    if (pendingTasksRes.error) return NextResponse.json({ error: pendingTasksRes.error.message }, { status: 500 });
+    if (unreadMessagesRes.error) return NextResponse.json({ error: unreadMessagesRes.error.message }, { status: 500 });
+    if (legacyMessagesRes.error) return NextResponse.json({ error: legacyMessagesRes.error.message }, { status: 500 });
 
-    const hasPending = (pendingAssignments ?? []).some(a =>
-      (a.type === "message" && !a.acknowledged_at) ||
-      (a.type === "task" && !a.completed_at)
-    );
-    if (hasPending) {
-      return NextResponse.json(
-        { error: "Pending messages or tasks must be completed before clock out." },
-        { status: 400 }
-      );
+    const hasPendingTasks = (pendingTasksRes.count ?? 0) > 0;
+    const hasUnreadMessages = (unreadMessagesRes.count ?? 0) > 0 || (legacyMessagesRes.count ?? 0) > 0;
+    if (hasPendingTasks || hasUnreadMessages) {
+      const reason = hasPendingTasks && hasUnreadMessages
+        ? "Unread messages and incomplete tasks must be resolved before clocking out."
+        : hasPendingTasks
+          ? "Incomplete tasks must be completed before clocking out."
+          : "Unread messages must be dismissed before clocking out.";
+      return NextResponse.json({ error: reason }, { status: 400 });
     }
 
     const shiftType = shift.shift_type as ShiftType;
@@ -685,6 +711,39 @@ export async function POST(req: Request) {
         );
       }
       return NextResponse.json({ error: endShiftErr.message }, { status: 500 });
+    }
+
+    const createdBy = auth.authType === "manager" ? auth.authUserId : undefined;
+    if (requiresOverride && !shift.requires_override) {
+      const created = await createStoreNotification({
+        storeId: shift.store_id,
+        notificationType: "override_pending",
+        priority: "normal",
+        title: "Shift variance needs review",
+        body: "A shift ended with a time variance that needs manager review.",
+        entityType: "shift",
+        entityId: shift.id,
+        createdBy,
+      });
+      if (!created) {
+        console.error("Failed to create override pending notification.", { shiftId: shift.id });
+      }
+    }
+
+    if (body.manualClose) {
+      const created = await createStoreNotification({
+        storeId: shift.store_id,
+        notificationType: "manual_close_pending",
+        priority: "normal",
+        title: "Manual shift close needs review",
+        body: "A shift was manually closed and needs manager review.",
+        entityType: "shift",
+        entityId: shift.id,
+        createdBy,
+      });
+      if (!created) {
+        console.error("Failed to create manual close notification.", { shiftId: shift.id });
+      }
     }
 
     // 4) Capture end weather — non-fatal; never delays or blocks clock-out response.

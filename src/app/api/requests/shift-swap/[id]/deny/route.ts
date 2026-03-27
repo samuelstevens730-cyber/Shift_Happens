@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
+import { createNotification } from "@/lib/notifications";
 
 type DenyBody = {
   reason?: string | null;
+};
+
+type SwapRequestRow = {
+  store_id: string;
+  requester_profile_id: string;
 };
 
 export async function POST(
@@ -27,9 +33,9 @@ export async function POST(
 
   const { data: request, error: reqErr } = await supabaseServer
     .from("shift_swap_requests")
-    .select("store_id")
+    .select("store_id, requester_profile_id")
     .eq("id", requestId)
-    .maybeSingle<{ store_id: string }>();
+    .maybeSingle<SwapRequestRow>();
 
   if (reqErr || !request) {
     return NextResponse.json({ error: "Request not found." }, { status: 404 });
@@ -39,16 +45,40 @@ export async function POST(
     return NextResponse.json({ error: "Forbidden." }, { status: 403 });
   }
 
-  const body = (await req.json().catch(() => null)) as DenyBody | null;
+  let body: DenyBody;
+  try {
+    body = (await req.json()) as DenyBody;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+  }
+  const denialReason = typeof body.reason === "string" ? body.reason.trim() : "";
 
   const { error } = await supabaseServer.rpc("deny_request", {
     p_actor_auth_user_id: user.id,
     p_request_type: "shift_swap",
     p_request_id: requestId,
-    p_denial_reason: body?.reason ?? null,
+    p_denial_reason: denialReason || null,
   });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  const created = await createNotification({
+    recipientProfileId: request.requester_profile_id,
+    sourceStoreId: request.store_id,
+    notificationType: "swap_denied",
+    priority: "high",
+    title: "Shift swap denied",
+    body: denialReason
+      ? `Your shift swap request was denied: ${denialReason}`
+      : "Your shift swap request was denied by a manager.",
+    entityType: "shift_swap_request",
+    entityId: requestId,
+    createdBy: user.id,
+  });
+
+  if (!created) {
+    console.error("Failed to create swap denial notification.", { requestId });
+  }
 
   return NextResponse.json({ ok: true });
 }
