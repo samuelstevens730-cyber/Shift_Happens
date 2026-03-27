@@ -1011,176 +1011,179 @@ function SafeLedgerDashboardContent() {
   }
 
   return (
-    <div className="space-y-4 p-6 text-slate-100">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Safe Ledger Dashboard</h1>
-        <div className="flex items-center gap-2">
-          <Button className="bg-cyan-600 text-white hover:bg-cyan-700" onClick={() => setIsAddOpen(true)}>Add Manual Closeout</Button>
-          <Button className="bg-amber-600 text-white hover:bg-amber-700" onClick={() => setIsPickupOpen(true)}>Record Full Pickup</Button>
-          <Button className="bg-purple-600 text-white hover:bg-purple-700" onClick={() => void copyText(buildSalesTsv(), "Copied Sales TSV")}>Copy Sales TSV</Button>
-          <Button className="bg-purple-600 text-white hover:bg-purple-700" onClick={() => void copyText(buildDenomTsv(), "Copied Denom TSV")}>Copy Denom TSV</Button>
-          <Button className="bg-purple-600 text-white hover:bg-purple-700" onClick={() => void copyText(buildExpensesTsv(), "Copied Expenses TSV")}>Copy Expenses TSV</Button>
-        </div>
-      </div>
-
-      {source === "dashboard" && (
-        <div className="rounded border border-cyan-500/40 bg-cyan-500/10 px-3 py-2 text-xs text-cyan-100">
-          Opened from Command Center Action Items. Matching closeout is highlighted when available.
-        </div>
-      )}
-
-      <div className="rounded-xl border border-cyan-400/30 bg-[#0b1220] p-4">
-        <div className="grid gap-3 lg:grid-cols-4">
-          <DatePicker label="Start Date" value={from} onChange={setFrom} max={to} />
-          <DatePicker label="End Date" value={to} onChange={setTo} min={from} />
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-300">Store</span>
-            <select
-              className="rounded-md border border-cyan-400/30 bg-slate-900/60 px-2 py-1.5"
-              value={storeId}
-              onChange={(e) => setStoreId(e.target.value)}
-            >
-              <option value="all">All Stores</option>
-              {stores.map((store) => (
-                <option key={store.id} value={store.id}>{store.name}</option>
-              ))}
-            </select>
-          </label>
-          <div className="flex flex-col gap-1 text-sm">
-            <span className="text-slate-300">Quick View</span>
-            <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center">
-              <select
-                className="w-full min-w-0 rounded-md border border-cyan-400/30 bg-slate-900/60 px-2 py-1.5 md:w-auto"
-                value={quickViewMode}
-                onChange={(e) => setQuickViewMode(e.target.value as "week" | "month")}
-              >
-                <option value="week">Weekly (Current Month)</option>
-                <option value="month">Month to Date</option>
-              </select>
-              {quickViewMode === "week" && (
-                <select
-                  className="w-full min-w-0 rounded-md border border-cyan-400/30 bg-slate-900/60 px-2 py-1.5 md:w-auto"
-                  value={selectedWeek}
-                  onChange={(e) => setSelectedWeek(e.target.value)}
-                >
-                  {weekRanges.map((range) => (
-                    <option key={range.value} value={range.value}>
-                      {range.label}
-                    </option>
-                  ))}
-                </select>
-              )}
-              <Button className="w-full bg-purple-600 text-white hover:bg-purple-700 md:w-auto" onClick={applyQuickView}>
-                Apply
-              </Button>
-            </div>
+    <div className="app-shell">
+      <div className="mx-auto max-w-7xl space-y-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <h1 className="font-[family-name:var(--font-display)] text-2xl font-bold uppercase tracking-tight text-[var(--text)]">Safe Ledger Dashboard</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button className="bg-cyan-600 text-white hover:bg-cyan-700" onClick={() => setIsAddOpen(true)}>Add Manual Closeout</Button>
+            <Button className="bg-amber-600 text-white hover:bg-amber-700" onClick={() => setIsPickupOpen(true)}>Record Full Pickup</Button>
+            <Button className="bg-purple-600 text-white hover:bg-purple-700" onClick={() => void copyText(buildSalesTsv(), "Copied Sales TSV")}>Copy Sales TSV</Button>
+            <Button className="bg-purple-600 text-white hover:bg-purple-700" onClick={() => void copyText(buildDenomTsv(), "Copied Denom TSV")}>Copy Denom TSV</Button>
+            <Button className="bg-purple-600 text-white hover:bg-purple-700" onClick={() => void copyText(buildExpensesTsv(), "Copied Expenses TSV")}>Copy Expenses TSV</Button>
           </div>
         </div>
-        <label className="mt-3 flex items-center gap-2 text-sm text-slate-200">
-          <input type="checkbox" checked={showIssuesOnly} onChange={(e) => setShowIssuesOnly(e.target.checked)} />
-          Show Issues Only
-        </label>
-      </div>
-      <div className="rounded-xl border border-cyan-400/30 bg-[#0b1220] p-4">
-        <div className="mb-3 text-sm font-semibold text-slate-200">Overall Store Reconciliation (Filtered Results)</div>
-        {storeReconciliationSummaries.length === 0 ? (
-          <div className="text-sm text-slate-400">No closeouts in current filter range.</div>
-        ) : (
-          <div className="grid gap-3 md:grid-cols-2">
-            {storeReconciliationSummaries.map((summary) => {
-              const safeVariance = summary.actualTotalCents - summary.expectedTotalCents;
-              const safeCleared = summary.expectedTotalCents === 0;
-              return (
-                <div key={summary.storeId} className="rounded border border-cyan-400/30 bg-slate-900/40 p-3">
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <div className="text-sm font-semibold text-cyan-200">{summary.storeName}</div>
-                    {safeCleared ? (
-                      <span className="rounded-full border border-emerald-300 bg-emerald-900/30 px-2 py-0.5 text-xs font-semibold text-emerald-200">
-                        SAFE CLEARED
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="grid gap-2 text-sm md:grid-cols-2">
-                    <div>
-                      <div className="text-xs uppercase text-slate-400">Expected Total</div>
-                      <div>{money(summary.expectedTotalCents)}</div>
-                      <div className="text-xs text-slate-500">Cash Sales - Expenses (since last pickup)</div>
-                    </div>
-                    <div>
-                      <div className="text-xs uppercase text-slate-400">Actual Total</div>
-                      <div>{money(summary.actualTotalCents)}</div>
-                      <div className="text-xs text-slate-500">Denomination Counts (since last pickup)</div>
-                    </div>
-                    <div className={`rounded border px-2 py-1 ${varianceTone(safeVariance)}`}>
-                      <div className="text-xs uppercase">Variance (Actual - Expected)</div>
-                      <div className="font-semibold">{money(safeVariance)}</div>
-                    </div>
-                  </div>
-                  {summary.lastPickupDate ? (
-                    <div className="mt-2 text-xs text-emerald-300">Baseline reset by full pickup on {summary.lastPickupDate}</div>
-                  ) : null}
-                  <div className="mt-3 text-xs text-slate-300">
-                    Denomination count: 1({summary.denoms["1"]}) 2({summary.denoms["2"]}) 5({summary.denoms["5"]}) 10({summary.denoms["10"]}) 20({summary.denoms["20"]}) 50({summary.denoms["50"]}) 100({summary.denoms["100"]})
-                  </div>
-                </div>
-              );
-            })}
+
+        {source === "dashboard" && (
+          <div className="banner border-cyan-500/40 bg-cyan-500/10 text-cyan-100">
+            Opened from Command Center Action Items. Matching closeout is highlighted when available.
           </div>
         )}
-      </div>
 
-      {error && <div className="rounded border border-red-400/50 bg-red-900/30 p-2 text-sm text-red-200">{error}</div>}
-      {loading ? (
-        <div className="rounded border border-cyan-400/30 bg-[#0b1220] p-4 text-sm text-slate-300">Loading safe ledger...</div>
-      ) : (
-        <TableContainer>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Store</TableHead>
-                <TableHead>Closer</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Expenses</TableHead>
-                <TableHead>Expense Note</TableHead>
-                <TableHead>Variance ($)</TableHead>
-                <TableHead>Edited By</TableHead>
-                <TableHead>Date Edited</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredRows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  className={targetCloseoutId === row.id ? "ring-1 ring-cyan-400/40" : undefined}
+        <div className="card card-pad">
+          <div className="grid gap-3 lg:grid-cols-4">
+            <DatePicker label="Start Date" value={from} onChange={setFrom} max={to} />
+            <DatePicker label="End Date" value={to} onChange={setTo} min={from} />
+            <label className="text-sm">
+              <span className="text-slate-300">Store</span>
+              <select
+                className="select mt-1"
+                value={storeId}
+                onChange={(e) => setStoreId(e.target.value)}
+              >
+                <option value="all">All Stores</option>
+                {stores.map((store) => (
+                  <option key={store.id} value={store.id}>{store.name}</option>
+                ))}
+              </select>
+            </label>
+            <div className="flex flex-col gap-1 text-sm">
+              <span className="text-slate-300">Quick View</span>
+              <div className="flex min-w-0 flex-col gap-2 md:flex-row md:items-center">
+                <select
+                  className="select w-full min-w-0 md:w-auto"
+                  value={quickViewMode}
+                  onChange={(e) => setQuickViewMode(e.target.value as "week" | "month")}
                 >
-                  <TableCell>{row.business_date}</TableCell>
-                  <TableCell>{row.store_name ?? "--"}</TableCell>
-                  <TableCell>{row.employee_name ?? "--"}</TableCell>
-                  <TableCell>{statusChip(row)}</TableCell>
-                  <TableCell>{money(row.expense_total_cents)}</TableCell>
-                  <TableCell className="max-w-64 whitespace-normal text-sm text-slate-300">
-                    {expenseSummaryByCloseoutId.get(row.id) ?? "--"}
-                  </TableCell>
-                  <TableCell>{money(row.variance_cents)}</TableCell>
-                  <TableCell>{row.edited_by_name ?? row.edited_by ?? "--"}</TableCell>
-                  <TableCell>{row.edited_at ? new Date(row.edited_at).toLocaleString() : "--"}</TableCell>
-                  <TableCell>
-                    <Button variant="secondary" onClick={() => setSelectedId(row.id)}>View</Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {filteredRows.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={10} className="text-center text-slate-400">No closeouts for selected filters.</TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      )}
+                  <option value="week">Weekly (Current Month)</option>
+                  <option value="month">Month to Date</option>
+                </select>
+                {quickViewMode === "week" && (
+                  <select
+                    className="select w-full min-w-0 md:w-auto"
+                    value={selectedWeek}
+                    onChange={(e) => setSelectedWeek(e.target.value)}
+                  >
+                    {weekRanges.map((range) => (
+                      <option key={range.value} value={range.value}>
+                        {range.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <Button className="w-full bg-purple-600 text-white hover:bg-purple-700 md:w-auto" onClick={applyQuickView}>
+                  Apply
+                </Button>
+              </div>
+            </div>
+          </div>
+          <label className="mt-3 flex items-center gap-2 text-sm text-slate-200">
+            <input type="checkbox" checked={showIssuesOnly} onChange={(e) => setShowIssuesOnly(e.target.checked)} />
+            Show Issues Only
+          </label>
+        </div>
 
+        <div className="card card-pad">
+          <div className="mb-3 text-sm font-semibold text-slate-200">Overall Store Reconciliation (Filtered Results)</div>
+          {storeReconciliationSummaries.length === 0 ? (
+            <div className="text-sm muted">No closeouts in current filter range.</div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              {storeReconciliationSummaries.map((summary) => {
+                const safeVariance = summary.actualTotalCents - summary.expectedTotalCents;
+                const safeCleared = summary.expectedTotalCents === 0;
+                return (
+                  <div key={summary.storeId} className="rounded border border-white/10 bg-black/10 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div className="text-sm font-semibold text-slate-100">{summary.storeName}</div>
+                      {safeCleared ? (
+                        <span className="rounded-full border border-emerald-300 bg-emerald-900/30 px-2 py-0.5 text-xs font-semibold text-emerald-200">
+                          SAFE CLEARED
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="grid gap-2 text-sm md:grid-cols-2">
+                      <div>
+                        <div className="text-xs uppercase text-slate-400">Expected Total</div>
+                        <div className="text-slate-100">{money(summary.expectedTotalCents)}</div>
+                        <div className="text-xs text-slate-500">Cash Sales - Expenses (since last pickup)</div>
+                      </div>
+                      <div>
+                        <div className="text-xs uppercase text-slate-400">Actual Total</div>
+                        <div className="text-slate-100">{money(summary.actualTotalCents)}</div>
+                        <div className="text-xs text-slate-500">Denomination Counts (since last pickup)</div>
+                      </div>
+                      <div className={`rounded border px-2 py-1 ${varianceTone(safeVariance)}`}>
+                        <div className="text-xs uppercase">Variance (Actual - Expected)</div>
+                        <div className="font-semibold">{money(safeVariance)}</div>
+                      </div>
+                    </div>
+                    {summary.lastPickupDate ? (
+                      <div className="mt-2 text-xs text-emerald-300">Baseline reset by full pickup on {summary.lastPickupDate}</div>
+                    ) : null}
+                    <div className="mt-3 text-xs text-slate-300">
+                      Denomination count: 1({summary.denoms["1"]}) 2({summary.denoms["2"]}) 5({summary.denoms["5"]}) 10({summary.denoms["10"]}) 20({summary.denoms["20"]}) 50({summary.denoms["50"]}) 100({summary.denoms["100"]})
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {error && <div className="banner banner-error">{error}</div>}
+        {loading ? (
+          <div className="card card-pad text-sm text-slate-300">Loading safe ledger...</div>
+        ) : (
+          <div className="card card-pad">
+            <TableContainer>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Store</TableHead>
+                    <TableHead>Closer</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Expenses</TableHead>
+                    <TableHead>Expense Note</TableHead>
+                    <TableHead>Variance ($)</TableHead>
+                    <TableHead>Edited By</TableHead>
+                    <TableHead>Date Edited</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredRows.map((row) => (
+                    <TableRow
+                      key={row.id}
+                      className={targetCloseoutId === row.id ? "ring-1 ring-cyan-400/40" : undefined}
+                    >
+                      <TableCell>{row.business_date}</TableCell>
+                      <TableCell>{row.store_name ?? "--"}</TableCell>
+                      <TableCell>{row.employee_name ?? "--"}</TableCell>
+                      <TableCell>{statusChip(row)}</TableCell>
+                      <TableCell>{money(row.expense_total_cents)}</TableCell>
+                      <TableCell className="max-w-64 whitespace-normal text-sm text-slate-300">
+                        {expenseSummaryByCloseoutId.get(row.id) ?? "--"}
+                      </TableCell>
+                      <TableCell>{money(row.variance_cents)}</TableCell>
+                      <TableCell>{row.edited_by_name ?? row.edited_by ?? "--"}</TableCell>
+                      <TableCell>{row.edited_at ? new Date(row.edited_at).toLocaleString() : "--"}</TableCell>
+                      <TableCell>
+                        <Button variant="secondary" onClick={() => setSelectedId(row.id)}>View</Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredRows.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={10} className="text-center text-slate-400">No closeouts for selected filters.</TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </div>
+        )}
       <Dialog open={Boolean(selectedId)} onOpenChange={(open) => !open && setSelectedId(null)}>
         <DialogContent>
           <DialogHeader>
@@ -1721,6 +1724,7 @@ function SafeLedgerDashboardContent() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
