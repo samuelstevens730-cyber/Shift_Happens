@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import UserAvatar, { type AvatarOptions } from "@/components/UserAvatar";
+import NotificationBell from "@/components/NotificationBell";
 import EmployeeBottomNav from "@/components/EmployeeBottomNav";
 import EmployeeShellFX from "@/components/EmployeeShellFX";
 import { Home, Clock, CalendarDays, Star, ShieldCheck } from "lucide-react";
@@ -102,26 +103,31 @@ export default function HomeHeader({
 
       {/* Desktop sidebar — hidden on mobile via CSS */}
       {!pathname?.startsWith("/admin") ? (
-        <nav className="employee-desktop-sidebar">
+        <nav className="employee-desktop-sidebar overflow-visible">
           <div className="employee-sidebar-brand">
-            <Link href="/" className="employee-sidebar-logo-wrap" aria-label="Go to home">
-              <span className="employee-header-logo-glow" aria-hidden="true" />
-              <Image
-                src="/brand/no_cap_logo.png"
-                alt="No Cap Smoke Shop"
-                width={96}
-                height={96}
-                priority
-                className="employee-header-logo"
-              />
-            </Link>
-            <div className="employee-header-copy">
-              <div className="employee-header-title">Shift Happens</div>
-              <div className="employee-header-subtitle">Let's track it.</div>
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <Link href="/" className="employee-sidebar-logo-wrap" aria-label="Go to home">
+                  <span className="employee-header-logo-glow" aria-hidden="true" />
+                  <Image
+                    src="/brand/no_cap_logo.png"
+                    alt="No Cap Smoke Shop"
+                    width={96}
+                    height={96}
+                    priority
+                    className="employee-header-logo"
+                  />
+                </Link>
+                <div className="employee-header-copy">
+                  <div className="employee-header-title">Shift Happens</div>
+                  <div className="employee-header-subtitle">Let's track it.</div>
+                </div>
+              </div>
+              {isAuthenticated ? <NotificationBell /> : null}
             </div>
           </div>
 
-          <div className="employee-sidebar-nav">
+          <div className="employee-sidebar-nav overflow-y-auto">
             {sidebarLinks.map((link) => {
               const Icon = link.icon;
               return (
@@ -188,6 +194,7 @@ export default function HomeHeader({
         <div className="employee-header-actions">
           {isAuthenticated ? (
             <>
+              <NotificationBell />
               <Link href="/avatar" className="employee-header-avatar" aria-label="Open avatar settings">
                 <UserAvatar
                   seed={avatar?.avatar_seed ?? profileId}

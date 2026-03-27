@@ -2,6 +2,14 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
+import { createNotification } from "@/lib/notifications";
+
+type CoverageRequestRow = {
+  id: string;
+  status: string;
+  coverage_store_id: string;
+  profile_id: string;
+};
 
 export async function POST(
   req: Request,
@@ -22,9 +30,9 @@ export async function POST(
 
   const { data: request, error: fetchErr } = await supabaseServer
     .from("coverage_shift_requests")
-    .select("id, status, coverage_store_id")
+    .select("id, status, coverage_store_id, profile_id")
     .eq("id", id)
-    .maybeSingle();
+    .maybeSingle<CoverageRequestRow>();
 
   if (fetchErr || !request) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -52,6 +60,22 @@ export async function POST(
   if (updateErr) {
     console.error("Coverage shift approve error:", updateErr);
     return NextResponse.json({ error: updateErr.message }, { status: 500 });
+  }
+
+  const created = await createNotification({
+    recipientProfileId: request.profile_id,
+    sourceStoreId: request.coverage_store_id,
+    notificationType: "coverage_approved",
+    priority: "high",
+    title: "Coverage request approved",
+    body: "Your coverage request has been approved.",
+    entityType: "coverage_shift_request",
+    entityId: request.id,
+    createdBy: user.id,
+  });
+
+  if (!created) {
+    console.error("Failed to create coverage approval notification.", { requestId: request.id });
   }
 
   return NextResponse.json({ ok: true });

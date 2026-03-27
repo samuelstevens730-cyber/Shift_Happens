@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
+import { createNotification } from "@/lib/notifications";
+
+type TimesheetRequestRow = {
+  id: string;
+  store_id: string;
+  requester_profile_id: string;
+};
 
 export async function POST(
   req: Request,
@@ -23,9 +30,9 @@ export async function POST(
 
   const { data: request, error: reqErr } = await supabaseServer
     .from("timesheet_change_requests")
-    .select("store_id")
+    .select("id, store_id, requester_profile_id")
     .eq("id", requestId)
-    .maybeSingle<{ store_id: string }>();
+    .maybeSingle<TimesheetRequestRow>();
 
   if (reqErr || !request) {
     return NextResponse.json({ error: "Request not found." }, { status: 404 });
@@ -41,6 +48,22 @@ export async function POST(
   });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  const created = await createNotification({
+    recipientProfileId: request.requester_profile_id,
+    sourceStoreId: request.store_id,
+    notificationType: "timesheet_approved",
+    priority: "normal",
+    title: "Timesheet correction approved",
+    body: "Your timesheet correction request has been approved.",
+    entityType: "timesheet_change_request",
+    entityId: request.id,
+    createdBy: user.id,
+  });
+
+  if (!created) {
+    console.error("Failed to create timesheet approval notification.", { requestId });
+  }
 
   return NextResponse.json({ ok: true });
 }

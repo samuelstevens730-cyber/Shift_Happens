@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import QuickSendModal from "./QuickSendModal";
+import NotificationBell from "@/components/NotificationBell";
 import UserAvatar, { type AvatarOptions } from "@/components/UserAvatar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
@@ -183,27 +184,32 @@ export default function AdminSidebar({ stores, users }: Props) {
 
   return (
     <>
-      <aside className="fixed left-0 top-0 bottom-0 w-[224px] z-30 hidden lg:flex flex-col bg-[rgba(8,10,9,0.92)] backdrop-blur-[18px] border-r border-white/7 overflow-y-auto">
+      <aside className="fixed left-0 top-0 bottom-0 w-[224px] z-30 hidden lg:flex flex-col bg-[rgba(8,10,9,0.92)] backdrop-blur-[18px] border-r border-white/7 overflow-visible">
 
         {/* Brand — logo + app name, links back to employee home */}
-        <div className="px-4 pt-5 pb-4 border-b border-white/7">
-          <Link href="/" className="flex items-center gap-3 group" aria-label="Return to home">
-            <div className="employee-sidebar-logo-wrap">
-              <span className="employee-header-logo-glow" aria-hidden="true" />
-              <Image
-                src="/brand/no_cap_logo.png"
-                alt="No Cap Smoke Shop"
-                width={36}
-                height={36}
-                priority
-                className="employee-header-logo rounded-lg"
-              />
+        <div className="sticky top-0 z-10 border-b border-white/7 bg-[rgba(8,10,9,0.96)] px-4 pt-5 pb-4 backdrop-blur-[18px]">
+          <div className="flex items-start justify-between gap-3">
+            <Link href="/" className="flex items-center gap-3 group" aria-label="Return to home">
+              <div className="employee-sidebar-logo-wrap">
+                <span className="employee-header-logo-glow" aria-hidden="true" />
+                <Image
+                  src="/brand/no_cap_logo.png"
+                  alt="No Cap Smoke Shop"
+                  width={36}
+                  height={36}
+                  priority
+                  className="employee-header-logo rounded-lg"
+                />
+              </div>
+              <div className="employee-header-copy">
+                <div className="employee-header-title">Shift Happens</div>
+                <div className="employee-header-subtitle">Admin</div>
+              </div>
+            </Link>
+            <div className="pt-0.5">
+              <NotificationBell />
             </div>
-            <div className="employee-header-copy">
-              <div className="employee-header-title">Shift Happens</div>
-              <div className="employee-header-subtitle">Admin</div>
-            </div>
-          </Link>
+          </div>
         </div>
 
         {/* Home / Command Center link */}
@@ -222,7 +228,7 @@ export default function AdminSidebar({ stores, users }: Props) {
         </div>
 
         {/* Nav groups */}
-        <nav className="flex-1 px-3 space-y-1 pb-4">
+        <nav className="flex-1 overflow-y-auto px-3 space-y-1 pb-4">
           {groups.map((group) => (
             <Collapsible
               key={group.label}

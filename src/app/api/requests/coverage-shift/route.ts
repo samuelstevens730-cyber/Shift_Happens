@@ -1,7 +1,8 @@
 // src/app/api/requests/coverage-shift/route.ts
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
-import { authenticateShiftRequest } from "@/lib/shiftAuth";
+import { authenticateShiftRequest, validateStoreAccess } from "@/lib/shiftAuth";
+import { createStoreNotification } from "@/lib/notifications";
 import { submitCoverageShiftSchema } from "@/schemas/requests";
 import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
 
@@ -69,7 +70,7 @@ export async function POST(req: Request) {
   try {
     body = await req.json();
   } catch {
-    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
   const parsed = submitCoverageShiftSchema.safeParse(body);
@@ -78,6 +79,9 @@ export async function POST(req: Request) {
   }
 
   const { coverageStoreId, shiftDate, timeIn, timeOut, notes } = parsed.data;
+  if (!validateStoreAccess(authResult.auth, coverageStoreId)) {
+    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+  }
 
   // Convert Chicago wall-clock times to UTC instants
   const timeInUtc  = chicagoToUtcIso(shiftDate, timeIn);
@@ -104,6 +108,21 @@ export async function POST(req: Request) {
   if (error) {
     console.error("Coverage shift insert error:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const created = await createStoreNotification({
+    storeId: coverageStoreId,
+    notificationType: "coverage_pending_approval",
+    priority: "high",
+    title: "Coverage request needs approval",
+    body: "An employee has requested coverage for a shift.",
+    entityType: "coverage_shift_request",
+    entityId: data.id,
+    createdBy: authResult.auth.authType === "manager" ? authResult.auth.authUserId : undefined,
+  });
+
+  if (!created) {
+    console.error("Failed to create coverage pending approval notification.", { requestId: data.id });
   }
 
   return NextResponse.json({ requestId: data.id }, { status: 201 });

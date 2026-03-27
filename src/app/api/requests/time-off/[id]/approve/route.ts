@@ -1,6 +1,13 @@
 import { NextResponse } from "next/server";
 import { supabaseServer } from "@/lib/supabaseServer";
 import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
+import { createNotification } from "@/lib/notifications";
+
+type TimeOffRequestRow = {
+  id: string;
+  store_id: string;
+  profile_id: string;
+};
 
 export async function POST(
   req: Request,
@@ -23,9 +30,9 @@ export async function POST(
 
   const { data: request, error: reqErr } = await supabaseServer
     .from("time_off_requests")
-    .select("store_id")
+    .select("id, store_id, profile_id")
     .eq("id", requestId)
-    .maybeSingle<{ store_id: string }>();
+    .maybeSingle<TimeOffRequestRow>();
 
   if (reqErr || !request) {
     return NextResponse.json({ error: "Request not found." }, { status: 404 });
@@ -41,6 +48,22 @@ export async function POST(
   });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+
+  const created = await createNotification({
+    recipientProfileId: request.profile_id,
+    sourceStoreId: request.store_id,
+    notificationType: "time_off_approved",
+    priority: "high",
+    title: "Time off approved",
+    body: "Your time off request has been approved.",
+    entityType: "time_off_request",
+    entityId: request.id,
+    createdBy: user.id,
+  });
+
+  if (!created) {
+    console.error("Failed to create time-off approval notification.", { requestId });
+  }
 
   return NextResponse.json({ blockId: data });
 }

@@ -2,14 +2,6 @@ import { NextResponse } from "next/server";
 import { authenticateShiftRequest } from "@/lib/shiftAuth";
 import { supabaseServer } from "@/lib/supabaseServer";
 
-type AssignmentRow = {
-  id: string;
-  type: "task" | "message";
-  target_profile_id: string | null;
-  acknowledged_at: string | null;
-  deleted_at: string | null;
-};
-
 export async function POST(
   req: Request,
   props: { params: Promise<{ id: string }> }
@@ -20,41 +12,49 @@ export async function POST(
   }
 
   const params = await props.params;
-  const assignmentId = params.id;
-  const auth = authResult.auth;
+  const notificationId = params.id;
+  const now = new Date().toISOString();
 
-  const { data: assignment, error: lookupError } = await supabaseServer
-    .from("shift_assignments")
-    .select("id, type, target_profile_id, acknowledged_at, deleted_at")
-    .eq("id", assignmentId)
-    .maybeSingle<AssignmentRow>();
-
-  if (lookupError) {
-    return NextResponse.json({ error: lookupError.message }, { status: 500 });
-  }
-  if (!assignment || assignment.deleted_at) {
-    return NextResponse.json({ error: "Message not found." }, { status: 404 });
-  }
-  if (assignment.type !== "message") {
-    return NextResponse.json({ error: "Not a message." }, { status: 400 });
-  }
-  if (assignment.target_profile_id !== auth.profileId) {
-    return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-  }
-  if (assignment.acknowledged_at) {
-    return NextResponse.json({ ok: true });
-  }
-
-  const { error: updateError } = await supabaseServer
-    .from("shift_assignments")
-    .update({ acknowledged_at: new Date().toISOString() })
-    .eq("id", assignmentId)
-    .is("deleted_at", null);
+  // Service-role update is explicitly scoped to the authenticated recipient profile.
+  const { data: notification, error: updateError } = await supabaseServer
+    .from("notifications")
+    .update({ read_at: now, dismissed_at: now })
+    .eq("id", notificationId)
+    .eq("recipient_profile_id", authResult.auth.profileId)
+    .is("deleted_at", null)
+    .select("id")
+    .maybeSingle();
 
   if (updateError) {
-    return NextResponse.json({ error: updateError.message }, { status: 500 });
+    console.error("[POST /api/messages/[id]/dismiss]", updateError.message);
+    return NextResponse.json({ error: "Dismiss failed" }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true });
+  if (notification) {
+    return NextResponse.json({ success: true });
+  }
+
+  // Transition fallback: older callers may still be holding legacy shift_assignment ids
+  // until all read paths move fully to notifications.
+  const { data: assignment, error: assignmentError } = await supabaseServer
+    .from("shift_assignments")
+    .update({ acknowledged_at: now })
+    .eq("id", notificationId)
+    .eq("type", "message")
+    .eq("target_profile_id", authResult.auth.profileId)
+    .is("deleted_at", null)
+    .select("id")
+    .maybeSingle();
+
+  if (assignmentError) {
+    console.error("[POST /api/messages/[id]/dismiss]", assignmentError.message);
+    return NextResponse.json({ error: "Dismiss failed" }, { status: 500 });
+  }
+
+  if (!assignment) {
+    return NextResponse.json({ error: "Message not found." }, { status: 404 });
+  }
+
+  return NextResponse.json({ success: true });
 }
 

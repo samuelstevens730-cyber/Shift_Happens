@@ -30,7 +30,7 @@ const PIN_STORE_KEY = "sh_pin_store_id";
 const PIN_PROFILE_KEY = "sh_pin_profile_id";
 
 type Store = { id: string; name: string };
-type EmployeeMessage = { id: string; content: string; created_at: string };
+type EmployeeMessage = { id: string; title: string; body: string; created_at: string };
 
 type ScheduleShift = {
   id: string;
@@ -261,48 +261,44 @@ function HomePageInner() {
     };
   }, []);
 
-  // Fetch employee messages when authenticated
+  // Fetch employee notifications when authenticated
   useEffect(() => {
     if (!hasPinAuth && !hasAdminAuth) return;
 
     let alive = true;
     async function fetchMessages() {
-      const pinToken = sessionStorage.getItem(PIN_TOKEN_KEY);
-      const client = pinToken ? createEmployeeSupabase(pinToken) : supabase;
-      let profileId = sessionStorage.getItem(PIN_PROFILE_KEY);
-      if (!profileId && hasAdminAuth) {
-        const { data: userData } = await supabase.auth.getUser();
-        if (userData.user) {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("id")
-            .eq("auth_user_id", userData.user.id)
-            .maybeSingle();
-          profileId = profile?.id ?? null;
-        }
-      }
-      if (!profileId) return;
+      const authHeader = await getAuthHeaderValue();
+      if (!authHeader) return;
 
-      const { data, error } = await client
-        .from("shift_assignments")
-        .select("id, message, created_at")
-        .eq("type", "message")
-        .eq("target_profile_id", profileId)
-        .is("deleted_at", null)
-        .is("acknowledged_at", null)
-        .order("created_at", { ascending: false })
-        .limit(1);
+      const res = await fetch("/api/notifications", {
+        headers: { Authorization: authHeader },
+        cache: "no-store",
+      });
 
       if (!alive) return;
-      if (error) {
-        console.error("Failed to load messages:", error);
+      const json = (await res.json().catch(() => null)) as
+        | {
+            notifications?: Array<{
+              id: string;
+              title: string;
+              body: string;
+              created_at: string;
+            }>;
+          }
+        | { error?: string }
+        | null;
+
+      if (!res.ok) {
+        console.error("Failed to load messages:", json && "error" in json ? json.error : res.statusText);
         return;
       }
-      if (data) {
+
+      if (json && "notifications" in json) {
         setEmployeeMessages(
-          (data ?? []).map((row) => ({
+          (json.notifications ?? []).slice(0, 1).map((row) => ({
             id: row.id,
-            content: row.message,
+            title: row.title ?? "Management Update",
+            body: row.body ?? "",
             created_at: row.created_at,
           }))
         );
@@ -504,9 +500,13 @@ function HomePageInner() {
     const authHeader = await getAuthHeaderValue();
     if (!authHeader) return;
 
-    const res = await fetch(`/api/messages/${messageId}/dismiss`, {
-      method: "POST",
-      headers: { Authorization: authHeader },
+    const res = await fetch(`/api/notifications/${messageId}`, {
+      method: "PATCH",
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ dismiss: true }),
     });
 
     if (!res.ok) {
@@ -677,8 +677,8 @@ function HomePageInner() {
             {employeeMessages.map((message) => (
               <div key={message.id} className="employee-message">
                 <div className="employee-message-copy">
-                  <div className="employee-message-kicker">Management Message</div>
-                  <p>{message.content}</p>
+                  <div className="employee-message-kicker">{message.title}</div>
+                  <p>{message.body}</p>
                   <Link href="/dashboard/requests?tab=open" className="employee-inline-link">
                     View offers
                   </Link>
