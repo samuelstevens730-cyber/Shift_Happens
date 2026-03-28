@@ -712,8 +712,9 @@ function SafeLedgerDashboardContent() {
   }
 
   function buildExpensesTsv() {
-    const lines = ["DATE\tAMOUNT\tREASON"];
+    const lines: string[] = [];
     for (const expense of filteredExpenses) {
+      if (expense.amount_cents === 0) continue;
       lines.push(
         `${expense.business_date}\t${(expense.amount_cents / 100).toFixed(2)}\t${expense.note?.trim() || expense.category.trim()}`
       );
