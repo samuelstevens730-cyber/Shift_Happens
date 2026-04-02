@@ -98,6 +98,16 @@ type PendingNotification = {
   created_at: string;
 };
 
+type ThermostatGuidance = {
+  applicable: boolean;
+  available?: boolean;
+  overnightLowF?: number;
+  nextOpenAt?: string;
+  recommendedMode?: "heat" | "cool";
+  setPointF?: number;
+  message?: string;
+};
+
 type CleaningTaskStatus = "pending" | "completed" | "skipped";
 
 type CleaningTaskRow = {
@@ -2087,6 +2097,9 @@ function ClockOutModal({
   const [rolloverMismatchNeedsConfirm, setRolloverMismatchNeedsConfirm] = useState(false);
   const [openTransactionCount, setOpenTransactionCount] = useState("");
   const [closeTransactionCount, setCloseTransactionCount] = useState("");
+  const [thermostatGuidance, setThermostatGuidance] = useState<ThermostatGuidance | null>(null);
+  const [thermostatLoading, setThermostatLoading] = useState(false);
+  const [thermostatConfirmed, setThermostatConfirmed] = useState(false);
 
   const storeKey = toStoreKey(storeName);
 
@@ -2105,10 +2118,59 @@ function ClockOutModal({
 
   const authToken = managerSession ? managerAccessToken : pinToken;
   const businessDate = getCstDateKey(plannedStartAt);
+  const thermostatEndAt = useMemo(() => {
+    const dt = toCstDateFromLocalInput(endLocal);
+    return dt ? dt.toISOString() : null;
+  }, [endLocal]);
 
   useEffect(() => {
     setEndLocal(scheduledEndLocal ?? toLocalInputValue());
   }, [scheduledEndLocal, shiftId]);
+
+  useEffect(() => {
+    let alive = true;
+    const loadThermostatGuidance = async () => {
+      if (!authToken || (shiftType !== "close" && shiftType !== "double")) {
+        if (alive) {
+          setThermostatGuidance(null);
+          setThermostatLoading(false);
+        }
+        return;
+      }
+
+      setThermostatLoading(true);
+      try {
+        const query = new URLSearchParams({ shiftId });
+        if (thermostatEndAt) {
+          query.set("endAt", thermostatEndAt);
+        }
+        const res = await fetch(`/api/end-shift/thermostat-guidance?${query.toString()}`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+        const json = (await res.json()) as ThermostatGuidance & { error?: string };
+        if (!res.ok) throw new Error(json?.error || "Failed to load thermostat guidance.");
+        if (!alive) return;
+        setThermostatGuidance(json);
+        setThermostatConfirmed(false);
+      } catch {
+        if (!alive) return;
+        setThermostatGuidance({
+          applicable: true,
+          available: false,
+          message:
+            "Before leaving, set the thermostat to 70F on cool if tomorrow will be warm, or 70F on heat if tomorrow will be cool.",
+        });
+        setThermostatConfirmed(false);
+      } finally {
+        if (alive) setThermostatLoading(false);
+      }
+    };
+
+    void loadThermostatGuidance();
+    return () => {
+      alive = false;
+    };
+  }, [authToken, shiftId, shiftType, thermostatEndAt]);
 
   useEffect(() => {
     let alive = true;
@@ -2184,6 +2246,7 @@ function ClockOutModal({
     (isOther ? true : hasValidDrawer && hasValidChange) &&
     (!salesTrackingEnabled || salesInputsValid) &&
     (!salesNeedsConfirm || salesConfirmChecked) &&
+    (!isCloseOrDouble || (!thermostatLoading && thermostatConfirmed)) &&
     (outOfThreshold ? confirm : true) &&
     (changeNot200 ? notify : true);
   if (showRolloverPrompt) {
@@ -2455,6 +2518,35 @@ function ClockOutModal({
               />
               I confirm these sales numbers are correct (this will be flagged for review)
             </label>
+          </div>
+        )}
+
+        {isCloseOrDouble && (
+          <div className="employee-panel space-y-2">
+            <div className="shift-status-title">Thermostat Reminder</div>
+            {thermostatLoading ? (
+              <div className="shift-note text-xs">Checking overnight forecast...</div>
+            ) : (
+              <>
+                <div className="shift-flash shift-flash-warn text-sm">
+                  {thermostatGuidance?.message ??
+                    "Before leaving, set the thermostat to 70F on cool if tomorrow will be warm, or 70F on heat if tomorrow will be cool."}
+                </div>
+                {thermostatGuidance?.available && thermostatGuidance.nextOpenAt && (
+                  <div className="shift-section-meta text-xs">
+                    Next open: {formatDateTime(thermostatGuidance.nextOpenAt)}
+                  </div>
+                )}
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={thermostatConfirmed}
+                    onChange={e => setThermostatConfirmed(e.target.checked)}
+                  />
+                  I adjusted the thermostat before leaving.
+                </label>
+              </>
+            )}
           </div>
         )}
 

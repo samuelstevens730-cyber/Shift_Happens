@@ -277,10 +277,11 @@ Next AM    Opener submits their version → POST /api/sales/rollover (source = "
 1. Auth validated
 2. Pending required checklist items, unacknowledged messages, incomplete tasks checked — blocked if any open
 3. Drawer counts validated (start + end required; changeover required for doubles)
-4. Variance thresholds checked; override flag required if >13 hours
-5. Sales data written to `daily_sales_records` (if sales tracking enabled)
-6. `ended_at` set on shift
-7. `fetchCurrentWeather()` called (fire-and-forget) — updates `end_weather_condition`, `end_temp_f`
+4. Close/double shifts show a thermostat reminder using overnight forecast guidance before final submit
+5. Variance thresholds checked; override flag required if >13 hours
+6. Sales data written to `daily_sales_records` (if sales tracking enabled)
+7. `ended_at` set on shift
+8. `fetchCurrentWeather()` called (fire-and-forget) — updates `end_weather_condition`, `end_temp_f`
 
 ### Notifications & Bell
 

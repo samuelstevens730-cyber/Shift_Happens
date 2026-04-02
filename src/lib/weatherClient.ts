@@ -27,10 +27,29 @@ export interface WeatherSnapshot {
   tempF: number;
 }
 
+export interface WeatherForecastPoint {
+  /** Forecast timestamp (Unix epoch seconds) */
+  unixTime: number;
+  /** Human-readable condition string */
+  condition: string;
+  /** Detailed description */
+  description: string;
+  /** Temperature in F, rounded to nearest integer */
+  tempF: number;
+}
+
 /** OWM /data/2.5/weather response shape (partial — only fields we use) */
 interface OWMCurrentResponse {
   weather: Array<{ main: string; description: string }>;
   main: { temp: number };
+}
+
+interface OWMForecastResponse {
+  list: Array<{
+    dt: number;
+    main: { temp: number };
+    weather: Array<{ main: string; description: string }>;
+  }>;
 }
 
 /**
@@ -165,6 +184,67 @@ export async function fetchHistoricalWeather(
     };
   } catch (err) {
     console.warn("[weatherClient] Historical weather fetch failed (non-fatal):", err);
+    return null;
+  }
+}
+
+/**
+ * Fetches the next 5 days of 3-hour forecast points.
+ *
+ * Free OWM plans expose the 5 day / 3 hour forecast even when hourly and daily
+ * forecast products are unavailable.
+ */
+export async function fetchForecast3Hour(
+  lat: number,
+  lon: number
+): Promise<WeatherForecastPoint[] | null> {
+  const apiKey = process.env.OPENWEATHERMAP_API_KEY;
+  if (!apiKey) {
+    console.error("[weatherClient] OPENWEATHERMAP_API_KEY is not set. Forecast fetch skipped.");
+    return null;
+  }
+
+  const url =
+    `https://api.openweathermap.org/data/2.5/forecast` +
+    `?lat=${lat}&lon=${lon}&units=imperial&appid=${apiKey}`;
+
+  try {
+    const res = await fetch(url, {
+      signal: AbortSignal.timeout(5000),
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      console.warn(
+        `[weatherClient] OWM forecast responded ${res.status} for (${lat}, ${lon}). Forecast not captured.`
+      );
+      return null;
+    }
+
+    const data: OWMForecastResponse = await res.json();
+    const points = (data.list ?? [])
+      .map((entry) => {
+        const condition = entry.weather?.[0]?.main ?? null;
+        const description = entry.weather?.[0]?.description ?? null;
+        const tempRaw = entry.main?.temp ?? null;
+        const unixTime = entry.dt ?? null;
+
+        if (condition == null || tempRaw == null || unixTime == null) {
+          return null;
+        }
+
+        return {
+          unixTime,
+          condition: toTitleCase(condition),
+          description: toTitleCase(description ?? condition),
+          tempF: Math.round(tempRaw),
+        } satisfies WeatherForecastPoint;
+      })
+      .filter((point): point is WeatherForecastPoint => point != null);
+
+    return points;
+  } catch (err) {
+    console.warn("[weatherClient] Forecast fetch failed (non-fatal):", err);
     return null;
   }
 }
