@@ -974,7 +974,7 @@ export default function ShiftPage() {
         isAuthenticated={managerSession || Boolean(pinToken)}
         profileId={profileId ?? null}
       />
-      <div className="px-4 py-4 pb-28 md:px-6">
+      <div className="px-4 py-4 md:px-6">
         <div className="shift-detail-shell">
           <div>
             <h1 className="shift-detail-title">Shift</h1>
@@ -1364,15 +1364,15 @@ export default function ShiftPage() {
                         const isCompleted = task.status === "completed";
                         const isSkipped = task.status === "skipped";
                         return (
-                          <li key={task.schedule_id} className="shift-item-row !items-start">
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <div className="shift-item-title">{task.task_name}</div>
+                          <li key={task.schedule_id} className="shift-item-row shift-item-row-cleaning">
+                            <div className="flex min-w-0 flex-col gap-2 sm:flex-1 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                              <div className="min-w-0 flex-1">
+                                <div className="shift-item-title break-words">{task.task_name}</div>
                                 <div className="shift-item-meta">
                                   {task.cleaning_shift_type.toUpperCase()} · {task.task_category ?? "cleaning"}
                                 </div>
                               </div>
-                              <div className="shift-item-status">
+                              <div className="shift-item-status self-start sm:self-auto">
                                 {isCompleted && <span className="shift-item-status-complete">Completed</span>}
                                 {isSkipped && <span className="shift-item-status-skipped">Skipped</span>}
                                 {!isCompleted && !isSkipped && <span>Pending</span>}
@@ -2344,7 +2344,7 @@ function ClockOutModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center p-4 overflow-y-auto modal-under-header">
-      <div className="shift-modal-shell space-y-3 max-h-[85vh] overflow-y-auto overscroll-contain">
+      <div className="shift-modal-shell space-y-3 pb-28 sm:pb-20">
         <h2 className="shift-status-title">End Shift</h2>
 
         <label className="shift-field-label">End time</label>
@@ -2558,7 +2558,7 @@ function ClockOutModal({
 
         {err && <div className="shift-flash shift-flash-error text-sm">{err}</div>}
 
-        <div className="flex gap-2 justify-end">
+        <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
           <button className="shift-button-secondary" onClick={onClose} disabled={saving}>
             Cancel
           </button>
