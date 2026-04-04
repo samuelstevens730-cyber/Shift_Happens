@@ -260,8 +260,9 @@ body::after {
 }
 
 .modal-under-header {
-  padding-top: 72px;
-  padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  z-index: 50;
+  padding-top: max(72px, calc(env(safe-area-inset-top, 0px) + 16px));
+  padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px));
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-y: contain;
   touch-action: pan-y;
