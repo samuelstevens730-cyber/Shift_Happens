@@ -2751,6 +2751,11 @@ body::after {
 }
 
 @media (max-width: 640px) {
+  .modal-under-header {
+    padding-top: max(104px, calc(env(safe-area-inset-top, 0px) + 28px));
+    padding-bottom: calc(144px + env(safe-area-inset-bottom, 0px));
+  }
+
   .shift-modal-shell {
     max-height: min(88vh, 88dvh);
     border-radius: 20px;
@@ -2758,6 +2763,7 @@ body::after {
   }
 
   .shift-modal-shell-form {
+    padding-bottom: calc(10rem + env(safe-area-inset-bottom, 0px));
     max-height: none;
     overflow: visible;
   }
