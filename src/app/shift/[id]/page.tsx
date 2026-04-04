@@ -2344,7 +2344,7 @@ function ClockOutModal({
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-start justify-center p-4 overflow-y-auto modal-under-header">
-      <div className="shift-modal-shell space-y-3 pb-28 sm:pb-20">
+      <div className="shift-modal-shell shift-modal-shell-form space-y-3">
         <h2 className="shift-status-title">End Shift</h2>
 
         <label className="shift-field-label">End time</label>

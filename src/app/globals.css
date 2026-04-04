@@ -262,6 +262,9 @@ body::after {
 .modal-under-header {
   padding-top: 72px;
   padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  touch-action: pan-y;
 }
 
 @media (min-width: 1024px) {
@@ -2738,6 +2741,10 @@ body::after {
     0 0 28px rgba(147, 51, 234, 0.12);
 }
 
+.shift-modal-shell-form {
+  padding-bottom: calc(7rem + env(safe-area-inset-bottom, 0px));
+}
+
 .shift-modal-shell-wide {
   max-width: 42rem;
 }
@@ -2747,6 +2754,11 @@ body::after {
     max-height: min(88vh, 88dvh);
     border-radius: 20px;
     padding: 16px;
+  }
+
+  .shift-modal-shell-form {
+    max-height: none;
+    overflow: visible;
   }
 }
 
