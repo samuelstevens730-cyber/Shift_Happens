@@ -2757,7 +2757,7 @@ body::after {
   }
 
   .shift-modal-shell {
-    max-height: min(88vh, 88dvh);
+    max-height: calc(100dvh - 220px);
     border-radius: 20px;
     padding: 16px;
   }
