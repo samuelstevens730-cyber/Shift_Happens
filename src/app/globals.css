@@ -2762,6 +2762,27 @@ body::after {
     padding: 16px;
   }
 
+  .shift-button,
+  .shift-button-secondary,
+  .shift-button-danger {
+    min-height: 40px;
+    font-size: 0.82rem;
+    padding: 0 12px;
+  }
+
+  .shift-step-panel {
+    padding: 10px;
+    gap: 10px;
+  }
+
+  .shift-kpi-box {
+    padding: 10px;
+  }
+
+  .shift-kpi-box strong {
+    font-size: 1.1rem;
+  }
+
   .shift-modal-shell-form {
     padding-bottom: calc(10rem + env(safe-area-inset-bottom, 0px));
     max-height: none;
