@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getBearerToken, getManagerStoreIds } from "@/lib/adminAuth";
+import { DEFAULT_EXPECTED_DRAWER_CENTS, isOutOfThreshold } from "@/lib/kioskRules";
 import { supabaseServer } from "@/lib/supabaseServer";
 import type { ShiftDetailResponse } from "@/types/adminShiftDetail";
 
@@ -73,7 +74,9 @@ type DailySalesRow = {
   open_shift_id: string | null;
   close_shift_id: string | null;
   open_x_report_cents: number | null;
+  open_transaction_count: number | null;
   close_sales_cents: number | null;
+  close_transaction_count: number | null;
   z_report_cents: number | null;
   closer_rollover_cents: number | null;
   opener_rollover_cents: number | null;
@@ -214,7 +217,7 @@ export async function GET(
       supabaseServer
         .from("daily_sales_records")
         .select(
-          "id,business_date,open_shift_id,close_shift_id,open_x_report_cents,close_sales_cents,z_report_cents,closer_rollover_cents,opener_rollover_cents,rollover_cents,rollover_mismatch,out_of_balance,balance_variance_cents,reviewed_at,review_note"
+          "id,business_date,open_shift_id,close_shift_id,open_x_report_cents,open_transaction_count,close_sales_cents,close_transaction_count,z_report_cents,closer_rollover_cents,opener_rollover_cents,rollover_cents,rollover_mismatch,out_of_balance,balance_variance_cents,reviewed_at,review_note"
         )
         .or(`open_shift_id.eq.${shift.id},close_shift_id.eq.${shift.id}`)
         .limit(1)
@@ -384,7 +387,9 @@ export async function GET(
             openShiftId: dailySalesRes.data.open_shift_id,
             closeShiftId: dailySalesRes.data.close_shift_id,
             openXReportCents: dailySalesRes.data.open_x_report_cents,
+            openTransactionCount: dailySalesRes.data.open_transaction_count,
             closeSalesCents: dailySalesRes.data.close_sales_cents,
+            closeTransactionCount: dailySalesRes.data.close_transaction_count,
             zReportCents: dailySalesRes.data.z_report_cents,
             closerRolloverCents: dailySalesRes.data.closer_rollover_cents,
             openerRolloverCents: dailySalesRes.data.opener_rollover_cents,
@@ -470,7 +475,8 @@ type ShiftDetailPatchBody = {
     manualCloseReviewStatus?: "approved" | "edited" | "removed" | null;
   };
   drawerCounts?: Array<{
-    id: string;
+    id?: string;
+    countType: "start" | "changeover" | "end";
     drawerCents?: number;
     changeCount?: number | null;
     confirmed?: boolean;
@@ -479,7 +485,9 @@ type ShiftDetailPatchBody = {
   }>;
   dailySalesRecord?: {
     openXReportCents?: number | null;
+    openTransactionCount?: number | null;
     closeSalesCents?: number | null;
+    closeTransactionCount?: number | null;
     zReportCents?: number | null;
     reviewNote?: string | null;
   };
@@ -513,7 +521,9 @@ export async function PATCH(
 
     const { data: shift, error: shiftErr } = await supabaseServer
       .from("shifts")
-      .select("id,store_id,last_action,schedule_shift_id,manual_closed,requires_override,override_at")
+      .select(
+        "id,store_id,last_action,schedule_shift_id,manual_closed,requires_override,override_at,shift_type,planned_start_at,started_at,ended_at"
+      )
       .eq("id", shiftId)
       .maybeSingle()
       .returns<{
@@ -524,6 +534,10 @@ export async function PATCH(
         manual_closed: boolean | null;
         requires_override: boolean;
         override_at: string | null;
+        shift_type: "open" | "close" | "double" | "other";
+        planned_start_at: string;
+        started_at: string;
+        ended_at: string | null;
       }>();
     if (shiftErr) return NextResponse.json({ error: shiftErr.message }, { status: 500 });
     if (!shift) return NextResponse.json({ error: "Shift not found." }, { status: 404 });
@@ -534,7 +548,12 @@ export async function PATCH(
       return NextResponse.json({ error: "Shift removed." }, { status: 400 });
     }
 
-    const body = (await req.json()) as ShiftDetailPatchBody;
+    let body: ShiftDetailPatchBody;
+    try {
+      body = (await req.json()) as ShiftDetailPatchBody;
+    } catch {
+      return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
+    }
     const reason = (body.reason ?? "").trim();
     if (!reason) {
       return NextResponse.json({ error: "Edit reason is required." }, { status: 400 });
@@ -583,21 +602,96 @@ export async function PATCH(
     }
 
     if (hasDrawer && body.drawerCounts) {
+      const { data: existingDrawerCounts, error: drawerFetchErr } = await supabaseServer
+        .from("shift_drawer_counts")
+        .select("id,count_type,counted_at")
+        .eq("shift_id", shiftId)
+        .returns<Array<{ id: string; count_type: "start" | "changeover" | "end"; counted_at: string }>>();
+      if (drawerFetchErr) {
+        return NextResponse.json({ error: drawerFetchErr.message }, { status: 500 });
+      }
+
+      const { data: storeRow, error: storeErr } = await supabaseServer
+        .from("stores")
+        .select("expected_drawer_cents")
+        .eq("id", shift.store_id)
+        .maybeSingle<{ expected_drawer_cents: number | null }>();
+      if (storeErr) {
+        return NextResponse.json({ error: storeErr.message }, { status: 500 });
+      }
+
+      const expectedDrawerCents =
+        storeRow?.expected_drawer_cents ?? DEFAULT_EXPECTED_DRAWER_CENTS;
+      const existingByType = new Map(
+        (existingDrawerCounts ?? []).map((row) => [row.count_type, row] as const)
+      );
+
       for (const row of body.drawerCounts) {
-        if (!row.id) continue;
-        const drawerUpdate: Record<string, number | string | boolean | null> = {};
-        if (row.drawerCents !== undefined) drawerUpdate.drawer_cents = row.drawerCents;
+        const existingRow = existingByType.get(row.countType);
+        if (!existingRow && row.drawerCents == null) continue;
+
+        if (
+          row.drawerCents !== undefined &&
+          (!Number.isInteger(row.drawerCents) || row.drawerCents < 0)
+        ) {
+          return NextResponse.json(
+            {
+              error: `${row.countType} drawer count must be a non-negative integer cents value.`,
+            },
+            { status: 400 }
+          );
+        }
+        if (
+          row.changeCount !== undefined &&
+          row.changeCount !== null &&
+          (!Number.isInteger(row.changeCount) || row.changeCount < 0)
+        ) {
+          return NextResponse.json(
+            {
+              error: `${row.countType} change count must be null or a non-negative integer cents value.`,
+            },
+            { status: 400 }
+          );
+        }
+
+        const drawerUpdate: Record<string, number | string | boolean | null> = {
+          shift_id: shiftId,
+          count_type: row.countType,
+        };
+        if (row.drawerCents !== undefined) {
+          drawerUpdate.drawer_cents = row.drawerCents;
+          drawerUpdate.out_of_threshold = isOutOfThreshold(
+            row.drawerCents,
+            expectedDrawerCents
+          );
+          drawerUpdate.count_missing = false;
+        }
         if (row.changeCount !== undefined) drawerUpdate.change_count = row.changeCount;
         if (row.confirmed !== undefined) drawerUpdate.confirmed = row.confirmed;
-        if (row.notifiedManager !== undefined) drawerUpdate.notified_manager = row.notifiedManager;
+        if (row.notifiedManager !== undefined) {
+          drawerUpdate.notified_manager = row.notifiedManager;
+        }
         if (row.note !== undefined) drawerUpdate.note = row.note;
-        if (Object.keys(drawerUpdate).length === 0) continue;
+        if (!existingRow) {
+          drawerUpdate.counted_at =
+            row.countType === "start"
+              ? body.shift?.startedAt ??
+                shift.started_at ??
+                body.shift?.plannedStartAt ??
+                shift.planned_start_at ??
+                new Date().toISOString()
+              : row.countType === "end"
+                ? body.shift?.endedAt ?? shift.ended_at ?? new Date().toISOString()
+                : body.shift?.startedAt ??
+                  shift.started_at ??
+                  body.shift?.plannedStartAt ??
+                  shift.planned_start_at ??
+                  new Date().toISOString();
+        }
 
         const { error: drawerErr } = await supabaseServer
           .from("shift_drawer_counts")
-          .update(drawerUpdate)
-          .eq("id", row.id)
-          .eq("shift_id", shiftId);
+          .upsert(drawerUpdate, { onConflict: "shift_id,count_type" });
         if (drawerErr) {
           return NextResponse.json({ error: drawerErr.message }, { status: 500 });
         }
@@ -605,6 +699,29 @@ export async function PATCH(
     }
 
     if (hasDailySales && body.dailySalesRecord) {
+      if (
+        body.dailySalesRecord.openTransactionCount !== undefined &&
+        body.dailySalesRecord.openTransactionCount !== null &&
+        (!Number.isInteger(body.dailySalesRecord.openTransactionCount) ||
+          body.dailySalesRecord.openTransactionCount <= 0)
+      ) {
+        return NextResponse.json(
+          { error: "Open transaction count must be a positive integer." },
+          { status: 400 }
+        );
+      }
+      if (
+        body.dailySalesRecord.closeTransactionCount !== undefined &&
+        body.dailySalesRecord.closeTransactionCount !== null &&
+        (!Number.isInteger(body.dailySalesRecord.closeTransactionCount) ||
+          body.dailySalesRecord.closeTransactionCount <= 0)
+      ) {
+        return NextResponse.json(
+          { error: "Close transaction count must be a positive integer." },
+          { status: 400 }
+        );
+      }
+
       const { data: dailyRecord, error: dailyFetchErr } = await supabaseServer
         .from("daily_sales_records")
         .select("id")
@@ -614,28 +731,76 @@ export async function PATCH(
         .returns<{ id: string }>();
       if (dailyFetchErr) return NextResponse.json({ error: dailyFetchErr.message }, { status: 500 });
 
-      if (dailyRecord?.id) {
-        const dailyUpdate: Record<string, number | string | null> = {
-          updated_at: new Date().toISOString(),
-        };
-        if (body.dailySalesRecord.openXReportCents !== undefined) {
-          dailyUpdate.open_x_report_cents = body.dailySalesRecord.openXReportCents;
-        }
-        if (body.dailySalesRecord.closeSalesCents !== undefined) {
-          dailyUpdate.close_sales_cents = body.dailySalesRecord.closeSalesCents;
-        }
-        if (body.dailySalesRecord.zReportCents !== undefined) {
-          dailyUpdate.z_report_cents = body.dailySalesRecord.zReportCents;
-        }
-        if (body.dailySalesRecord.reviewNote !== undefined) {
-          dailyUpdate.review_note = body.dailySalesRecord.reviewNote;
-        }
+      const dailyUpdate: Record<string, number | string | null> = {
+        updated_at: new Date().toISOString(),
+      };
+      if (body.dailySalesRecord.openXReportCents !== undefined) {
+        dailyUpdate.open_x_report_cents = body.dailySalesRecord.openXReportCents;
+      }
+      if (body.dailySalesRecord.openTransactionCount !== undefined) {
+        dailyUpdate.open_transaction_count = body.dailySalesRecord.openTransactionCount;
+      }
+      if (body.dailySalesRecord.closeSalesCents !== undefined) {
+        dailyUpdate.close_sales_cents = body.dailySalesRecord.closeSalesCents;
+      }
+      if (body.dailySalesRecord.closeTransactionCount !== undefined) {
+        dailyUpdate.close_transaction_count = body.dailySalesRecord.closeTransactionCount;
+      }
+      if (body.dailySalesRecord.zReportCents !== undefined) {
+        dailyUpdate.z_report_cents = body.dailySalesRecord.zReportCents;
+      }
+      if (body.dailySalesRecord.reviewNote !== undefined) {
+        dailyUpdate.review_note = body.dailySalesRecord.reviewNote;
+      }
 
+      if (dailyRecord?.id) {
         const { error: dailyUpdateErr } = await supabaseServer
           .from("daily_sales_records")
           .update(dailyUpdate)
           .eq("id", dailyRecord.id);
         if (dailyUpdateErr) return NextResponse.json({ error: dailyUpdateErr.message }, { status: 500 });
+      } else {
+        const shiftDateSource =
+          body.shift?.plannedStartAt ??
+          shift.planned_start_at ??
+          body.shift?.startedAt ??
+          shift.started_at;
+        const shiftDate = shiftDateSource ? new Date(shiftDateSource) : null;
+        if (!shiftDate || Number.isNaN(shiftDate.getTime())) {
+          return NextResponse.json(
+            { error: "Cannot create daily sales data without a valid shift date." },
+            { status: 400 }
+          );
+        }
+
+        const businessDate = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Chicago",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).format(shiftDate);
+        const effectiveShiftType = body.shift?.shiftType ?? shift.shift_type;
+        if (effectiveShiftType === "other") {
+          return NextResponse.json(
+            { error: "Other shifts do not support daily sales edits." },
+            { status: 400 }
+          );
+        }
+
+        const dailyInsert: Record<string, number | string | null> = {
+          store_id: shift.store_id,
+          business_date: businessDate,
+          ...dailyUpdate,
+        };
+        if (effectiveShiftType === "open") dailyInsert.open_shift_id = shiftId;
+        if (effectiveShiftType === "close" || effectiveShiftType === "double") {
+          dailyInsert.close_shift_id = shiftId;
+        }
+
+        const { error: dailyInsertErr } = await supabaseServer
+          .from("daily_sales_records")
+          .upsert(dailyInsert, { onConflict: "store_id,business_date" });
+        if (dailyInsertErr) return NextResponse.json({ error: dailyInsertErr.message }, { status: 500 });
       }
     }
 

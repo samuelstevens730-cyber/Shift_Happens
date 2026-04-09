@@ -10,6 +10,22 @@ import { Separator } from "@/components/ui/separator";
 import { supabase } from "@/lib/supabaseClient";
 import type { ShiftDetailResponse } from "@/types/adminShiftDetail";
 
+type DrawerEditorRow = {
+  id: string;
+  countType: "start" | "changeover" | "end";
+  countedAt: string | null;
+  drawerCents: number | null;
+  changeCount: number | null;
+  confirmed: boolean;
+  notifiedManager: boolean;
+  note: string | null;
+  outOfThreshold: boolean;
+  reviewedAt: string | null;
+  reviewedBy: string | null;
+  countMissing: boolean;
+  exists: boolean;
+};
+
 function fmtDateTime(value: string | null | undefined): string {
   if (!value) return "--";
   const dt = new Date(value);
@@ -60,6 +76,58 @@ function durationLabel(startedAt: string, endedAt: string | null): string {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
   return `${hours}h ${String(mins).padStart(2, "0")}m`;
+}
+
+function requiredDrawerTypes(
+  shiftType: ShiftDetailResponse["shift"]["shiftType"]
+): Array<"start" | "changeover" | "end"> {
+  if (shiftType === "double") return ["start", "changeover", "end"];
+  if (shiftType === "open" || shiftType === "close") return ["start", "end"];
+  return [];
+}
+
+function buildDrawerEditorRows(data: ShiftDetailResponse): DrawerEditorRow[] {
+  const existing = new Map(data.drawerCounts.map((row) => [row.countType, row] as const));
+  return requiredDrawerTypes(data.shift.shiftType).map((countType) => {
+    const row = existing.get(countType);
+    if (row) {
+      return {
+        ...row,
+        exists: true,
+      };
+    }
+
+    return {
+      id: `missing-${countType}`,
+      countType,
+      countedAt: null,
+      drawerCents: null,
+      changeCount: null,
+      confirmed: false,
+      notifiedManager: false,
+      note: null,
+      outOfThreshold: false,
+      reviewedAt: null,
+      reviewedBy: null,
+      countMissing: true,
+      exists: false,
+    };
+  });
+}
+
+function createDrawerFormState(rows: DrawerEditorRow[]) {
+  return Object.fromEntries(
+    rows.map((row) => [
+      row.countType,
+      {
+        drawerCents: row.drawerCents == null ? "" : String(row.drawerCents),
+        changeCount: row.changeCount == null ? "" : String(row.changeCount),
+        note: row.note ?? "",
+        confirmed: row.confirmed,
+        notifiedManager: row.notifiedManager,
+      },
+    ])
+  );
 }
 
 const pdfStyles = StyleSheet.create({
@@ -148,7 +216,9 @@ export default function AdminShiftDetailPage() {
   >({});
   const [dailySalesForm, setDailySalesForm] = useState({
     openXReportCents: "",
+    openTransactionCount: "",
     closeSalesCents: "",
+    closeTransactionCount: "",
     zReportCents: "",
     reviewNote: "",
   });
@@ -215,29 +285,24 @@ export default function AdminShiftDetailPage() {
           shiftNote: payload.shift.shiftNote ?? "",
           manualCloseReviewStatus: payload.shift.manualClosedReviewStatus ?? "",
         });
-        setDrawerForm(
-          Object.fromEntries(
-            payload.drawerCounts.map((row) => [
-              row.id,
-              {
-                drawerCents: String(row.drawerCents),
-                changeCount: row.changeCount == null ? "" : String(row.changeCount),
-                note: row.note ?? "",
-                confirmed: row.confirmed,
-                notifiedManager: row.notifiedManager,
-              },
-            ])
-          )
-        );
+        setDrawerForm(createDrawerFormState(buildDrawerEditorRows(payload)));
         setDailySalesForm({
           openXReportCents:
             payload.dailySalesRecord?.openXReportCents == null
               ? ""
               : String(payload.dailySalesRecord.openXReportCents),
+          openTransactionCount:
+            payload.dailySalesRecord?.openTransactionCount == null
+              ? ""
+              : String(payload.dailySalesRecord.openTransactionCount),
           closeSalesCents:
             payload.dailySalesRecord?.closeSalesCents == null
               ? ""
               : String(payload.dailySalesRecord.closeSalesCents),
+          closeTransactionCount:
+            payload.dailySalesRecord?.closeTransactionCount == null
+              ? ""
+              : String(payload.dailySalesRecord.closeTransactionCount),
           zReportCents:
             payload.dailySalesRecord?.zReportCents == null
               ? ""
@@ -277,6 +342,30 @@ export default function AdminShiftDetailPage() {
       shiftNote: payload.shift.shiftNote ?? "",
       manualCloseReviewStatus: payload.shift.manualClosedReviewStatus ?? "",
     });
+    setDrawerForm(createDrawerFormState(buildDrawerEditorRows(payload)));
+    setDailySalesForm({
+      openXReportCents:
+        payload.dailySalesRecord?.openXReportCents == null
+          ? ""
+          : String(payload.dailySalesRecord.openXReportCents),
+      openTransactionCount:
+        payload.dailySalesRecord?.openTransactionCount == null
+          ? ""
+          : String(payload.dailySalesRecord.openTransactionCount),
+      closeSalesCents:
+        payload.dailySalesRecord?.closeSalesCents == null
+          ? ""
+          : String(payload.dailySalesRecord.closeSalesCents),
+      closeTransactionCount:
+        payload.dailySalesRecord?.closeTransactionCount == null
+          ? ""
+          : String(payload.dailySalesRecord.closeTransactionCount),
+      zReportCents:
+        payload.dailySalesRecord?.zReportCents == null
+          ? ""
+          : String(payload.dailySalesRecord.zReportCents),
+      reviewNote: payload.dailySalesRecord?.reviewNote ?? "",
+    });
   }
 
   async function saveAllChanges() {
@@ -295,18 +384,26 @@ export default function AdminShiftDetailPage() {
         return;
       }
 
-      const drawerPayload = data.drawerCounts.map((row) => {
-        const formRow = drawerForm[row.id];
-        return {
-          id: row.id,
-          drawerCents: formRow ? Number(formRow.drawerCents || 0) : row.drawerCents,
-          changeCount:
-            formRow && formRow.changeCount !== "" ? Number(formRow.changeCount) : null,
-          note: formRow?.note ?? null,
-          confirmed: formRow?.confirmed ?? row.confirmed,
-          notifiedManager: formRow?.notifiedManager ?? row.notifiedManager,
-        };
-      });
+      const drawerPayload = buildDrawerEditorRows(data)
+        .map((row) => {
+          const formRow = drawerForm[row.countType];
+          const hasDrawerValue = Boolean(formRow && formRow.drawerCents !== "");
+          if (!row.exists && !hasDrawerValue) return null;
+          return {
+            id: row.exists ? row.id : undefined,
+            countType: row.countType,
+            drawerCents:
+              formRow && formRow.drawerCents !== ""
+                ? Number(formRow.drawerCents)
+                : row.drawerCents ?? undefined,
+            changeCount:
+              formRow && formRow.changeCount !== "" ? Number(formRow.changeCount) : null,
+            note: formRow?.note ?? row.note ?? null,
+            confirmed: formRow?.confirmed ?? row.confirmed,
+            notifiedManager: formRow?.notifiedManager ?? row.notifiedManager,
+          };
+        })
+        .filter((row): row is NonNullable<typeof row> => row !== null);
 
       const body = {
         reason: editReason.trim(),
@@ -331,10 +428,18 @@ export default function AdminShiftDetailPage() {
             dailySalesForm.openXReportCents === ""
               ? null
               : Number(dailySalesForm.openXReportCents),
+          openTransactionCount:
+            dailySalesForm.openTransactionCount === ""
+              ? null
+              : Number(dailySalesForm.openTransactionCount),
           closeSalesCents:
             dailySalesForm.closeSalesCents === ""
               ? null
               : Number(dailySalesForm.closeSalesCents),
+          closeTransactionCount:
+            dailySalesForm.closeTransactionCount === ""
+              ? null
+              : Number(dailySalesForm.closeTransactionCount),
           zReportCents:
             dailySalesForm.zReportCents === ""
               ? null
@@ -542,6 +647,11 @@ export default function AdminShiftDetailPage() {
   }
 
   const shiftState = data.shift.endedAt ? "Closed" : "Open";
+  const drawerRows = buildDrawerEditorRows(data);
+  const showOpenTransactionCount =
+    data.shift.shiftType === "open" || data.shift.shiftType === "double";
+  const showCloseTransactionCount =
+    data.shift.shiftType === "close" || data.shift.shiftType === "double";
   const openOrCloseSchedule = data.scheduleShift
     ? `${data.scheduleShift.shiftDate} ${data.scheduleShift.scheduledStart} - ${data.scheduleShift.scheduledEnd}`
     : "--";
@@ -760,29 +870,36 @@ export default function AdminShiftDetailPage() {
                 <CardDescription>Start/changeover/end counts tied to this shift.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
-                {data.drawerCounts.length === 0 ? (
-                  <div className="text-sm text-slate-400">No drawer counts recorded.</div>
+                {drawerRows.length === 0 ? (
+                  <div className="text-sm text-slate-400">No drawer counts required for this shift type.</div>
                 ) : (
                   <div className="space-y-2">
-                    {data.drawerCounts.map((row) => (
+                    {drawerRows.map((row) => (
                       <div key={row.id} className="rounded border border-white/8 bg-[var(--card)] p-2 text-sm">
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="font-medium text-slate-100">{row.countType.toUpperCase()} Count</div>
-                          <div className="text-xs text-slate-400">{fmtDateTime(row.countedAt)}</div>
+                          <div className="text-xs text-slate-400">
+                            {row.exists ? fmtDateTime(row.countedAt) : "Missing record"}
+                          </div>
                         </div>
+                        {!row.exists ? (
+                          <div className="mt-1 text-xs text-amber-300">
+                            Enter a drawer count to create the missing {row.countType} record.
+                          </div>
+                        ) : null}
                         <div className="mt-1 grid grid-cols-1 gap-1 sm:grid-cols-2">
                           <label>
                             Drawer (cents)
                             <input
                               type="number"
                               className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
-                              value={drawerForm[row.id]?.drawerCents ?? ""}
+                              value={drawerForm[row.countType]?.drawerCents ?? ""}
                               onChange={(e) =>
                                 setDrawerForm((prev) => ({
                                   ...prev,
-                                  [row.id]: {
-                                    ...(prev[row.id] ?? {
-                                      drawerCents: String(row.drawerCents),
+                                  [row.countType]: {
+                                    ...(prev[row.countType] ?? {
+                                      drawerCents: row.drawerCents == null ? "" : String(row.drawerCents),
                                       changeCount: row.changeCount == null ? "" : String(row.changeCount),
                                       note: row.note ?? "",
                                       confirmed: row.confirmed,
@@ -799,13 +916,13 @@ export default function AdminShiftDetailPage() {
                             <input
                               type="number"
                               className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
-                              value={drawerForm[row.id]?.changeCount ?? ""}
+                              value={drawerForm[row.countType]?.changeCount ?? ""}
                               onChange={(e) =>
                                 setDrawerForm((prev) => ({
                                   ...prev,
-                                  [row.id]: {
-                                    ...(prev[row.id] ?? {
-                                      drawerCents: String(row.drawerCents),
+                                  [row.countType]: {
+                                    ...(prev[row.countType] ?? {
+                                      drawerCents: row.drawerCents == null ? "" : String(row.drawerCents),
                                       changeCount: row.changeCount == null ? "" : String(row.changeCount),
                                       note: row.note ?? "",
                                       confirmed: row.confirmed,
@@ -820,13 +937,13 @@ export default function AdminShiftDetailPage() {
                           <label className="flex items-center gap-2">
                             <input
                               type="checkbox"
-                              checked={drawerForm[row.id]?.confirmed ?? row.confirmed}
+                              checked={drawerForm[row.countType]?.confirmed ?? row.confirmed}
                               onChange={(e) =>
                                 setDrawerForm((prev) => ({
                                   ...prev,
-                                  [row.id]: {
-                                    ...(prev[row.id] ?? {
-                                      drawerCents: String(row.drawerCents),
+                                  [row.countType]: {
+                                    ...(prev[row.countType] ?? {
+                                      drawerCents: row.drawerCents == null ? "" : String(row.drawerCents),
                                       changeCount: row.changeCount == null ? "" : String(row.changeCount),
                                       note: row.note ?? "",
                                       confirmed: row.confirmed,
@@ -842,13 +959,13 @@ export default function AdminShiftDetailPage() {
                           <label className="flex items-center gap-2">
                             <input
                               type="checkbox"
-                              checked={drawerForm[row.id]?.notifiedManager ?? row.notifiedManager}
+                              checked={drawerForm[row.countType]?.notifiedManager ?? row.notifiedManager}
                               onChange={(e) =>
                                 setDrawerForm((prev) => ({
                                   ...prev,
-                                  [row.id]: {
-                                    ...(prev[row.id] ?? {
-                                      drawerCents: String(row.drawerCents),
+                                  [row.countType]: {
+                                    ...(prev[row.countType] ?? {
+                                      drawerCents: row.drawerCents == null ? "" : String(row.drawerCents),
                                       changeCount: row.changeCount == null ? "" : String(row.changeCount),
                                       note: row.note ?? "",
                                       confirmed: row.confirmed,
@@ -867,13 +984,13 @@ export default function AdminShiftDetailPage() {
                           Note:
                           <input
                             className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
-                            value={drawerForm[row.id]?.note ?? ""}
+                            value={drawerForm[row.countType]?.note ?? ""}
                             onChange={(e) =>
                               setDrawerForm((prev) => ({
                                 ...prev,
-                                [row.id]: {
-                                  ...(prev[row.id] ?? {
-                                    drawerCents: String(row.drawerCents),
+                                [row.countType]: {
+                                  ...(prev[row.countType] ?? {
+                                    drawerCents: row.drawerCents == null ? "" : String(row.drawerCents),
                                     changeCount: row.changeCount == null ? "" : String(row.changeCount),
                                     note: row.note ?? "",
                                     confirmed: row.confirmed,
@@ -915,6 +1032,22 @@ export default function AdminShiftDetailPage() {
                       }
                     />
                   </label>
+                  {showOpenTransactionCount ? (
+                    <label>
+                      Open Transaction Count:
+                      <input
+                        type="number"
+                        className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
+                        value={dailySalesForm.openTransactionCount}
+                        onChange={(e) =>
+                          setDailySalesForm((prev) => ({
+                            ...prev,
+                            openTransactionCount: e.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  ) : null}
                   <label>
                     Close Sales (cents):
                     <input
@@ -929,6 +1062,22 @@ export default function AdminShiftDetailPage() {
                       }
                     />
                   </label>
+                  {showCloseTransactionCount ? (
+                    <label>
+                      Close Transaction Count:
+                      <input
+                        type="number"
+                        className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
+                        value={dailySalesForm.closeTransactionCount}
+                        onChange={(e) =>
+                          setDailySalesForm((prev) => ({
+                            ...prev,
+                            closeTransactionCount: e.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  ) : null}
                   <label>
                     Z Report (cents):
                     <input

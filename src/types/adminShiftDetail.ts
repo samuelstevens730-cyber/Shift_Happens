@@ -69,7 +69,9 @@ export type ShiftDetailResponse = {
     openShiftId: string | null;
     closeShiftId: string | null;
     openXReportCents: number | null;
+    openTransactionCount: number | null;
     closeSalesCents: number | null;
+    closeTransactionCount: number | null;
     zReportCents: number | null;
     closerRolloverCents: number | null;
     openerRolloverCents: number | null;
