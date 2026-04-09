@@ -566,41 +566,6 @@ export async function PATCH(
       return NextResponse.json({ error: "No fields to update." }, { status: 400 });
     }
 
-    if (hasShift && body.shift) {
-      const shiftUpdate: Record<string, string | null> = {
-        last_action: "edited",
-        last_action_by: user.id,
-      };
-
-      if (body.shift.shiftType) shiftUpdate.shift_type = body.shift.shiftType;
-      if (body.shift.plannedStartAt) shiftUpdate.planned_start_at = body.shift.plannedStartAt;
-      if (body.shift.startedAt) shiftUpdate.started_at = body.shift.startedAt;
-      if (body.shift.endedAt !== undefined) shiftUpdate.ended_at = body.shift.endedAt;
-      if (body.shift.shiftNote !== undefined) shiftUpdate.shift_note = body.shift.shiftNote;
-
-      if (body.shift.manualCloseReviewStatus !== undefined) {
-        shiftUpdate.manual_closed_review_status = body.shift.manualCloseReviewStatus;
-        shiftUpdate.manual_closed_reviewed_at = new Date().toISOString();
-        shiftUpdate.manual_closed_reviewed_by = user.id;
-      } else if (shift.manual_closed) {
-        shiftUpdate.manual_closed_review_status = "edited";
-        shiftUpdate.manual_closed_reviewed_at = new Date().toISOString();
-        shiftUpdate.manual_closed_reviewed_by = user.id;
-      }
-
-      if (body.shift.endedAt && shift.schedule_shift_id) {
-        shiftUpdate.shift_source = "scheduled";
-      }
-
-      const { error: updateShiftErr } = await supabaseServer
-        .from("shifts")
-        .update(shiftUpdate)
-        .eq("id", shiftId);
-      if (updateShiftErr) {
-        return NextResponse.json({ error: updateShiftErr.message }, { status: 500 });
-      }
-    }
-
     if (hasDrawer && body.drawerCounts) {
       const { data: existingDrawerCounts, error: drawerFetchErr } = await supabaseServer
         .from("shift_drawer_counts")
@@ -695,6 +660,41 @@ export async function PATCH(
         if (drawerErr) {
           return NextResponse.json({ error: drawerErr.message }, { status: 500 });
         }
+      }
+    }
+
+    if (hasShift && body.shift) {
+      const shiftUpdate: Record<string, string | null> = {
+        last_action: "edited",
+        last_action_by: user.id,
+      };
+
+      if (body.shift.shiftType) shiftUpdate.shift_type = body.shift.shiftType;
+      if (body.shift.plannedStartAt) shiftUpdate.planned_start_at = body.shift.plannedStartAt;
+      if (body.shift.startedAt) shiftUpdate.started_at = body.shift.startedAt;
+      if (body.shift.endedAt !== undefined) shiftUpdate.ended_at = body.shift.endedAt;
+      if (body.shift.shiftNote !== undefined) shiftUpdate.shift_note = body.shift.shiftNote;
+
+      if (body.shift.manualCloseReviewStatus !== undefined) {
+        shiftUpdate.manual_closed_review_status = body.shift.manualCloseReviewStatus;
+        shiftUpdate.manual_closed_reviewed_at = new Date().toISOString();
+        shiftUpdate.manual_closed_reviewed_by = user.id;
+      } else if (shift.manual_closed) {
+        shiftUpdate.manual_closed_review_status = "edited";
+        shiftUpdate.manual_closed_reviewed_at = new Date().toISOString();
+        shiftUpdate.manual_closed_reviewed_by = user.id;
+      }
+
+      if (body.shift.endedAt && shift.schedule_shift_id) {
+        shiftUpdate.shift_source = "scheduled";
+      }
+
+      const { error: updateShiftErr } = await supabaseServer
+        .from("shifts")
+        .update(shiftUpdate)
+        .eq("id", shiftId);
+      if (updateShiftErr) {
+        return NextResponse.json({ error: updateShiftErr.message }, { status: 500 });
       }
     }
 

@@ -58,6 +58,21 @@ function fmtMoney(cents: number | null | undefined): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
 
+function centsToMoneyInput(cents: number | null | undefined): string {
+  if (cents == null) return "";
+  return (cents / 100).toFixed(2);
+}
+
+function moneyInputToCents(value: string): number | null {
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  const normalized = trimmed.replace(/[$,\s]/g, "");
+  if (!/^\d+(\.\d{0,2})?$/.test(normalized)) return null;
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.round(parsed * 100);
+}
+
 function toLocalInputValueFromISO(value: string | null | undefined): string {
   if (!value) return "";
   const d = new Date(value);
@@ -120,8 +135,8 @@ function createDrawerFormState(rows: DrawerEditorRow[]) {
     rows.map((row) => [
       row.countType,
       {
-        drawerCents: row.drawerCents == null ? "" : String(row.drawerCents),
-        changeCount: row.changeCount == null ? "" : String(row.changeCount),
+        drawerCents: centsToMoneyInput(row.drawerCents),
+        changeCount: centsToMoneyInput(row.changeCount),
         note: row.note ?? "",
         confirmed: row.confirmed,
         notifiedManager: row.notifiedManager,
@@ -290,7 +305,7 @@ export default function AdminShiftDetailPage() {
           openXReportCents:
             payload.dailySalesRecord?.openXReportCents == null
               ? ""
-              : String(payload.dailySalesRecord.openXReportCents),
+              : centsToMoneyInput(payload.dailySalesRecord.openXReportCents),
           openTransactionCount:
             payload.dailySalesRecord?.openTransactionCount == null
               ? ""
@@ -298,7 +313,7 @@ export default function AdminShiftDetailPage() {
           closeSalesCents:
             payload.dailySalesRecord?.closeSalesCents == null
               ? ""
-              : String(payload.dailySalesRecord.closeSalesCents),
+              : centsToMoneyInput(payload.dailySalesRecord.closeSalesCents),
           closeTransactionCount:
             payload.dailySalesRecord?.closeTransactionCount == null
               ? ""
@@ -306,7 +321,7 @@ export default function AdminShiftDetailPage() {
           zReportCents:
             payload.dailySalesRecord?.zReportCents == null
               ? ""
-              : String(payload.dailySalesRecord.zReportCents),
+              : centsToMoneyInput(payload.dailySalesRecord.zReportCents),
           reviewNote: payload.dailySalesRecord?.reviewNote ?? "",
         });
       } catch (e: unknown) {
@@ -347,7 +362,7 @@ export default function AdminShiftDetailPage() {
       openXReportCents:
         payload.dailySalesRecord?.openXReportCents == null
           ? ""
-          : String(payload.dailySalesRecord.openXReportCents),
+          : centsToMoneyInput(payload.dailySalesRecord.openXReportCents),
       openTransactionCount:
         payload.dailySalesRecord?.openTransactionCount == null
           ? ""
@@ -355,7 +370,7 @@ export default function AdminShiftDetailPage() {
       closeSalesCents:
         payload.dailySalesRecord?.closeSalesCents == null
           ? ""
-          : String(payload.dailySalesRecord.closeSalesCents),
+          : centsToMoneyInput(payload.dailySalesRecord.closeSalesCents),
       closeTransactionCount:
         payload.dailySalesRecord?.closeTransactionCount == null
           ? ""
@@ -363,7 +378,7 @@ export default function AdminShiftDetailPage() {
       zReportCents:
         payload.dailySalesRecord?.zReportCents == null
           ? ""
-          : String(payload.dailySalesRecord.zReportCents),
+          : centsToMoneyInput(payload.dailySalesRecord.zReportCents),
       reviewNote: payload.dailySalesRecord?.reviewNote ?? "",
     });
   }
@@ -389,15 +404,19 @@ export default function AdminShiftDetailPage() {
           const formRow = drawerForm[row.countType];
           const hasDrawerValue = Boolean(formRow && formRow.drawerCents !== "");
           if (!row.exists && !hasDrawerValue) return null;
+          const drawerCents =
+            formRow && formRow.drawerCents !== ""
+              ? moneyInputToCents(formRow.drawerCents)
+              : row.drawerCents;
+          const changeCountCents =
+            formRow && formRow.changeCount !== ""
+              ? moneyInputToCents(formRow.changeCount)
+              : null;
           return {
             id: row.exists ? row.id : undefined,
             countType: row.countType,
-            drawerCents:
-              formRow && formRow.drawerCents !== ""
-                ? Number(formRow.drawerCents)
-                : row.drawerCents ?? undefined,
-            changeCount:
-              formRow && formRow.changeCount !== "" ? Number(formRow.changeCount) : null,
+            drawerCents: drawerCents ?? undefined,
+            changeCount: changeCountCents,
             note: formRow?.note ?? row.note ?? null,
             confirmed: formRow?.confirmed ?? row.confirmed,
             notifiedManager: formRow?.notifiedManager ?? row.notifiedManager,
@@ -427,7 +446,7 @@ export default function AdminShiftDetailPage() {
           openXReportCents:
             dailySalesForm.openXReportCents === ""
               ? null
-              : Number(dailySalesForm.openXReportCents),
+              : moneyInputToCents(dailySalesForm.openXReportCents),
           openTransactionCount:
             dailySalesForm.openTransactionCount === ""
               ? null
@@ -435,7 +454,7 @@ export default function AdminShiftDetailPage() {
           closeSalesCents:
             dailySalesForm.closeSalesCents === ""
               ? null
-              : Number(dailySalesForm.closeSalesCents),
+              : moneyInputToCents(dailySalesForm.closeSalesCents),
           closeTransactionCount:
             dailySalesForm.closeTransactionCount === ""
               ? null
@@ -443,12 +462,23 @@ export default function AdminShiftDetailPage() {
           zReportCents:
             dailySalesForm.zReportCents === ""
               ? null
-              : Number(dailySalesForm.zReportCents),
+              : moneyInputToCents(dailySalesForm.zReportCents),
           reviewNote: dailySalesForm.reviewNote.trim() || null,
         },
       };
       if (!body.reason) {
         throw new Error("Edit reason is required.");
+      }
+      if (
+        drawerPayload.some((row) => row.drawerCents === undefined) ||
+        drawerPayload.some(
+          (row) => row.changeCount === null && drawerForm[row.countType]?.changeCount !== ""
+        ) ||
+        (dailySalesForm.openXReportCents !== "" && body.dailySalesRecord.openXReportCents === null) ||
+        (dailySalesForm.closeSalesCents !== "" && body.dailySalesRecord.closeSalesCents === null) ||
+        (dailySalesForm.zReportCents !== "" && body.dailySalesRecord.zReportCents === null)
+      ) {
+        throw new Error("Enter valid dollar amounts with up to 2 decimal places.");
       }
 
       const res = await fetch(`/api/admin/shifts/${shiftId}/detail`, {
@@ -889,9 +919,10 @@ export default function AdminShiftDetailPage() {
                         ) : null}
                         <div className="mt-1 grid grid-cols-1 gap-1 sm:grid-cols-2">
                           <label>
-                            Drawer (cents)
+                            Drawer ($)
                             <input
                               type="number"
+                              step="0.01"
                               className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                               value={drawerForm[row.countType]?.drawerCents ?? ""}
                               onChange={(e) =>
@@ -899,8 +930,8 @@ export default function AdminShiftDetailPage() {
                                   ...prev,
                                   [row.countType]: {
                                     ...(prev[row.countType] ?? {
-                                      drawerCents: row.drawerCents == null ? "" : String(row.drawerCents),
-                                      changeCount: row.changeCount == null ? "" : String(row.changeCount),
+                                      drawerCents: centsToMoneyInput(row.drawerCents),
+                                      changeCount: centsToMoneyInput(row.changeCount),
                                       note: row.note ?? "",
                                       confirmed: row.confirmed,
                                       notifiedManager: row.notifiedManager,
@@ -912,9 +943,10 @@ export default function AdminShiftDetailPage() {
                             />
                           </label>
                           <label>
-                            Change Count (cents)
+                            Change Count ($)
                             <input
                               type="number"
+                              step="0.01"
                               className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                               value={drawerForm[row.countType]?.changeCount ?? ""}
                               onChange={(e) =>
@@ -922,8 +954,8 @@ export default function AdminShiftDetailPage() {
                                   ...prev,
                                   [row.countType]: {
                                     ...(prev[row.countType] ?? {
-                                      drawerCents: row.drawerCents == null ? "" : String(row.drawerCents),
-                                      changeCount: row.changeCount == null ? "" : String(row.changeCount),
+                                      drawerCents: centsToMoneyInput(row.drawerCents),
+                                      changeCount: centsToMoneyInput(row.changeCount),
                                       note: row.note ?? "",
                                       confirmed: row.confirmed,
                                       notifiedManager: row.notifiedManager,
@@ -943,8 +975,8 @@ export default function AdminShiftDetailPage() {
                                   ...prev,
                                   [row.countType]: {
                                     ...(prev[row.countType] ?? {
-                                      drawerCents: row.drawerCents == null ? "" : String(row.drawerCents),
-                                      changeCount: row.changeCount == null ? "" : String(row.changeCount),
+                                      drawerCents: centsToMoneyInput(row.drawerCents),
+                                      changeCount: centsToMoneyInput(row.changeCount),
                                       note: row.note ?? "",
                                       confirmed: row.confirmed,
                                       notifiedManager: row.notifiedManager,
@@ -965,8 +997,8 @@ export default function AdminShiftDetailPage() {
                                   ...prev,
                                   [row.countType]: {
                                     ...(prev[row.countType] ?? {
-                                      drawerCents: row.drawerCents == null ? "" : String(row.drawerCents),
-                                      changeCount: row.changeCount == null ? "" : String(row.changeCount),
+                                      drawerCents: centsToMoneyInput(row.drawerCents),
+                                      changeCount: centsToMoneyInput(row.changeCount),
                                       note: row.note ?? "",
                                       confirmed: row.confirmed,
                                       notifiedManager: row.notifiedManager,
@@ -990,8 +1022,8 @@ export default function AdminShiftDetailPage() {
                                 ...prev,
                                 [row.countType]: {
                                   ...(prev[row.countType] ?? {
-                                    drawerCents: row.drawerCents == null ? "" : String(row.drawerCents),
-                                    changeCount: row.changeCount == null ? "" : String(row.changeCount),
+                                    drawerCents: centsToMoneyInput(row.drawerCents),
+                                    changeCount: centsToMoneyInput(row.changeCount),
                                     note: row.note ?? "",
                                     confirmed: row.confirmed,
                                     notifiedManager: row.notifiedManager,
@@ -1019,9 +1051,10 @@ export default function AdminShiftDetailPage() {
                 <div>Business Date: <b>{fmtDate(data.dailySalesRecord?.businessDate)}</b></div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <label>
-                    Open X Report (cents):
+                    Open X Report ($):
                     <input
                       type="number"
+                      step="0.01"
                       className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                       value={dailySalesForm.openXReportCents}
                       onChange={(e) =>
@@ -1049,9 +1082,10 @@ export default function AdminShiftDetailPage() {
                     </label>
                   ) : null}
                   <label>
-                    Close Sales (cents):
+                    Close Sales ($):
                     <input
                       type="number"
+                      step="0.01"
                       className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                       value={dailySalesForm.closeSalesCents}
                       onChange={(e) =>
@@ -1079,9 +1113,10 @@ export default function AdminShiftDetailPage() {
                     </label>
                   ) : null}
                   <label>
-                    Z Report (cents):
+                    Z Report ($):
                     <input
                       type="number"
+                      step="0.01"
                       className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
                       value={dailySalesForm.zReportCents}
                       onChange={(e) =>
