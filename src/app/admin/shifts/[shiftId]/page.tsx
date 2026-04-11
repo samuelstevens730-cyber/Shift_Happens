@@ -235,6 +235,8 @@ export default function AdminShiftDetailPage() {
     closeSalesCents: "",
     closeTransactionCount: "",
     zReportCents: "",
+    closerRolloverCents: "",
+    openerRolloverCents: "",
     reviewNote: "",
   });
   const [editReason, setEditReason] = useState("");
@@ -322,6 +324,14 @@ export default function AdminShiftDetailPage() {
             payload.dailySalesRecord?.zReportCents == null
               ? ""
               : centsToMoneyInput(payload.dailySalesRecord.zReportCents),
+          closerRolloverCents:
+            payload.dailySalesRecord?.closerRolloverCents == null
+              ? ""
+              : centsToMoneyInput(payload.dailySalesRecord.closerRolloverCents),
+          openerRolloverCents:
+            payload.dailySalesRecord?.openerRolloverCents == null
+              ? ""
+              : centsToMoneyInput(payload.dailySalesRecord.openerRolloverCents),
           reviewNote: payload.dailySalesRecord?.reviewNote ?? "",
         });
       } catch (e: unknown) {
@@ -379,6 +389,14 @@ export default function AdminShiftDetailPage() {
         payload.dailySalesRecord?.zReportCents == null
           ? ""
           : centsToMoneyInput(payload.dailySalesRecord.zReportCents),
+      closerRolloverCents:
+        payload.dailySalesRecord?.closerRolloverCents == null
+          ? ""
+          : centsToMoneyInput(payload.dailySalesRecord.closerRolloverCents),
+      openerRolloverCents:
+        payload.dailySalesRecord?.openerRolloverCents == null
+          ? ""
+          : centsToMoneyInput(payload.dailySalesRecord.openerRolloverCents),
       reviewNote: payload.dailySalesRecord?.reviewNote ?? "",
     });
   }
@@ -463,6 +481,14 @@ export default function AdminShiftDetailPage() {
             dailySalesForm.zReportCents === ""
               ? null
               : moneyInputToCents(dailySalesForm.zReportCents),
+          closerRolloverCents:
+            dailySalesForm.closerRolloverCents === ""
+              ? null
+              : moneyInputToCents(dailySalesForm.closerRolloverCents),
+          openerRolloverCents:
+            dailySalesForm.openerRolloverCents === ""
+              ? null
+              : moneyInputToCents(dailySalesForm.openerRolloverCents),
           reviewNote: dailySalesForm.reviewNote.trim() || null,
         },
       };
@@ -476,7 +502,11 @@ export default function AdminShiftDetailPage() {
         ) ||
         (dailySalesForm.openXReportCents !== "" && body.dailySalesRecord.openXReportCents === null) ||
         (dailySalesForm.closeSalesCents !== "" && body.dailySalesRecord.closeSalesCents === null) ||
-        (dailySalesForm.zReportCents !== "" && body.dailySalesRecord.zReportCents === null)
+        (dailySalesForm.zReportCents !== "" && body.dailySalesRecord.zReportCents === null) ||
+        (dailySalesForm.closerRolloverCents !== "" &&
+          body.dailySalesRecord.closerRolloverCents === null) ||
+        (dailySalesForm.openerRolloverCents !== "" &&
+          body.dailySalesRecord.openerRolloverCents === null)
       ) {
         throw new Error("Enter valid dollar amounts with up to 2 decimal places.");
       }
@@ -682,6 +712,14 @@ export default function AdminShiftDetailPage() {
     data.shift.shiftType === "open" || data.shift.shiftType === "double";
   const showCloseTransactionCount =
     data.shift.shiftType === "close" || data.shift.shiftType === "double";
+  const showRolloverFields =
+    data.shift.shiftType === "close" ||
+    data.shift.shiftType === "double" ||
+    Boolean(data.dailySalesRecord?.rolloverMismatch) ||
+    data.dailySalesRecord?.closerRolloverCents != null ||
+    data.dailySalesRecord?.openerRolloverCents != null ||
+    data.dailySalesRecord?.rolloverCents != null ||
+    Boolean(data.dailySalesRecord?.closeShiftId === data.shift.id);
   const openOrCloseSchedule = data.scheduleShift
     ? `${data.scheduleShift.shiftDate} ${data.scheduleShift.scheduledStart} - ${data.scheduleShift.scheduledEnd}`
     : "--";
@@ -1127,7 +1165,51 @@ export default function AdminShiftDetailPage() {
                       }
                     />
                   </label>
+                  {showRolloverFields ? (
+                    <label>
+                      Closer Rollover ($):
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
+                        value={dailySalesForm.closerRolloverCents}
+                        onChange={(e) =>
+                          setDailySalesForm((prev) => ({
+                            ...prev,
+                            closerRolloverCents: e.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  ) : null}
+                  {showRolloverFields ? (
+                    <label>
+                      Opener Rollover ($):
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
+                        value={dailySalesForm.openerRolloverCents}
+                        onChange={(e) =>
+                          setDailySalesForm((prev) => ({
+                            ...prev,
+                            openerRolloverCents: e.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  ) : null}
                   <div>Balance Variance: <b>{fmtMoney(data.dailySalesRecord?.balanceVarianceCents)}</b></div>
+                  {showRolloverFields ? (
+                    <div>
+                      Resolved Rollover: <b>{fmtMoney(data.dailySalesRecord?.rolloverCents)}</b>
+                    </div>
+                  ) : null}
+                  {showRolloverFields ? (
+                    <div>
+                      Rollover Mismatch: <b>{data.dailySalesRecord?.rolloverMismatch ? "Yes" : "No"}</b>
+                    </div>
+                  ) : null}
                 </div>
                 <label className="block">
                   Daily Sales Review Note:

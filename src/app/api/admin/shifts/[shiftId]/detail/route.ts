@@ -489,6 +489,8 @@ type ShiftDetailPatchBody = {
     closeSalesCents?: number | null;
     closeTransactionCount?: number | null;
     zReportCents?: number | null;
+    closerRolloverCents?: number | null;
+    openerRolloverCents?: number | null;
     reviewNote?: string | null;
   };
   /** Override action: approve a long-shift override or clear the flag entirely. */
@@ -724,11 +726,17 @@ export async function PATCH(
 
       const { data: dailyRecord, error: dailyFetchErr } = await supabaseServer
         .from("daily_sales_records")
-        .select("id")
+        .select("id,business_date,closer_rollover_cents,opener_rollover_cents,is_rollover_night")
         .or(`open_shift_id.eq.${shiftId},close_shift_id.eq.${shiftId}`)
         .limit(1)
         .maybeSingle()
-        .returns<{ id: string }>();
+        .returns<{
+          id: string;
+          business_date: string;
+          closer_rollover_cents: number | null;
+          opener_rollover_cents: number | null;
+          is_rollover_night: boolean | null;
+        }>();
       if (dailyFetchErr) return NextResponse.json({ error: dailyFetchErr.message }, { status: 500 });
 
       const dailyUpdate: Record<string, number | string | null> = {
@@ -749,9 +757,21 @@ export async function PATCH(
       if (body.dailySalesRecord.zReportCents !== undefined) {
         dailyUpdate.z_report_cents = body.dailySalesRecord.zReportCents;
       }
+      if (body.dailySalesRecord.closerRolloverCents !== undefined) {
+        dailyUpdate.closer_rollover_cents = body.dailySalesRecord.closerRolloverCents;
+      }
+      if (body.dailySalesRecord.openerRolloverCents !== undefined) {
+        dailyUpdate.opener_rollover_cents = body.dailySalesRecord.openerRolloverCents;
+      }
       if (body.dailySalesRecord.reviewNote !== undefined) {
         dailyUpdate.review_note = body.dailySalesRecord.reviewNote;
       }
+
+      let targetDailyRecordId = dailyRecord?.id ?? null;
+      let targetBusinessDate = dailyRecord?.business_date ?? null;
+      let currentCloserRollover = dailyRecord?.closer_rollover_cents ?? null;
+      let currentOpenerRollover = dailyRecord?.opener_rollover_cents ?? null;
+      let currentIsRolloverNight = Boolean(dailyRecord?.is_rollover_night);
 
       if (dailyRecord?.id) {
         const { error: dailyUpdateErr } = await supabaseServer
@@ -797,10 +817,96 @@ export async function PATCH(
           dailyInsert.close_shift_id = shiftId;
         }
 
-        const { error: dailyInsertErr } = await supabaseServer
+        const { data: dailyInsertRow, error: dailyInsertErr } = await supabaseServer
           .from("daily_sales_records")
-          .upsert(dailyInsert, { onConflict: "store_id,business_date" });
+          .upsert(dailyInsert, { onConflict: "store_id,business_date" })
+          .select("id,business_date,closer_rollover_cents,opener_rollover_cents,is_rollover_night")
+          .maybeSingle<{
+            id: string;
+            business_date: string;
+            closer_rollover_cents: number | null;
+            opener_rollover_cents: number | null;
+            is_rollover_night: boolean | null;
+          }>();
         if (dailyInsertErr) return NextResponse.json({ error: dailyInsertErr.message }, { status: 500 });
+        targetDailyRecordId = dailyInsertRow?.id ?? null;
+        targetBusinessDate = dailyInsertRow?.business_date ?? businessDate;
+        currentCloserRollover = dailyInsertRow?.closer_rollover_cents ?? null;
+        currentOpenerRollover = dailyInsertRow?.opener_rollover_cents ?? null;
+        currentIsRolloverNight = Boolean(dailyInsertRow?.is_rollover_night);
+      }
+
+      const finalCloserRollover =
+        body.dailySalesRecord.closerRolloverCents !== undefined
+          ? body.dailySalesRecord.closerRolloverCents
+          : currentCloserRollover;
+      const finalOpenerRollover =
+        body.dailySalesRecord.openerRolloverCents !== undefined
+          ? body.dailySalesRecord.openerRolloverCents
+          : currentOpenerRollover;
+      const rolloverEdited =
+        body.dailySalesRecord.closerRolloverCents !== undefined ||
+        body.dailySalesRecord.openerRolloverCents !== undefined;
+
+      if (rolloverEdited && targetDailyRecordId && targetBusinessDate) {
+        const nextBusinessDate = new Date(`${targetBusinessDate}T00:00:00.000Z`);
+        nextBusinessDate.setUTCDate(nextBusinessDate.getUTCDate() + 1);
+        const nextBusinessDateKey = nextBusinessDate.toISOString().slice(0, 10);
+
+        const rolloverResolutionUpdate: Record<string, number | boolean | null> = {
+          is_rollover_night:
+            body.dailySalesRecord.closerRolloverCents !== undefined
+              ? finalCloserRollover != null
+              : currentIsRolloverNight,
+        };
+
+        if (finalCloserRollover != null && finalOpenerRollover != null) {
+          if (finalCloserRollover === finalOpenerRollover) {
+            rolloverResolutionUpdate.rollover_cents = finalCloserRollover;
+            rolloverResolutionUpdate.rollover_mismatch = false;
+            rolloverResolutionUpdate.rollover_needs_review = false;
+            rolloverResolutionUpdate.rollover_to_next_cents = finalCloserRollover;
+          } else {
+            rolloverResolutionUpdate.rollover_cents = null;
+            rolloverResolutionUpdate.rollover_mismatch = true;
+            rolloverResolutionUpdate.rollover_needs_review = true;
+            rolloverResolutionUpdate.rollover_to_next_cents = 0;
+          }
+        } else {
+          rolloverResolutionUpdate.rollover_cents = null;
+          rolloverResolutionUpdate.rollover_mismatch = false;
+          rolloverResolutionUpdate.rollover_needs_review = true;
+          rolloverResolutionUpdate.rollover_to_next_cents = 0;
+        }
+
+        const { error: rolloverResolveErr } = await supabaseServer
+          .from("daily_sales_records")
+          .update(rolloverResolutionUpdate)
+          .eq("id", targetDailyRecordId);
+        if (rolloverResolveErr) {
+          return NextResponse.json({ error: rolloverResolveErr.message }, { status: 500 });
+        }
+
+        const nextDayCarry =
+          finalCloserRollover != null &&
+          finalOpenerRollover != null &&
+          finalCloserRollover === finalOpenerRollover
+            ? finalCloserRollover
+            : 0;
+
+        const { error: nextDayErr } = await supabaseServer
+          .from("daily_sales_records")
+          .upsert(
+            {
+              store_id: shift.store_id,
+              business_date: nextBusinessDateKey,
+              rollover_from_previous_cents: nextDayCarry,
+            },
+            { onConflict: "store_id,business_date" }
+          );
+        if (nextDayErr) {
+          return NextResponse.json({ error: nextDayErr.message }, { status: 500 });
+        }
       }
     }
 
