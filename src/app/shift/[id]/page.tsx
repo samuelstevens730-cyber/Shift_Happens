@@ -136,6 +136,10 @@ type SalesContextState = {
   closeEntryExists: boolean;
 };
 
+const BASKET_WARNING_LOW_CENTS = 1500;
+const BASKET_WARNING_HIGH_CENTS = 8000;
+const LOW_CALCULATED_SALES_WARNING_CENTS = 1000;
+
 function toLocalInputValue(d = new Date()) {
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
@@ -230,6 +234,35 @@ function parseMoneyInputToCents(value: string): number | null {
   return Math.round(n * 100);
 }
 
+function dollarsFromCents(cents: number | null | undefined) {
+  if (cents == null) return "--";
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+function computeAverageTicketCents(salesCents: number | null, transactionCount: number | null) {
+  if (salesCents == null || transactionCount == null || transactionCount <= 0) return null;
+  return Math.round(salesCents / transactionCount);
+}
+
+function basketWarningMessage(avgTicketCents: number | null) {
+  if (avgTicketCents == null) return null;
+  if (avgTicketCents <= BASKET_WARNING_LOW_CENTS) {
+    return "This basket size looks unusually low. Enter only the transactions rung during your shift, not the whole day.";
+  }
+  if (avgTicketCents >= BASKET_WARNING_HIGH_CENTS) {
+    return "This basket size looks unusually high. Double-check that your sales total and transaction count are both for this shift only.";
+  }
+  return null;
+}
+
+function calculatedSalesWarningMessage(salesCents: number | null) {
+  if (salesCents == null || salesCents <= 0) return null;
+  if (salesCents < LOW_CALCULATED_SALES_WARNING_CENTS) {
+    return "These calculated shift sales look unusually low. Double-check that Prior X is the report printed at the beginning of your shift.";
+  }
+  return null;
+}
+
 function SkeletonCard() {
   return (
     <div className="card animate-pulse bg-slate-800/50 border-slate-700 h-32 w-full rounded-2xl">
@@ -288,6 +321,13 @@ export default function ShiftPage() {
   const [closeCheckpointSaving, setCloseCheckpointSaving] = useState(false);
   const [closeCheckpointErr, setCloseCheckpointErr] = useState<string | null>(null);
   const [safeCloseoutFlash, setSafeCloseoutFlash] = useState<{ tone: "success" | "warn" | "error"; message: string } | null>(null);
+  const closeCheckpointPriorXCents = parseMoneyInputToCents(closeCheckpointPriorX);
+  const closeCheckpointZCents = parseMoneyInputToCents(closeCheckpointZ);
+  const effectiveCloseCheckpointPriorXCents = closeCheckpointPriorXCents ?? (state?.shift.shift_type === "double" ? 0 : null);
+  const closeCheckpointComputedSalesCents =
+    closeCheckpointZCents != null && effectiveCloseCheckpointPriorXCents != null
+      ? closeCheckpointZCents - effectiveCloseCheckpointPriorXCents
+      : null;
 
   // Auth state for API calls
   const [pinToken, setPinToken] = useState<string | null>(null);
@@ -924,6 +964,18 @@ export default function ShiftPage() {
       setCloseCheckpointErr("Enter valid non-negative sales amounts.");
       return;
     }
+    if (effectivePriorXCents >= zCents) {
+      setCloseCheckpointErr(
+        "This field is for the X report printed at the beginning of your shift. Please check and make sure you're entering the correct report. If you are not sure how to proceed, call a manager."
+      );
+      return;
+    }
+    if (zCents - effectivePriorXCents <= 0) {
+      setCloseCheckpointErr(
+        "Calculated sales for your shift must be greater than $0.00. Please re-check the Prior X and 10pm Z report values."
+      );
+      return;
+    }
     setCloseCheckpointSaving(true);
     try {
       const res = await fetch("/api/sales/close-checkpoint", {
@@ -1265,10 +1317,16 @@ export default function ShiftPage() {
             <div className="shift-status-panel shift-status-panel-cyan space-y-3">
               <div className="shift-status-title">10:00 PM Sales Checkpoint</div>
               <div className="shift-status-copy">
-                Enter Z report and prior X at 10pm. Midnight rollover is entered at clock out.
+                Step 1 of 2. At 10pm, run the Z report that closes the business day and enter the Prior X from the start of your closing shift.
+              </div>
+              <div className="shift-section-meta text-xs">
+                Step 2 of 2 happens at midnight: after the register resets, keep using the new worksheet and enter the fresh-cycle X report total before leaving.
               </div>
               <div className="space-y-2">
                 <label className="shift-field-label">Prior X Report ($)</label>
+                <div className="shift-section-meta text-xs">
+                  Enter the X report printed at the beginning of your closing shift. For a double shift, use the mid-shift X report from changeover.
+                </div>
                 <input
                   className="shift-field-input"
                   inputMode="decimal"
@@ -1276,7 +1334,10 @@ export default function ShiftPage() {
                   onChange={e => setCloseCheckpointPriorX(e.target.value)}
                   placeholder="0.00"
                 />
-                <label className="shift-field-label">Z Report Total ($)</label>
+                <label className="shift-field-label">10pm Z Report Total ($)</label>
+                <div className="shift-section-meta text-xs">
+                  This is the Z report that closes out the business day at 10pm.
+                </div>
                 <input
                   className="shift-field-input"
                   inputMode="decimal"
@@ -1284,6 +1345,28 @@ export default function ShiftPage() {
                   onChange={e => setCloseCheckpointZ(e.target.value)}
                   placeholder="0.00"
                 />
+                {closeCheckpointComputedSalesCents != null && (
+                  <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+                    <div className="font-semibold">Calculated Sales For Your Shift</div>
+                    <div className="mt-1 text-xs text-emerald-50/90">
+                      10pm Z Report {dollarsFromCents(closeCheckpointZCents)} - Prior X {dollarsFromCents(effectiveCloseCheckpointPriorXCents)}
+                    </div>
+                    <div className="mt-1 text-base font-semibold">{dollarsFromCents(closeCheckpointComputedSalesCents)}</div>
+                  </div>
+                )}
+                {calculatedSalesWarningMessage(closeCheckpointComputedSalesCents) && (
+                  <div className="shift-flash shift-flash-warn text-sm">
+                    {calculatedSalesWarningMessage(closeCheckpointComputedSalesCents)}
+                  </div>
+                )}
+                {closeCheckpointZCents != null &&
+                  effectiveCloseCheckpointPriorXCents != null &&
+                  effectiveCloseCheckpointPriorXCents >= closeCheckpointZCents && (
+                    <div className="shift-flash shift-flash-warn text-sm">
+                      This field is for the X report printed at the beginning of your shift. Please check and make
+                      sure you're entering the correct report. If you are not sure how to proceed, call a manager.
+                    </div>
+                  )}
               </div>
 
               {closeCheckpointNeedsConfirm && (
@@ -1889,6 +1972,8 @@ function ChangeoverPanel({
   const parsedTxnCount = txnCount !== "" && /^\d+$/.test(txnCount.trim()) && Number(txnCount) > 0
     ? Number(txnCount)
     : null;
+  const averageTicketCents = computeAverageTicketCents(xReportCents, parsedTxnCount);
+  const averageTicketWarning = basketWarningMessage(averageTicketCents);
   const hasValidChange = Number.isFinite(changeCents) && changeCents >= 0;
   const changeNot200 = hasValidChange && changeCents !== 20000;
   const msg = Number.isFinite(cents) ? thresholdMessage(cents, expectedCents) : null;
@@ -1949,6 +2034,20 @@ function ChangeoverPanel({
         value={txnCount}
         onChange={e => setTxnCount(e.target.value)}
       />
+      <div className="shift-section-meta text-xs">
+        Enter only the sales rung during the AM half of this double shift.
+      </div>
+      {xReportCents != null && (
+        <div className="shift-flash shift-flash-success text-sm">
+          Calculated Sales For Your Shift: {dollarsFromCents(xReportCents)}
+          {averageTicketCents != null ? ` (${dollarsFromCents(averageTicketCents)} avg sale)` : ""}
+        </div>
+      )}
+      {averageTicketWarning && (
+        <div className="shift-flash shift-flash-warn text-sm">
+          {averageTicketWarning}
+        </div>
+      )}
 
       {msg && (
         <div className="shift-flash shift-flash-warn text-sm">
@@ -2086,6 +2185,7 @@ function ClockOutModal({
   const [salesXReport, setSalesXReport] = useState("");
   const [salesZReport, setSalesZReport] = useState("");
   const [salesPriorX, setSalesPriorX] = useState("");
+  const [salesPriorXSourceLabel, setSalesPriorXSourceLabel] = useState<string | null>(null);
   const [salesNeedsConfirm, setSalesNeedsConfirm] = useState(false);
   const [salesConfirmChecked, setSalesConfirmChecked] = useState(false);
   const [salesVarianceCents, setSalesVarianceCents] = useState<number | null>(null);
@@ -2194,6 +2294,13 @@ function ClockOutModal({
         const prior = json?.priorXReportCents;
         if (typeof prior === "number" && Number.isFinite(prior)) {
           setSalesPriorX((prior / 100).toFixed(2));
+          setSalesPriorXSourceLabel(
+            shiftType === "double"
+              ? "Prefilled from your mid-shift changeover X report. You can still edit it if needed."
+              : "Prefilled from the X report at the beginning of your shift. You can still edit it if needed."
+          );
+        } else {
+          setSalesPriorXSourceLabel(null);
         }
       } catch (e: unknown) {
         if (!alive) return;
@@ -2211,6 +2318,14 @@ function ClockOutModal({
   const salesXReportCents = parseMoneyInputToCents(salesXReport);
   const salesZReportCents = parseMoneyInputToCents(salesZReport);
   const salesPriorXCents = parseMoneyInputToCents(salesPriorX);
+  const openTxnCountValue =
+    openTransactionCount.trim() !== "" && /^\d+$/.test(openTransactionCount.trim()) && Number(openTransactionCount) > 0
+      ? Number(openTransactionCount)
+      : null;
+  const closeTxnCountValue =
+    closeTransactionCount.trim() !== "" && /^\d+$/.test(closeTransactionCount.trim()) && Number(closeTransactionCount) > 0
+      ? Number(closeTransactionCount)
+      : null;
   const requiresSalesForOpen = salesTrackingEnabled && shiftType === "open";
   const useSafeCloseoutSalesForClose = Boolean(
     safeCloseoutEnabled &&
@@ -2224,6 +2339,25 @@ function ClockOutModal({
     !isRolloverNight &&
     !useSafeCloseoutSalesForClose;
   const isCloseOrDouble = shiftType === "close" || shiftType === "double";
+  const effectiveSalesPriorXCents = salesPriorXCents ?? (shiftType === "double" ? 0 : null);
+  const safeCloseoutSalesCents = safeCloseoutContext?.closeout
+    ? safeCloseoutContext.closeout.cash_sales_cents + safeCloseoutContext.closeout.card_sales_cents
+    : null;
+  const calculatedOpenShiftSalesCents = requiresSalesForOpen ? salesXReportCents : null;
+  const calculatedCloseShiftSalesCents = isCloseOrDouble
+    ? (isRolloverNight
+        ? null
+        : useSafeCloseoutSalesForClose
+          ? safeCloseoutSalesCents
+          : salesZReportCents != null && effectiveSalesPriorXCents != null
+            ? salesZReportCents - effectiveSalesPriorXCents
+            : null)
+    : null;
+  const openAverageTicketCents = computeAverageTicketCents(calculatedOpenShiftSalesCents, openTxnCountValue);
+  const closeAverageTicketCents = computeAverageTicketCents(calculatedCloseShiftSalesCents, closeTxnCountValue);
+  const openBasketWarning = basketWarningMessage(openAverageTicketCents);
+  const closeBasketWarning = basketWarningMessage(closeAverageTicketCents);
+  const closeCalculatedSalesWarning = calculatedSalesWarningMessage(calculatedCloseShiftSalesCents);
   const salesInputsValid =
     (!requiresSalesForOpen || salesXReportCents != null) &&
     (!requiresSalesForClose || (
@@ -2256,7 +2390,7 @@ function ClockOutModal({
         <div className="shift-modal-shell space-y-3">
           <h2 className="shift-status-title">Midnight X Report</h2>
           <div className="shift-section-meta">
-            Enter the midnight X report total before you leave. This is compared against the opener's blind entry tomorrow morning.
+            After the 10pm Z report resets the register, keep using the new worksheet. At midnight, print the X report from that fresh cycle and enter that total here. This is compared against the opener's blind entry tomorrow morning.
           </div>
           <label className="shift-field-label">Midnight X Report Total ($)</label>
           <input
@@ -2413,7 +2547,7 @@ function ClockOutModal({
 
             {shiftType === "open" && (
               <>
-                <label className="shift-field-label">X Report Total ($)</label>
+                <label className="shift-field-label">End-of-Shift X Report Total ($)</label>
                 <input
                   className="shift-field-input"
                   inputMode="decimal"
@@ -2421,7 +2555,19 @@ function ClockOutModal({
                   onChange={e => setSalesXReport(e.target.value)}
                   placeholder="0.00"
                 />
-                <label className="shift-field-label">Transaction count <span className="text-gray-500 normal-case tracking-normal">(# of sales rung — optional)</span></label>
+                {calculatedOpenShiftSalesCents != null && (
+                  <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+                    <div className="font-semibold">Calculated Sales For Your Shift</div>
+                    <div className="mt-1 text-xs text-emerald-50/90">
+                      End-of-shift X Report {dollarsFromCents(calculatedOpenShiftSalesCents)}
+                    </div>
+                    <div className="mt-1 text-base font-semibold">{dollarsFromCents(calculatedOpenShiftSalesCents)}</div>
+                    {openAverageTicketCents != null && (
+                      <div className="mt-1 text-xs text-emerald-50/90">Average sale: {dollarsFromCents(openAverageTicketCents)}</div>
+                    )}
+                  </div>
+                )}
+                <label className="shift-field-label">Transaction count <span className="text-gray-500 normal-case tracking-normal">(# of sales rung — required for clock-out)</span></label>
                 <input
                   className="shift-field-input"
                   inputMode="numeric"
@@ -2429,12 +2575,23 @@ function ClockOutModal({
                   onChange={e => setOpenTransactionCount(e.target.value)}
                   placeholder="e.g. 42"
                 />
+                <div className="shift-section-meta text-xs">
+                  Enter only the sales rung during your opening shift, not the whole day.
+                </div>
+                {openBasketWarning && (
+                  <div className="shift-flash shift-flash-warn text-sm">
+                    {openBasketWarning}
+                  </div>
+                )}
               </>
             )}
 
             {(shiftType === "close" || shiftType === "double") && !isRolloverNight && !useSafeCloseoutSalesForClose && (
               <>
                 <label className="shift-field-label">Prior X Report ($)</label>
+                <div className="shift-section-meta text-xs">
+                  Enter the X report printed at the beginning of your closing shift. Do not enter the whole-day total here.
+                </div>
                 <input
                   className="shift-field-input"
                   inputMode="decimal"
@@ -2442,7 +2599,13 @@ function ClockOutModal({
                   onChange={e => setSalesPriorX(e.target.value)}
                   placeholder="0.00"
                 />
+                {salesPriorXSourceLabel && (
+                  <div className="shift-section-meta text-xs">{salesPriorXSourceLabel}</div>
+                )}
                 <label className="shift-field-label">Z Report Total ($)</label>
+                <div className="shift-section-meta text-xs">
+                  This is the full Z report at the end of the business day for your closing shift.
+                </div>
                 <input
                   className="shift-field-input"
                   inputMode="decimal"
@@ -2450,7 +2613,32 @@ function ClockOutModal({
                   onChange={e => setSalesZReport(e.target.value)}
                   placeholder="0.00"
                 />
-                <label className="shift-field-label">Transaction count <span className="text-gray-500 normal-case tracking-normal">(# of sales rung — optional)</span></label>
+                {calculatedCloseShiftSalesCents != null && (
+                  <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+                    <div className="font-semibold">Calculated Sales For Your Shift</div>
+                    <div className="mt-1 text-xs text-emerald-50/90">
+                      Z Report {dollarsFromCents(salesZReportCents)} - Prior X {dollarsFromCents(effectiveSalesPriorXCents)}
+                    </div>
+                    <div className="mt-1 text-base font-semibold">{dollarsFromCents(calculatedCloseShiftSalesCents)}</div>
+                    {closeAverageTicketCents != null && (
+                      <div className="mt-1 text-xs text-emerald-50/90">Average sale: {dollarsFromCents(closeAverageTicketCents)}</div>
+                    )}
+                  </div>
+                )}
+                {closeCalculatedSalesWarning && (
+                  <div className="shift-flash shift-flash-warn text-sm">
+                    {closeCalculatedSalesWarning}
+                  </div>
+                )}
+                {salesZReportCents != null &&
+                  effectiveSalesPriorXCents != null &&
+                  effectiveSalesPriorXCents >= salesZReportCents && (
+                    <div className="shift-flash shift-flash-warn text-sm">
+                      This field is for the X report printed at the beginning of your shift. Please check and make
+                      sure you're entering the correct report. If you are not sure how to proceed, call a manager.
+                    </div>
+                  )}
+                <label className="shift-field-label">Transaction count <span className="text-gray-500 normal-case tracking-normal">(# of sales rung — required for clock-out)</span></label>
                 <input
                   className="shift-field-input"
                   inputMode="numeric"
@@ -2458,6 +2646,14 @@ function ClockOutModal({
                   onChange={e => setCloseTransactionCount(e.target.value)}
                   placeholder="e.g. 42"
                 />
+                <div className="shift-section-meta text-xs">
+                  Enter only the sales rung during your closing shift, not the whole day.
+                </div>
+                {closeBasketWarning && (
+                  <div className="shift-flash shift-flash-warn text-sm">
+                    {closeBasketWarning}
+                  </div>
+                )}
               </>
             )}
             {(shiftType === "close" || shiftType === "double") && !isRolloverNight && useSafeCloseoutSalesForClose && (
@@ -2466,6 +2662,9 @@ function ClockOutModal({
                   Using submitted Safe Closeout totals for close-shift sales.
                 </div>
                 <label className="shift-field-label">Prior X Report ($)</label>
+                <div className="shift-section-meta text-xs">
+                  Enter the X report printed at the beginning of your closing shift. For doubles, use the mid-shift X report if needed.
+                </div>
                 <input
                   className="shift-field-input"
                   inputMode="decimal"
@@ -2473,9 +2672,29 @@ function ClockOutModal({
                   onChange={e => setSalesPriorX(e.target.value)}
                   placeholder="Enter if missing"
                 />
+                {salesPriorXSourceLabel && (
+                  <div className="shift-section-meta text-xs">{salesPriorXSourceLabel}</div>
+                )}
                 <div className="shift-section-meta text-xs">
-                  Only needed if opener X report was not entered earlier.
+                  Only needed if the earlier X report was not entered yet. Do not enter the whole-day total here.
                 </div>
+                {calculatedCloseShiftSalesCents != null && (
+                  <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 p-3 text-sm text-emerald-100">
+                    <div className="font-semibold">Calculated Sales For Your Shift</div>
+                    <div className="mt-1 text-xs text-emerald-50/90">
+                      Safe Closeout Sales {dollarsFromCents(calculatedCloseShiftSalesCents)}
+                    </div>
+                    <div className="mt-1 text-base font-semibold">{dollarsFromCents(calculatedCloseShiftSalesCents)}</div>
+                    {closeAverageTicketCents != null && (
+                      <div className="mt-1 text-xs text-emerald-50/90">Average sale: {dollarsFromCents(closeAverageTicketCents)}</div>
+                    )}
+                  </div>
+                )}
+                {closeCalculatedSalesWarning && (
+                  <div className="shift-flash shift-flash-warn text-sm">
+                    {closeCalculatedSalesWarning}
+                  </div>
+                )}
                 <label className="shift-field-label">Transaction count <span className="text-gray-500 normal-case tracking-normal">(# of sales rung - required)</span></label>
                 <input
                   className="shift-field-input"
@@ -2484,12 +2703,23 @@ function ClockOutModal({
                   onChange={e => setCloseTransactionCount(e.target.value)}
                   placeholder="e.g. 42"
                 />
+                <div className="shift-section-meta text-xs">
+                  Enter only the sales rung during your closing shift, not the whole day.
+                </div>
+                {closeBasketWarning && (
+                  <div className="shift-flash shift-flash-warn text-sm">
+                    {closeBasketWarning}
+                  </div>
+                )}
               </>
             )}
             {(shiftType === "close" || shiftType === "double") && isRolloverNight && (
               <>
                 <div className="shift-flash shift-flash-warn text-xs">
-                  10pm Z/Prior-X is entered from the shift page. At clock out, enter transaction count for the full close period.
+                  Step 1 of 2 was completed earlier on this shift page: 10pm Prior X and 10pm Z report.
+                </div>
+                <div className="shift-section-meta text-xs">
+                  Step 2 of 2 happens after clock out: enter the midnight X report from the fresh post-10pm register cycle.
                 </div>
                 <label className="shift-field-label">Transaction count <span className="text-gray-500 normal-case tracking-normal">(# of sales rung - required)</span></label>
                 <input
@@ -2499,6 +2729,9 @@ function ClockOutModal({
                   onChange={e => setCloseTransactionCount(e.target.value)}
                   placeholder="e.g. 42"
                 />
+                <div className="shift-section-meta text-xs">
+                  Enter only the sales rung during your closing shift, not the whole day.
+                </div>
               </>
             )}
           </div>
@@ -2605,11 +2838,39 @@ function ClockOutModal({
                     setErr("Transaction count is required before clock-out for open shifts.");
                     return;
                   }
+                  if (salesXReportCents == null || salesXReportCents <= 0) {
+                    setErr("Calculated sales for your shift must be greater than $0.00.");
+                    return;
+                  }
                 }
                 if (shiftType === "close" || shiftType === "double") {
                   const closeTxn = closeTransactionCount.trim();
                   if (!(closeTxn !== "" && /^\d+$/.test(closeTxn) && Number(closeTxn) > 0)) {
                     setErr("Transaction count is required before clock-out for close/double shifts.");
+                    return;
+                  }
+                  if (!isRolloverNight && !useSafeCloseoutSalesForClose) {
+                    if (effectiveSalesPriorXCents == null || salesZReportCents == null) {
+                      setErr("Enter valid Prior X and Z report amounts before clock-out.");
+                      return;
+                    }
+                    if (effectiveSalesPriorXCents >= salesZReportCents) {
+                      setErr(
+                        "This field is for the X report printed at the beginning of your shift. Please check and make sure you're entering the correct report. If you are not sure how to proceed, call a manager."
+                      );
+                      return;
+                    }
+                    if (calculatedCloseShiftSalesCents == null || calculatedCloseShiftSalesCents <= 0) {
+                      setErr("Calculated sales for your shift must be greater than $0.00. Please re-check the Prior X and Z report values.");
+                      return;
+                    }
+                  }
+                  if (
+                    !isRolloverNight &&
+                    useSafeCloseoutSalesForClose &&
+                    (calculatedCloseShiftSalesCents == null || calculatedCloseShiftSalesCents <= 0)
+                  ) {
+                    setErr("Calculated sales for your shift must be greater than $0.00 before clock-out.");
                     return;
                   }
                 }

@@ -465,6 +465,9 @@ export default function SafeCloseoutWizard({
                 <div className="shift-step-panel">
                   <div className="shift-step-label">1 · Shift Context</div>
                   <label className="shift-field-label">Prior X Report Total ($)</label>
+                  <div className="shift-section-meta text-xs">
+                    Enter the X report printed at the beginning of your closing shift. For doubles, use the mid-shift X report from changeover.
+                  </div>
                   <input className="shift-field-input" inputMode="decimal" value={priorX} onChange={(e) => setPriorX(e.target.value)} />
                 </div>
               )}
