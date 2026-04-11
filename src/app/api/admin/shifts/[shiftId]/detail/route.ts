@@ -486,6 +486,7 @@ type ShiftDetailPatchBody = {
   dailySalesRecord?: {
     openXReportCents?: number | null;
     openTransactionCount?: number | null;
+    priorXReportCents?: number | null;
     closeSalesCents?: number | null;
     closeTransactionCount?: number | null;
     zReportCents?: number | null;
@@ -723,16 +724,28 @@ export async function PATCH(
           { status: 400 }
         );
       }
+      if (
+        body.dailySalesRecord.priorXReportCents !== undefined &&
+        body.dailySalesRecord.priorXReportCents !== null &&
+        (!Number.isInteger(body.dailySalesRecord.priorXReportCents) ||
+          body.dailySalesRecord.priorXReportCents < 0)
+      ) {
+        return NextResponse.json(
+          { error: "Prior X report must be a non-negative integer cents value." },
+          { status: 400 }
+        );
+      }
 
       const { data: dailyRecord, error: dailyFetchErr } = await supabaseServer
         .from("daily_sales_records")
-        .select("id,business_date,closer_rollover_cents,opener_rollover_cents,is_rollover_night")
+        .select("id,business_date,z_report_cents,closer_rollover_cents,opener_rollover_cents,is_rollover_night")
         .or(`open_shift_id.eq.${shiftId},close_shift_id.eq.${shiftId}`)
         .limit(1)
         .maybeSingle()
         .returns<{
           id: string;
           business_date: string;
+          z_report_cents: number | null;
           closer_rollover_cents: number | null;
           opener_rollover_cents: number | null;
           is_rollover_night: boolean | null;
@@ -774,6 +787,21 @@ export async function PATCH(
       let currentIsRolloverNight = Boolean(dailyRecord?.is_rollover_night);
 
       if (dailyRecord?.id) {
+        const effectivePriorX =
+          body.dailySalesRecord.priorXReportCents !== undefined
+            ? body.dailySalesRecord.priorXReportCents
+            : null;
+        const effectiveZReport =
+          body.dailySalesRecord.zReportCents !== undefined
+            ? body.dailySalesRecord.zReportCents
+            : dailyRecord.z_report_cents;
+        if (
+          effectivePriorX !== null &&
+          effectiveZReport !== null &&
+          body.dailySalesRecord.closeSalesCents === undefined
+        ) {
+          dailyUpdate.close_sales_cents = Math.max(0, effectiveZReport - effectivePriorX);
+        }
         const { error: dailyUpdateErr } = await supabaseServer
           .from("daily_sales_records")
           .update(dailyUpdate)
@@ -812,6 +840,16 @@ export async function PATCH(
           business_date: businessDate,
           ...dailyUpdate,
         };
+        if (
+          body.dailySalesRecord.priorXReportCents != null &&
+          body.dailySalesRecord.zReportCents != null &&
+          body.dailySalesRecord.closeSalesCents === undefined
+        ) {
+          dailyInsert.close_sales_cents = Math.max(
+            0,
+            body.dailySalesRecord.zReportCents - body.dailySalesRecord.priorXReportCents
+          );
+        }
         if (effectiveShiftType === "open") dailyInsert.open_shift_id = shiftId;
         if (effectiveShiftType === "close" || effectiveShiftType === "double") {
           dailyInsert.close_shift_id = shiftId;
@@ -906,6 +944,49 @@ export async function PATCH(
           );
         if (nextDayErr) {
           return NextResponse.json({ error: nextDayErr.message }, { status: 500 });
+        }
+      }
+
+      if (body.dailySalesRecord.priorXReportCents !== undefined) {
+        const effectiveZReport =
+          body.dailySalesRecord.zReportCents !== undefined
+            ? body.dailySalesRecord.zReportCents
+            : dailyUpdate.z_report_cents !== undefined && typeof dailyUpdate.z_report_cents === "number"
+              ? dailyUpdate.z_report_cents
+              : dailyRecord?.z_report_cents ?? null;
+
+        const { data: existingZEntry, error: existingZEntryErr } = await supabaseServer
+          .from("shift_sales_counts")
+          .select("id,amount_cents")
+          .eq("shift_id", shiftId)
+          .eq("entry_type", "z_report")
+          .maybeSingle<{ id: string; amount_cents: number }>();
+        if (existingZEntryErr) {
+          return NextResponse.json({ error: existingZEntryErr.message }, { status: 500 });
+        }
+
+        const amountCents = effectiveZReport ?? existingZEntry?.amount_cents ?? null;
+        if (amountCents == null) {
+          return NextResponse.json(
+            { error: "Cannot update Prior X without a Z report total on the shift." },
+            { status: 400 }
+          );
+        }
+
+        const { error: zEntryErr } = await supabaseServer
+          .from("shift_sales_counts")
+          .upsert(
+            {
+              shift_id: shiftId,
+              daily_sales_record_id: targetDailyRecordId,
+              entry_type: "z_report",
+              amount_cents: amountCents,
+              prior_x_report_cents: body.dailySalesRecord.priorXReportCents,
+            },
+            { onConflict: "shift_id,entry_type" }
+          );
+        if (zEntryErr) {
+          return NextResponse.json({ error: zEntryErr.message }, { status: 500 });
         }
       }
     }

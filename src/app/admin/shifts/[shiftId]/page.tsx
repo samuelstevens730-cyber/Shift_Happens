@@ -232,6 +232,7 @@ export default function AdminShiftDetailPage() {
   const [dailySalesForm, setDailySalesForm] = useState({
     openXReportCents: "",
     openTransactionCount: "",
+    priorXReportCents: "",
     closeSalesCents: "",
     closeTransactionCount: "",
     zReportCents: "",
@@ -312,6 +313,14 @@ export default function AdminShiftDetailPage() {
             payload.dailySalesRecord?.openTransactionCount == null
               ? ""
               : String(payload.dailySalesRecord.openTransactionCount),
+          priorXReportCents:
+            payload.shiftSalesEntries.find((entry) => entry.entryType === "z_report")
+              ?.priorXReportCents == null
+              ? ""
+              : centsToMoneyInput(
+                  payload.shiftSalesEntries.find((entry) => entry.entryType === "z_report")
+                    ?.priorXReportCents ?? null
+                ),
           closeSalesCents:
             payload.dailySalesRecord?.closeSalesCents == null
               ? ""
@@ -377,6 +386,14 @@ export default function AdminShiftDetailPage() {
         payload.dailySalesRecord?.openTransactionCount == null
           ? ""
           : String(payload.dailySalesRecord.openTransactionCount),
+      priorXReportCents:
+        payload.shiftSalesEntries.find((entry) => entry.entryType === "z_report")
+          ?.priorXReportCents == null
+          ? ""
+          : centsToMoneyInput(
+              payload.shiftSalesEntries.find((entry) => entry.entryType === "z_report")
+                ?.priorXReportCents ?? null
+            ),
       closeSalesCents:
         payload.dailySalesRecord?.closeSalesCents == null
           ? ""
@@ -469,6 +486,10 @@ export default function AdminShiftDetailPage() {
             dailySalesForm.openTransactionCount === ""
               ? null
               : Number(dailySalesForm.openTransactionCount),
+          priorXReportCents:
+            dailySalesForm.priorXReportCents === ""
+              ? null
+              : moneyInputToCents(dailySalesForm.priorXReportCents),
           closeSalesCents:
             dailySalesForm.closeSalesCents === ""
               ? null
@@ -501,6 +522,8 @@ export default function AdminShiftDetailPage() {
           (row) => row.changeCount === null && drawerForm[row.countType]?.changeCount !== ""
         ) ||
         (dailySalesForm.openXReportCents !== "" && body.dailySalesRecord.openXReportCents === null) ||
+        (dailySalesForm.priorXReportCents !== "" &&
+          body.dailySalesRecord.priorXReportCents === null) ||
         (dailySalesForm.closeSalesCents !== "" && body.dailySalesRecord.closeSalesCents === null) ||
         (dailySalesForm.zReportCents !== "" && body.dailySalesRecord.zReportCents === null) ||
         (dailySalesForm.closerRolloverCents !== "" &&
@@ -1089,7 +1112,7 @@ export default function AdminShiftDetailPage() {
                 <div>Business Date: <b>{fmtDate(data.dailySalesRecord?.businessDate)}</b></div>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   <label>
-                    Open X Report ($):
+                    Open X Report Total ($):
                     <input
                       type="number"
                       step="0.01"
@@ -1119,8 +1142,25 @@ export default function AdminShiftDetailPage() {
                       />
                     </label>
                   ) : null}
+                  {showCloseTransactionCount ? (
+                    <label>
+                      Prior X Used For Close Sales ($):
+                      <input
+                        type="number"
+                        step="0.01"
+                        className="mt-1 w-full rounded border border-white/8 bg-[var(--card)] px-2 py-1"
+                        value={dailySalesForm.priorXReportCents}
+                        onChange={(e) =>
+                          setDailySalesForm((prev) => ({
+                            ...prev,
+                            priorXReportCents: e.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                  ) : null}
                   <label>
-                    Close Sales ($):
+                    Computed Close Sales ($):
                     <input
                       type="number"
                       step="0.01"
@@ -1151,7 +1191,7 @@ export default function AdminShiftDetailPage() {
                     </label>
                   ) : null}
                   <label>
-                    Z Report ($):
+                    Z Report Total ($):
                     <input
                       type="number"
                       step="0.01"
