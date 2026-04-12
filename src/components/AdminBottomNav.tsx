@@ -34,6 +34,7 @@ export default function AdminBottomNav({ stores, users, pendingRequests }: Props
         { href: "/admin/open-shifts", label: "Open Shifts", icon: Clock },
         { href: "/admin/overrides", label: "Overrides", icon: ShieldCheck },
         { href: "/admin/coverage-shifts", label: "Coverage Shifts", icon: ChevronRight },
+        { href: "/admin/early-clock-in-requests", label: "Early Clock-Ins", icon: Clock },
       ],
     },
     {
@@ -204,7 +205,7 @@ function getInitialOpenGroups(pathname: string | null): Record<string, boolean> 
   const matches = (hrefs: string[]) =>
     hrefs.some((h) => pathname === h || pathname?.startsWith(`${h}/`));
   return {
-    "Live Ops": matches(["/admin/requests", "/admin/variances", "/admin/open-shifts", "/admin/overrides", "/admin/coverage-shifts"]),
+    "Live Ops": matches(["/admin/requests", "/admin/variances", "/admin/open-shifts", "/admin/overrides", "/admin/coverage-shifts", "/admin/early-clock-in-requests"]),
     "Scheduling": matches(["/admin/scheduler", "/admin/shifts", "/admin/employee-schedules", "/admin/assignments"]),
     "Payroll & Finance": matches(["/admin/payroll", "/admin/payroll/reconciliation", "/admin/safe-ledger", "/admin/shift-sales"]),
     "Reports": matches(["/admin/reports/store-sales", "/admin/reports/performance-summary", "/admin/employee-scoreboard", "/admin/cleaning/report"]),

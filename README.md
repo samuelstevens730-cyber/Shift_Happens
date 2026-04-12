@@ -7,6 +7,7 @@ A workforce management and time tracking application built for retail environmen
 Shift Happens is a comprehensive time clock and shift management system that handles:
 
 - **Time Tracking**: QR-code or manual clock-in/out with planned vs actual time tracking
+- **Early Clock-In Approval**: Scheduled employees requesting an early start must get manager approval before any shift row is created
 - **Drawer Accountability**: Start, changeover, and end drawer counts with variance detection and manager alerts
 - **Sales Tracking**: X report entry per shift, mid-shift X reports for double shifts, midnight rollover handling, and store sales reporting
 - **Safe Ledger**: End-of-day safe closeout form, cash pickup logging with photo upload, and historical ledger for managers
@@ -198,6 +199,7 @@ src/
 │   │   ├── sales/                     # X report context, close-checkpoint, rollover
 │   │   ├── shift/                     # Shift detail, assignments, start-drawer
 │   │   ├── start-shift/               # Clock-in endpoint
+│   │   ├── requests/early-clock-in/   # Early scheduled clock-in approval requests
 │   │   └── time-off-blocks/           # Employee availability blocks
 │   │
 │   ├── auth/reset/                    # Password reset page

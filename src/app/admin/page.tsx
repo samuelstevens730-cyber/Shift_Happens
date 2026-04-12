@@ -406,7 +406,9 @@ export default function AdminPage() {
         basePath = "/admin/open-shifts";
         break;
       case "approvals":
-        basePath = "/admin/requests";
+        basePath = item.id.startsWith("approval-earlyclockin-")
+          ? "/admin/early-clock-in-requests"
+          : "/admin/requests";
         break;
       default:
         basePath = "/admin";

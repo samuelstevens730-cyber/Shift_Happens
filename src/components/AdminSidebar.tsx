@@ -60,7 +60,7 @@ function getInitialOpenGroups(pathname: string | null): Record<string, boolean> 
   const matches = (hrefs: string[]) =>
     hrefs.some((h) => pathname === h || pathname?.startsWith(`${h}/`));
   return {
-    "Live Ops": matches(["/admin/requests", "/admin/variances", "/admin/open-shifts", "/admin/overrides", "/admin/coverage-shifts"]),
+    "Live Ops": matches(["/admin/requests", "/admin/variances", "/admin/open-shifts", "/admin/overrides", "/admin/coverage-shifts", "/admin/early-clock-in-requests"]),
     "Scheduling": matches(["/admin/scheduler", "/admin/shifts", "/admin/employee-schedules", "/admin/assignments"]),
     "Payroll & Finance": matches(["/admin/payroll", "/admin/safe-ledger", "/admin/shift-sales"]),
     "Reports": matches(["/admin/reports", "/admin/employee-scoreboard", "/admin/cleaning/report"]),
@@ -138,6 +138,7 @@ export default function AdminSidebar({ stores, users }: Props) {
         { href: "/admin/open-shifts", label: "Open Shifts", icon: Clock },
         { href: "/admin/overrides", label: "Overrides", icon: ShieldCheck },
         { href: "/admin/coverage-shifts", label: "Coverage Shifts", icon: ArrowRightLeft },
+        { href: "/admin/early-clock-in-requests", label: "Early Clock-Ins", icon: Clock },
       ],
     },
     {

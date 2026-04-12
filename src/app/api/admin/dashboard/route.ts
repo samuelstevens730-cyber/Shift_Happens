@@ -88,7 +88,7 @@ export async function GET(req: Request) {
     const activeStoreIds = storeId && storeId !== "all" ? [storeId] : managerStoreIds;
     const yesterday = cstDateKey(addDays(new Date(), -1));
 
-    const [storesRes, yesterdayCloseoutsRes, salesRes, openShiftsRes, swapCountRes, timeOffCountRes, timesheetCountRes] =
+    const [storesRes, yesterdayCloseoutsRes, salesRes, openShiftsRes, swapCountRes, timeOffCountRes, timesheetCountRes, earlyClockInCountRes] =
       await Promise.all([
         supabaseServer
           .from("stores")
@@ -149,6 +149,11 @@ export async function GET(req: Request) {
           .select("id", { count: "exact", head: true })
           .in("store_id", activeStoreIds)
           .in("status", ["open", "pending"] as RequestStatus[]),
+        supabaseServer
+          .from("early_clock_in_requests")
+          .select("id", { count: "exact", head: true })
+          .in("store_id", activeStoreIds)
+          .eq("status", "pending"),
       ]);
 
     if (storesRes.error) return NextResponse.json({ error: storesRes.error.message }, { status: 500 });
@@ -158,6 +163,7 @@ export async function GET(req: Request) {
     if (swapCountRes.error) return NextResponse.json({ error: swapCountRes.error.message }, { status: 500 });
     if (timeOffCountRes.error) return NextResponse.json({ error: timeOffCountRes.error.message }, { status: 500 });
     if (timesheetCountRes.error) return NextResponse.json({ error: timesheetCountRes.error.message }, { status: 500 });
+    if (earlyClockInCountRes.error) return NextResponse.json({ error: earlyClockInCountRes.error.message }, { status: 500 });
 
     const topline: DashboardToplineByStore = {};
     for (const store of storesRes.data ?? []) {
@@ -222,9 +228,11 @@ export async function GET(req: Request) {
       swapRowsRes,
       timeOffRowsRes,
       timesheetRowsRes,
+      earlyClockInRowsRes,
       swapPendingCountRes,
       timeOffPendingCountRes,
       timesheetPendingCountRes,
+      earlyClockInPendingCountRes,
     ] = await Promise.all([
       // Override pending — all shifts (open + completed) with unresolved override flag
       supabaseServer
@@ -331,6 +339,14 @@ export async function GET(req: Request) {
         .limit(3)
         .returns<Array<{ id: string; store_id: string; created_at: string; status: string }>>(),
       supabaseServer
+        .from("early_clock_in_requests")
+        .select("id,store_id,shift_date,created_at,profiles!profile_id(name)")
+        .in("store_id", activeStoreIds)
+        .eq("status", "pending")
+        .order("created_at", { ascending: true })
+        .limit(3)
+        .returns<Array<{ id: string; store_id: string; shift_date: string; created_at: string; profiles: { name: string | null } | null }>>(),
+      supabaseServer
         .from("shift_swap_requests")
         .select("id", { count: "exact", head: true })
         .in("store_id", activeStoreIds)
@@ -345,6 +361,11 @@ export async function GET(req: Request) {
         .select("id", { count: "exact", head: true })
         .in("store_id", activeStoreIds)
         .in("status", ["open", "pending"] as RequestStatus[]),
+      supabaseServer
+        .from("early_clock_in_requests")
+        .select("id", { count: "exact", head: true })
+        .in("store_id", activeStoreIds)
+        .eq("status", "pending"),
     ]);
 
     for (const r of [
@@ -359,9 +380,11 @@ export async function GET(req: Request) {
       swapRowsRes,
       timeOffRowsRes,
       timesheetRowsRes,
+      earlyClockInRowsRes,
       swapPendingCountRes,
       timeOffPendingCountRes,
       timesheetPendingCountRes,
+      earlyClockInPendingCountRes,
     ]) {
       if (r.error) return NextResponse.json({ error: r.error.message }, { status: 500 });
     }
@@ -470,6 +493,15 @@ export async function GET(req: Request) {
         store_id: row.store_id,
         created_at: row.created_at,
       })),
+      ...(earlyClockInRowsRes.data ?? []).map((row) => ({
+        id: `approval-earlyclockin-${row.id}`,
+        category: "approvals" as DashboardActionCategory,
+        severity: "high" as const,
+        title: `Early clock-in request — ${row.profiles?.name ?? "Unknown"}`,
+        description: `For ${row.shift_date}`,
+        store_id: row.store_id,
+        created_at: row.created_at,
+      })),
       ...(coveragePending ?? []).map((row) => ({
         id: `approval-coverage-${row.id}`,
         category: "approvals" as DashboardActionCategory,
@@ -495,7 +527,10 @@ export async function GET(req: Request) {
       money: moneyCountRes.count ?? 0,
       scheduling: schedulingCountRes.count ?? 0,
       approvals:
-        (swapPendingCountRes.count ?? 0) + (timeOffPendingCountRes.count ?? 0) + (timesheetPendingCountRes.count ?? 0),
+        (swapPendingCountRes.count ?? 0) +
+        (timeOffPendingCountRes.count ?? 0) +
+        (timesheetPendingCountRes.count ?? 0) +
+        (earlyClockInPendingCountRes.count ?? 0),
     };
 
     const health: Record<string, DashboardStoreHealth> = {};
@@ -705,7 +740,11 @@ export async function GET(req: Request) {
       stores: storesRes.data ?? [],
       topline,
       openShifts: openShiftsRes.count ?? 0,
-      pendingApprovals: (swapCountRes.count ?? 0) + (timeOffCountRes.count ?? 0) + (timesheetCountRes.count ?? 0),
+      pendingApprovals:
+        (swapCountRes.count ?? 0) +
+        (timeOffCountRes.count ?? 0) +
+        (timesheetCountRes.count ?? 0) +
+        (earlyClockInCountRes.count ?? 0),
       actions,
       actionCounts,
       salesHistory,

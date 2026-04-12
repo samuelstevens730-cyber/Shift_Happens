@@ -192,6 +192,18 @@ export default function ClockPageClient() {
     plannedLabel: string;
     storeName: string;
   } | null>(null);
+  const [earlyClockInPrompt, setEarlyClockInPrompt] = useState<{
+    storeId: string;
+    profileId: string;
+    scheduleShiftId: string;
+    shiftDate: string;
+    scheduledStartAt: string;
+    requestedPlannedStartAt: string;
+    requestedShiftType: ShiftKind;
+    scheduledStartLabel: string;
+    requestedPlannedStartLabel: string;
+  } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [tokenStore, setTokenStore] = useState<Store | null>(null);
   const [tokenError, setTokenError] = useState<string | null>(null);
 
@@ -593,6 +605,7 @@ export default function ClockPageClient() {
 
   async function startShift(force = false) {
     setError(null);
+    setNotice(null);
 
     const planned = toCstDateFromLocalInput(plannedStartLocal);
     if (!planned) {
@@ -639,7 +652,23 @@ export default function ClockPageClient() {
 
       const json = await res.json();
       if (!res.ok) {
+        if (json?.code === "EARLY_CLOCK_IN") {
+          setConfirmOpen(false);
+          setEarlyClockInPrompt({
+            storeId: json.storeId,
+            profileId: json.profileId,
+            scheduleShiftId: json.scheduleShiftId,
+            shiftDate: json.shiftDate,
+            scheduledStartAt: json.scheduledStartAt,
+            requestedPlannedStartAt: roundedPlanned.toISOString(),
+            requestedShiftType: json.requestedShiftType as ShiftKind,
+            scheduledStartLabel: json.scheduledStartLabel,
+            requestedPlannedStartLabel: json.requestedPlannedStartLabel ?? plannedStartRoundedLabel ?? formatCst(roundedPlanned),
+          });
+          return;
+        }
         if (json?.code === "UNSCHEDULED") {
+          setConfirmOpen(false);
           setUnscheduledPrompt({
             plannedLabel: plannedStartRoundedLabel || formatCst(roundedPlanned),
             storeName: selectedStoreName,
@@ -727,6 +756,7 @@ export default function ClockPageClient() {
         profileId={profileId || null}
       />
       <div className={`clock-layout ${modalOpen ? "pointer-events-none select-none" : ""}`}>
+        {notice && <div className="banner banner-success mb-4">{notice}</div>}
         {unscheduledPrompt && (
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4">
             <div className="card card-pad w-full max-w-md space-y-4">
@@ -753,6 +783,70 @@ export default function ClockPageClient() {
                   }}
                 >
                   Continue
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {earlyClockInPrompt && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 p-4">
+            <div className="card card-pad w-full max-w-md space-y-4">
+              <div className="text-lg font-semibold">Early clock-in needs approval</div>
+              <div className="text-sm muted">
+                Your shift does not start until <b>{earlyClockInPrompt.scheduledStartLabel}</b>. You must contact a manager to get approval for this shift start.
+              </div>
+              <div className="rounded-lg border border-white/10 bg-white/5 p-3 text-sm">
+                <div><b>Requested:</b> {earlyClockInPrompt.requestedPlannedStartLabel}</div>
+                <div><b>Scheduled:</b> {earlyClockInPrompt.scheduledStartLabel}</div>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <button
+                  className="btn-secondary px-4 py-2"
+                  onClick={() => setEarlyClockInPrompt(null)}
+                  disabled={submitting}
+                >
+                  Cancel and Reenter
+                </button>
+                <button
+                  className="btn-primary px-4 py-2 disabled:opacity-50"
+                  disabled={submitting}
+                  onClick={async () => {
+                    const authToken = managerSession ? managerAccessToken : pinToken;
+                    if (!authToken) {
+                      setError(managerSession ? "Session expired. Please refresh." : "Please authenticate with your PIN.");
+                      return;
+                    }
+                    setSubmitting(true);
+                    setError(null);
+                    try {
+                      const res = await fetch("/api/requests/early-clock-in", {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization: `Bearer ${authToken}`,
+                        },
+                        body: JSON.stringify({
+                          storeId: earlyClockInPrompt.storeId,
+                          profileId: earlyClockInPrompt.profileId,
+                          scheduleShiftId: earlyClockInPrompt.scheduleShiftId,
+                          shiftDate: earlyClockInPrompt.shiftDate,
+                          requestedPlannedStartAt: earlyClockInPrompt.requestedPlannedStartAt,
+                          scheduledStartAt: earlyClockInPrompt.scheduledStartAt,
+                          requestedShiftType: earlyClockInPrompt.requestedShiftType,
+                        }),
+                      });
+                      const json = await res.json();
+                      if (!res.ok) throw new Error(json?.error || "Failed to request early clock-in approval.");
+                      setEarlyClockInPrompt(null);
+                      setNotice("Early clock-in request sent to managers. Call a manager for approval before starting your shift.");
+                    } catch (e: unknown) {
+                      setError(e instanceof Error ? e.message : "Failed to request early clock-in approval.");
+                    } finally {
+                      setSubmitting(false);
+                    }
+                  }}
+                >
+                  {submitting ? "Sending..." : "Confirm"}
                 </button>
               </div>
             </div>

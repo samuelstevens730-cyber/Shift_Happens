@@ -2,6 +2,7 @@
 
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { Bell, Loader2, X } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { cn } from "@/lib/utils";
@@ -46,6 +47,7 @@ function formatTimestamp(value: string) {
 }
 
 export default function NotificationBell() {
+  const router = useRouter();
   const rootRef = useRef<HTMLDivElement | null>(null);
   const bellRef = useRef<HTMLButtonElement>(null);
   const latestCountRequestRef = useRef(0);
@@ -287,6 +289,17 @@ export default function NotificationBell() {
     }
   }
 
+  function notificationDestination(item: BellNotificationItem) {
+    if (item.notification_type === "early_clock_in_pending_approval" && item.entity_id) {
+      const params = new URLSearchParams({
+        source: "notifications",
+        actionId: `approval-earlyclockin-${item.entity_id}`,
+      });
+      return `/admin/early-clock-in-requests?${params.toString()}`;
+    }
+    return null;
+  }
+
   return (
     <div ref={rootRef} className="relative">
       {/* Bell trigger — ghost style to sit cleanly in the dark sidebar header */}
@@ -388,6 +401,7 @@ export default function NotificationBell() {
                   const isUnread = !item.is_task && !item.read_at;
                   const isHighPriority = !item.is_task && item.priority === "high";
                   const showDismiss = !item.is_task;
+                  const destination = !item.is_task ? notificationDestination(item) : null;
 
                   return (
                     <div key={`${item.is_task ? "task" : "notification"}-${item.id}`}>
@@ -401,6 +415,19 @@ export default function NotificationBell() {
                         <div className="flex items-start gap-3">
                           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
                             {/* Title row */}
+                            <button
+                              type="button"
+                              disabled={!destination}
+                              onClick={() => {
+                                if (!destination) return;
+                                setOpen(false);
+                                router.push(destination);
+                              }}
+                              className={cn(
+                                "flex w-full min-w-0 flex-col items-start gap-1.5 text-left",
+                                destination ? "cursor-pointer" : "cursor-default"
+                              )}
+                            >
                             <div className="flex flex-wrap items-center gap-2">
                               <span className={cn("text-sm font-medium", isUnread ? "text-[var(--text)]" : "text-[var(--muted)]")}>
                                 {item.title}
@@ -430,6 +457,7 @@ export default function NotificationBell() {
                             <div className="text-[11px] text-[var(--muted)]/50">
                               {formatTimestamp(item.created_at)}
                             </div>
+                            </button>
                           </div>
 
                           {showDismiss ? (

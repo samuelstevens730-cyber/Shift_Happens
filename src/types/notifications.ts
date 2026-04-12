@@ -18,6 +18,9 @@ export const NOTIFICATION_TYPES = [
   "timesheet_denied",
   "swap_pending_approval",
   "coverage_pending_approval",
+  "early_clock_in_pending_approval",
+  "early_clock_in_approved",
+  "early_clock_in_denied",
   "task_skipped",
   "drawer_variance",
   "safe_closeout_failed",
@@ -34,6 +37,7 @@ export type NotificationType = (typeof NOTIFICATION_TYPES)[number];
 export const NOTIFICATION_ENTITY_TYPES = [
   "shift_swap_request",
   "coverage_shift_request",
+  "early_clock_in_request",
   "time_off_request",
   "timesheet_change_request",
   "shift",

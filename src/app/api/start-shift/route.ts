@@ -57,6 +57,15 @@ type Body = {
   force?: boolean;
 };
 
+type ScheduledShiftMatch = {
+  id: string;
+  shift_type: ShiftType;
+  scheduled_start: string;
+  shift_date: string;
+  diff: number;
+  score: number;
+};
+
 const ALLOWED_SHIFT_TYPES: ShiftType[] = ["open", "close", "double", "other"];
 
 function resolveScheduledShiftType(
@@ -73,6 +82,35 @@ function parseClockWindowError(message: string) {
   if (!message.includes(token)) return null;
   const label = message.split(token)[1]?.trim() || "Outside allowed clock window";
   return { code: "CLOCK_WINDOW_VIOLATION", windowLabel: label };
+}
+
+function chicagoToUtcIso(date: string, time: string): string {
+  const candidate = new Date(`${date}T${time}:00Z`);
+  const fmt = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(candidate);
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? 0);
+  const chicagoAsUtc = Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    get("hour") % 24,
+    get("minute"),
+    get("second")
+  );
+  const offsetMs = candidate.getTime() - chicagoAsUtc;
+  const [y, mo, d] = date.split("-").map(Number);
+  const [h, mi] = time.split(":").map(Number);
+  const wallMs = Date.UTC(y, (mo ?? 1) - 1, d ?? 1, h, mi, 0);
+  return new Date(wallMs + offsetMs).toISOString();
 }
 
 async function resolveStoreIdFromQR(qrToken?: string): Promise<string | null> {
@@ -180,9 +218,9 @@ export async function POST(req: Request) {
 
     if (schedErr) return NextResponse.json({ error: schedErr.message }, { status: 500 });
 
-    let matchedSchedule: { id: string; shift_type: ShiftType } | null = null;
+    let matchedSchedule: ScheduledShiftMatch | null = null;
     let bestWithinWindowScore: number | null = null;
-    let nearestSchedule: { id: string; shift_type: ShiftType; score: number } | null = null;
+    let nearestSchedule: ScheduledShiftMatch | null = null;
     let doubleSchedule: { id: string; shift_type: ShiftType } | null = null;
     let openScheduleId: string | null = null;
     let closeScheduleId: string | null = null;
@@ -202,11 +240,25 @@ export async function POST(req: Request) {
         const diff = plannedMinutes - schedMinutes;
         const score = Math.abs(diff);
         if (!nearestSchedule || score < nearestSchedule.score) {
-          nearestSchedule = { id: row.id, shift_type: scheduledType, score };
+          nearestSchedule = {
+            id: row.id,
+            shift_type: scheduledType,
+            scheduled_start: row.scheduled_start,
+            shift_date: row.shift_date,
+            diff,
+            score,
+          };
         }
         if (diff >= -5 && diff <= 15) {
           if (bestWithinWindowScore == null || score < bestWithinWindowScore) {
-            matchedSchedule = { id: row.id, shift_type: scheduledType };
+            matchedSchedule = {
+              id: row.id,
+              shift_type: scheduledType,
+              scheduled_start: row.scheduled_start,
+              shift_date: row.shift_date,
+              diff,
+              score,
+            };
             bestWithinWindowScore = score;
           }
         }
@@ -216,6 +268,9 @@ export async function POST(req: Request) {
       nearestSchedule = {
         id: first.id,
         shift_type: resolveScheduledShiftType(first.shift_type as ShiftType, first.shift_mode ?? null),
+        scheduled_start: first.scheduled_start,
+        shift_date: first.shift_date,
+        diff: 0,
         score: 0,
       };
       const foundDouble = scheduledRows.find((row) => {
@@ -240,6 +295,40 @@ export async function POST(req: Request) {
 
     const isWithinScheduledWindow = Boolean(matchedSchedule);
     const hasScheduledShift = Boolean(nearestSchedule);
+    const isEarlyClockIn = Boolean(
+      nearestSchedule &&
+        plannedMinutes != null &&
+        nearestSchedule.diff < -5
+    );
+    if (isEarlyClockIn && nearestSchedule) {
+      const scheduledStartLabel = new Date(
+        `${nearestSchedule.shift_date}T${nearestSchedule.scheduled_start}:00`
+      ).toLocaleTimeString("en-US", {
+        timeZone: "America/Chicago",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+      return NextResponse.json(
+        {
+          error: "EARLY_CLOCK_IN",
+          code: "EARLY_CLOCK_IN",
+          requiresApproval: true,
+          scheduledStartAt: chicagoToUtcIso(nearestSchedule.shift_date, nearestSchedule.scheduled_start),
+          scheduledStartLabel,
+          requestedPlannedStartLabel: plannedRounded.toLocaleTimeString("en-US", {
+            timeZone: "America/Chicago",
+            hour: "numeric",
+            minute: "2-digit",
+          }),
+          storeId: store.id,
+          profileId: body.profileId,
+          scheduleShiftId: nearestSchedule.id,
+          shiftDate: nearestSchedule.shift_date,
+          requestedShiftType: nearestSchedule.shift_type,
+        },
+        { status: 409 }
+      );
+    }
     // Block unscheduled clock-ins unless explicitly forced (user confirmed the popup)
     if (!hasScheduledShift && !body.force) {
       return NextResponse.json(

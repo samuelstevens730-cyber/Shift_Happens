@@ -110,6 +110,9 @@ src/app/api/
 ├── start-shift/          POST  Clock in
 ├── end-shift/            POST  Clock out
 ├── confirm-changeover/   POST  Mid-shift changeover (doubles)
+├── requests/
+│   ├── early-clock-in/   POST  Employee early clock-in approval request
+│   └── ...               Existing swap / time-off / timesheet flows
 ├── sales/
 │   ├── context/          GET   Sales context for shift (rollover status, prior X)
 │   ├── close-checkpoint/ POST  10 PM Z-report submission on rollover nights
@@ -227,10 +230,54 @@ type AuthContext = {
 3. Auth validated via `authenticateShiftRequest`
 4. Clock window validated via `clockWindows.ts` + `clock_windows` table (CST)
 5. Matching `schedule_shifts` record found (if scheduled) or flagged as unscheduled
-6. Shift type defaults from the scheduled row for that date (double if open+close coverage), with user override allowed at clock-in and during active shift
-7. `shifts` row inserted; `shift_drawer_counts` start record written
-8. Start time rounded to 30-minute boundary for payroll
-9. `fetchCurrentWeather()` called (fire-and-forget) — updates `start_weather_condition`, `start_temp_f` on shift
+6. If the employee is scheduled but tries to clock in before `scheduled_start`, `/api/start-shift` returns `EARLY_CLOCK_IN` and **does not create a shift row**
+7. Employee can submit `/api/requests/early-clock-in`; managers review the request on `/admin/early-clock-in-requests`
+8. On manager approval, the shift row is created using manager-edited planned/actual start times; the employee resumes via the existing open-shift flow
+9. Otherwise, shift type defaults from the scheduled row for that date (double if open+close coverage), with user override allowed at clock-in and during active shift
+10. `shifts` row inserted; `shift_drawer_counts` start record written
+11. Start time rounded to 30-minute boundary for payroll
+12. `fetchCurrentWeather()` called (fire-and-forget) — updates `start_weather_condition`, `start_temp_f` on shift
+
+### Early Clock-In Approval
+
+Scheduled employees cannot self-create a shift before `scheduled_start`. Instead, the app creates an `early_clock_in_requests` row and notifies managers.
+
+#### Database Table: `early_clock_in_requests`
+
+| Column | Type | Notes |
+|---|---|---|
+| `id` | uuid PK | |
+| `store_id` | FK → `stores` | Store for the scheduled shift |
+| `profile_id` | FK → `profiles` | Requesting employee |
+| `schedule_shift_id` | FK → `schedule_shifts` | Published schedule row being started early |
+| `shift_date` | date | CST schedule date |
+| `requested_planned_start_at` | timestamptz | Employee-entered early start |
+| `scheduled_start_at` | timestamptz | Published scheduled start converted from Chicago wall time |
+| `requested_shift_type` | text | Resolved scheduled shift type (`open` / `close` / `double` / `other`) |
+| `status` | text | `pending` / `approved` / `denied` / `cancelled` |
+| `manager_planned_start_at` | timestamptz | Final approved planned start |
+| `manager_started_at` | timestamptz | Final approved actual start |
+| `denial_reason` | text | Optional |
+| `reviewed_by` / `reviewed_at` | timestamptz | Manager action audit |
+| `created_at` / `updated_at` | timestamptz | |
+
+**Migration:** `supabase/migrations/20260412_early_clock_in_requests.sql`
+
+#### Routes
+
+| Route | Auth | Purpose |
+|---|---|---|
+| `POST /api/requests/early-clock-in` | `authenticateShiftRequest` | Employee submits early clock-in request |
+| `GET /api/admin/early-clock-in-requests` | Manager session | Review queue |
+| `POST /api/admin/early-clock-in-requests/[id]/approve` | Manager session | Approve request and create shift |
+| `POST /api/admin/early-clock-in-requests/[id]/deny` | Manager session | Deny request |
+
+#### Integration Points
+
+- **Clock page** (`src/app/clock/ClockPageClient.tsx`) — early attempts show a hard-stop modal instead of creating a shift
+- **Admin queue** (`/admin/early-clock-in-requests`) — manager approval/denial with editable planned + actual start times
+- **Command Center** (`src/app/api/admin/dashboard/route.ts`) — pending early clock-in requests appear in the approvals feed
+- **Notifications** (`src/types/notifications.ts`) — pending / approved / denied early clock-in notification types and `early_clock_in_request` entity
 
 ### Active Shift (`/shift/[id]`)
 

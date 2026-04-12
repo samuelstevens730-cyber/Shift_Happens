@@ -62,3 +62,22 @@ export const submitCoverageShiftSchema = z.object({
 });
 
 export type SubmitCoverageShiftInput = z.infer<typeof submitCoverageShiftSchema>;
+
+export const submitEarlyClockInRequestSchema = z.object({
+  storeId: z.string().uuid(),
+  profileId: z.string().uuid(),
+  scheduleShiftId: z.string().uuid(),
+  shiftDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"),
+  requestedPlannedStartAt: z.string().datetime({ offset: true }),
+  scheduledStartAt: z.string().datetime({ offset: true }),
+  requestedShiftType: z.enum(["open", "close", "double", "other"]),
+});
+
+export const reviewEarlyClockInRequestSchema = z.object({
+  managerPlannedStartAt: z.string().datetime({ offset: true }),
+  managerStartedAt: z.string().datetime({ offset: true }),
+});
+
+export const denyEarlyClockInRequestSchema = z.object({
+  denialReason: z.string().trim().max(500).optional().nullable(),
+});
