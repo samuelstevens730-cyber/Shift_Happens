@@ -54,6 +54,7 @@ Managers and admins authenticate via Supabase Auth. Employees authenticate via P
 
 - Managers: Supabase auth (email/password + Bearer token)
 - Employees: PIN-based auth issuing JWT; employee API calls use `Authorization: Bearer <token>`
+- Browser auth cleanup is centralized in `src/lib/browserAuthCleanup.ts`; logout/session repair clears Supabase auth plus app-owned PIN and store/profile selection keys.
 
 ## Setup
 

@@ -186,6 +186,7 @@ All API routes use `supabaseServer` (service role — bypasses RLS). **Security 
 
 - Helper: `getBearerToken(req)` in `src/lib/adminAuth.ts`
 - Helper: `getManagerStoreIds(userId)` in `src/lib/adminAuth.ts`
+- Browser recovery: admin layout treats Supabase session bootstrap errors as recoverable, shows a session repair prompt, and uses `src/lib/browserAuthCleanup.ts` to clear stale Supabase/app auth state before re-login.
 
 ### Employee Auth
 
@@ -201,6 +202,7 @@ All API routes use `supabaseServer` (service role — bypasses RLS). **Security 
 
 - JWT verification: `verifyEmployeeJWT(token)` in `src/lib/jwtVerify.ts`
 - Dual auth resolver: `authenticateShiftRequest(req)` in `src/lib/shiftAuth.ts`
+- PIN browser state is app-owned and cleared via `src/lib/browserAuthCleanup.ts` on logout/session repair (`sh_pin_token`, store/profile hints, and legacy local selection keys).
 - JWT claims are **not DB-verified on every request** (known limitation — see AGENTS.md)
 
 ### Dual Auth (`shiftAuth.ts`)

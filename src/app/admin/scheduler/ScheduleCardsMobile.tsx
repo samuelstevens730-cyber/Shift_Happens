@@ -292,7 +292,7 @@ export default function ScheduleCardsMobile({
         )}
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/20 bg-[#0f1115]/95 backdrop-blur p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-white/20 bg-[#0f1115]/95 backdrop-blur p-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]">
         <div className="grid grid-cols-2 gap-2 mb-2">
           <button className="btn-secondary px-3 py-2 disabled:opacity-50" onClick={jumpToNextIncomplete} disabled={!allIncompleteByOrder.length}>
             Next incomplete

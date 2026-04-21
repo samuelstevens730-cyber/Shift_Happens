@@ -10,6 +10,7 @@ import NotificationBell from "@/components/NotificationBell";
 import EmployeeBottomNav from "@/components/EmployeeBottomNav";
 import EmployeeShellFX from "@/components/EmployeeShellFX";
 import { Home, Clock, CalendarDays, Star, ShieldCheck } from "lucide-react";
+import { resetBrowserAuthState } from "@/lib/browserAuthCleanup";
 
 interface HomeHeaderProps {
   isManager?: boolean;
@@ -46,14 +47,11 @@ export default function HomeHeader({
         setAvatar(null);
         return;
       }
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const pinToken = typeof window !== "undefined" ? sessionStorage.getItem(PIN_TOKEN_KEY) : null;
-      let token = pinToken ?? "";
-      if (!token) {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        token = session?.access_token ?? "";
-      }
+      const token = session?.access_token ?? pinToken ?? "";
       if (!token) return;
       const res = await fetch("/api/me/avatar", {
         headers: { Authorization: `Bearer ${token}` },
@@ -74,12 +72,7 @@ export default function HomeHeader({
   }, [isAuthenticated, profileId]);
 
   async function handleLogout() {
-    await supabase.auth.signOut();
-    if (typeof window !== "undefined") {
-      sessionStorage.removeItem("sh_pin_token");
-      sessionStorage.removeItem("sh_pin_store_id");
-      sessionStorage.removeItem("sh_pin_profile_id");
-    }
+    await resetBrowserAuthState();
     router.push("/");
   }
 

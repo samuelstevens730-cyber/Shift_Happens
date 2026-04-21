@@ -101,12 +101,13 @@ export default function AvatarStudio() {
   );
 
   async function getAuthToken() {
-    const pinToken = typeof window !== "undefined" ? sessionStorage.getItem(PIN_TOKEN_KEY) : null;
-    if (pinToken) return pinToken;
     const {
       data: { session },
     } = await supabase.auth.getSession();
-    return session?.access_token ?? null;
+    if (session?.access_token) return session.access_token;
+
+    const pinToken = typeof window !== "undefined" ? sessionStorage.getItem(PIN_TOKEN_KEY) : null;
+    return pinToken ?? null;
   }
 
   useEffect(() => {

@@ -21,6 +21,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { resetBrowserAuthState } from "@/lib/browserAuthCleanup";
 
 function ResetPasswordInner() {
   const router = useRouter();
@@ -93,8 +94,8 @@ function ResetPasswordInner() {
       const { error } = await supabase.auth.updateUser({ password: pw1 });
       if (error) throw error;
 
-      // Clear the recovery session and redirect to login
-      await supabase.auth.signOut();
+      // Clear the recovery session and any stale app-owned auth state.
+      await resetBrowserAuthState();
       router.replace("/login");
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);

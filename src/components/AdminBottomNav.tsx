@@ -81,7 +81,7 @@ export default function AdminBottomNav({ stores, users, pendingRequests }: Props
 
   return (
     <>
-      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center bg-[rgba(12,15,18,0.96)] backdrop-blur-[16px] border-t border-white/8 pb-[env(safe-area-inset-bottom)]">
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 flex items-center bg-[rgba(12,15,18,0.96)] backdrop-blur-[16px] border-t border-white/8 pb-[env(safe-area-inset-bottom,0px)]">
         {/* Home */}
         <Link href="/admin" className={`flex-1 flex flex-col items-center gap-1 py-2 text-[10px] font-medium ${isActive("/admin") ? "text-[var(--green)]" : "text-[var(--muted)]"}`}>
           <Zap className="h-5 w-5" strokeWidth={1.8} />

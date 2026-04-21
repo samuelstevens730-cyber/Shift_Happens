@@ -14,6 +14,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { resetBrowserAuthState } from "@/lib/browserAuthCleanup";
 
 export default function ClientHeader() {
   const router = useRouter();
@@ -92,7 +93,7 @@ export default function ClientHeader() {
   }, [accessToken, hasPinSession]);
 
   async function handleLogout() {
-    await supabase.auth.signOut();
+    await resetBrowserAuthState();
     router.push("/login");
   }
 

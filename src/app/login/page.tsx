@@ -20,6 +20,7 @@ import { ThemeSupa } from "@supabase/auth-ui-shared";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
+import { resetBrowserAuthState } from "@/lib/browserAuthCleanup";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -60,11 +61,17 @@ export default function LoginPage() {
     let mounted = true;
 
     // If already logged in, redirect immediately
-    supabase.auth.getSession().then(({ data }) => {
-      if (!mounted) return;
-      if (data.session) router.replace(nextPath);
-      else setReady(true);
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!mounted) return;
+        if (data.session) router.replace(nextPath);
+        else setReady(true);
+      })
+      .catch(async () => {
+        await resetBrowserAuthState();
+        if (mounted) setReady(true);
+      });
 
     // Listen for login events to trigger redirect
     const { data: sub } = supabase.auth.onAuthStateChange(

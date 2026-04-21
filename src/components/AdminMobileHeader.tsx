@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import UserAvatar, { type AvatarOptions } from "@/components/UserAvatar";
+import { resetBrowserAuthState } from "@/lib/browserAuthCleanup";
 
 type AvatarData = {
   avatar_style: string | null;
@@ -44,12 +45,7 @@ export default function AdminMobileHeader() {
   }, []);
 
   async function handleLogout() {
-    await supabase.auth.signOut();
-    if (typeof window !== "undefined") {
-      sessionStorage.removeItem("sh_pin_token");
-      sessionStorage.removeItem("sh_pin_store_id");
-      sessionStorage.removeItem("sh_pin_profile_id");
-    }
+    await resetBrowserAuthState();
     router.push("/");
   }
 

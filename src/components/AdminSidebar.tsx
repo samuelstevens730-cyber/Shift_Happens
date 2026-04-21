@@ -14,6 +14,7 @@ import QuickSendModal from "./QuickSendModal";
 import NotificationBell from "@/components/NotificationBell";
 import UserAvatar, { type AvatarOptions } from "@/components/UserAvatar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { resetBrowserAuthState } from "@/lib/browserAuthCleanup";
 
 type Store = { id: string; name: string };
 type User = { id: string; name: string; active: boolean; storeIds: string[] };
@@ -120,12 +121,7 @@ export default function AdminSidebar({ stores, users }: Props) {
   }, []);
 
   async function handleLogout() {
-    await supabase.auth.signOut();
-    if (typeof window !== "undefined") {
-      sessionStorage.removeItem("sh_pin_token");
-      sessionStorage.removeItem("sh_pin_store_id");
-      sessionStorage.removeItem("sh_pin_profile_id");
-    }
+    await resetBrowserAuthState();
     router.push("/");
   }
 

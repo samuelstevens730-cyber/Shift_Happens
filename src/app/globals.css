@@ -2871,7 +2871,7 @@ body::after {
 .employee-bottom-nav {
   position: fixed;
   left: 50%;
-  bottom: calc(env(safe-area-inset-bottom) + 10px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
   z-index: 40;
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -3368,7 +3368,7 @@ body::after {
 
   .employee-bottom-nav {
     width: calc(100% - 16px);
-    bottom: calc(env(safe-area-inset-bottom) + 8px);
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
     border-radius: 20px;
   }
 
