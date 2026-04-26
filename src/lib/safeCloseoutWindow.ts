@@ -1,13 +1,18 @@
+import { collapseScheduledCoverage } from "@/lib/shiftOverride";
 import { supabaseServer } from "@/lib/supabaseServer";
 
 type ShiftRow = {
   id: string;
   store_id: string;
+  profile_id: string;
   shift_type: "open" | "close" | "double" | "other";
+  planned_start_at: string | null;
   schedule_shift_id: string | null;
 };
 
 type ScheduleShiftRow = {
+  id?: string;
+  schedule_id?: string;
   shift_date: string;
   scheduled_start: string;
   scheduled_end: string;
@@ -91,10 +96,26 @@ function dayOfWeekFromDateOnly(dateOnly: string): number | null {
   return new Date(Date.UTC(Number(y), Number(m) - 1, Number(d), 0, 0, 0)).getUTCDay();
 }
 
+function getCstDateKey(value: string): string | null {
+  const dt = new Date(value);
+  if (Number.isNaN(dt.getTime())) return null;
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(dt);
+  const year = parts.find((part) => part.type === "year")?.value;
+  const month = parts.find((part) => part.type === "month")?.value;
+  const day = parts.find((part) => part.type === "day")?.value;
+  if (!year || !month || !day) return null;
+  return `${year}-${month}-${day}`;
+}
+
 export async function checkSafeCloseoutWindow(shiftId: string): Promise<SafeCloseoutWindowCheck> {
   const { data: shift, error: shiftErr } = await supabaseServer
     .from("shifts")
-    .select("id,store_id,shift_type,schedule_shift_id")
+    .select("id,store_id,profile_id,shift_type,planned_start_at,schedule_shift_id")
     .eq("id", shiftId)
     .maybeSingle<ShiftRow>();
   if (shiftErr) {
@@ -121,32 +142,61 @@ export async function checkSafeCloseoutWindow(shiftId: string): Promise<SafeClos
       scheduledEndIso: null,
     };
   }
-  if (!shift.schedule_shift_id) {
-    return {
-      allowed: false,
-      reason: "Safe closeout requires a scheduled shift end time.",
-      allowedFromIso: null,
-      scheduledEndIso: null,
-    };
+  let schedule: ScheduleShiftRow | null = null;
+  if (shift.schedule_shift_id) {
+    const { data: linkedSchedule, error: scheduleErr } = await supabaseServer
+      .from("schedule_shifts")
+      .select("shift_date,scheduled_start,scheduled_end")
+      .eq("id", shift.schedule_shift_id)
+      .maybeSingle<ScheduleShiftRow>();
+    if (scheduleErr) {
+      return {
+        allowed: false,
+        reason: scheduleErr.message,
+        allowedFromIso: null,
+        scheduledEndIso: null,
+      };
+    }
+    schedule = linkedSchedule ?? null;
   }
 
-  const { data: schedule, error: scheduleErr } = await supabaseServer
-    .from("schedule_shifts")
-    .select("shift_date,scheduled_start,scheduled_end")
-    .eq("id", shift.schedule_shift_id)
-    .maybeSingle<ScheduleShiftRow>();
-  if (scheduleErr) {
-    return {
-      allowed: false,
-      reason: scheduleErr.message,
-      allowedFromIso: null,
-      scheduledEndIso: null,
-    };
+  if (!schedule && shift.planned_start_at) {
+    const shiftDate = getCstDateKey(shift.planned_start_at);
+    if (shiftDate) {
+      const { data: inferredRows, error: inferredErr } = await supabaseServer
+        .from("schedule_shifts")
+        .select("id,schedule_id,shift_date,scheduled_start,scheduled_end,schedules!inner(status)")
+        .eq("profile_id", shift.profile_id)
+        .eq("shift_date", shiftDate)
+        .eq("schedules.store_id", shift.store_id)
+        .eq("schedules.status", "published")
+        .returns<ScheduleShiftRow[]>();
+      if (inferredErr) {
+        return {
+          allowed: false,
+          reason: inferredErr.message,
+          allowedFromIso: null,
+          scheduledEndIso: null,
+        };
+      }
+      const coverage = collapseScheduledCoverage(inferredRows ?? []);
+      if (coverage && inferredRows && inferredRows.length > 0) {
+        const sortedRows = inferredRows
+          .slice()
+          .sort((a, b) => a.scheduled_start.localeCompare(b.scheduled_start));
+        schedule = {
+          shift_date: coverage.shiftDate,
+          scheduled_start: sortedRows[0]!.scheduled_start,
+          scheduled_end: sortedRows[sortedRows.length - 1]!.scheduled_end,
+        };
+      }
+    }
   }
+
   if (!schedule) {
     return {
       allowed: false,
-      reason: "Scheduled shift data missing.",
+      reason: "Safe closeout requires a scheduled shift end time.",
       allowedFromIso: null,
       scheduledEndIso: null,
     };

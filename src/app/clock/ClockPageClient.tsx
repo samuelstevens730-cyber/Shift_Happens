@@ -440,8 +440,10 @@ export default function ClockPageClient() {
       setPinToken(storedToken);
       setPinStoreId(storedStore);
       setPinProfileId(storedProfile);
-      setPinLockedSelection(true);
-      setStoreId(storedStore);
+      setPinLockedSelection(Boolean(qrToken));
+      if (qrToken) {
+        setStoreId(storedStore);
+      }
       setProfileId(storedProfile);
       setAuthenticatedProfileName(storedProfileName);
       setPinModalOpen(false);
@@ -1414,7 +1416,7 @@ export default function ClockPageClient() {
                       setPinProfileId(authProfileId);
                       setProfileId(authProfileId);
                       setAuthenticatedProfileName(profileName || null);
-                      setPinLockedSelection(true);
+                      setPinLockedSelection(Boolean(qrToken));
                       if (typeof window !== "undefined") {
                         sessionStorage.setItem(PIN_TOKEN_KEY, token);
                         sessionStorage.setItem(PIN_STORE_KEY, activeStoreId);
